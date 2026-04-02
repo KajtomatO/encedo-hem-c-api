@@ -1,0 +1,18 @@
+A library that exposes a simple intereface that wraps around REST api calls to HEM device.
+Library - REST client
+HEM device - REST serwer
+
+Library should:
+ - expose all REST endpoints.
+ - provide quality-of-life features like checking state of HEM device, automaticly providing "check-in", automatic autentication.
+
+MVP:
+For MVP a test program need to be provided.
+A mvp should be able:
+	[ Assume that deivce is configured, pass is provided]
+	- Print device status
+	- Do a check-in
+	- Create an example key
+	- Encrypt random message
+	- Decrpyt this message
+	- Remove created key
