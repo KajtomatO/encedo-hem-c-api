@@ -19,7 +19,7 @@ operations happen on the device. The library handles:
 - Token caching and automatic re-authentication
 - The two-phase internet check-in flow
 
-The device REST API is documented in `hem-rest-api-design.md`.
+The device REST API is documented in `HEM-REST-API-DESIGN.md`.
 
 ---
 

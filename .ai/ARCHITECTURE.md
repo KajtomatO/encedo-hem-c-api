@@ -286,7 +286,7 @@ When a function requires auth and no valid cached token exists for the needed sc
 test_c_api_claude/
 ├── CMakeLists.txt              # Top-level build config
 ├── ARCHITECTURE.md
-├── hem-rest-api-design.md      # API reference
+├── HEM-REST-API-DESIGN.md      # API reference
 ├── mvp-description.txt
 ├── include/
 │   └── hem/
