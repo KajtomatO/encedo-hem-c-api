@@ -1,4 +1,0 @@
-/mnt/d/repo/encedo/test_c_api_claude/build/CMakeFiles/hem.dir
-/mnt/d/repo/encedo/test_c_api_claude/build/CMakeFiles/hem_test.dir
-/mnt/d/repo/encedo/test_c_api_claude/build/CMakeFiles/edit_cache.dir
-/mnt/d/repo/encedo/test_c_api_claude/build/CMakeFiles/rebuild_cache.dir

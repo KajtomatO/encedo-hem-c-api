@@ -1,2 +1,0 @@
-/usr/bin/ar qc libhem.a CMakeFiles/hem.dir/src/hem_ctx.c.o CMakeFiles/hem.dir/src/hem_http.c.o CMakeFiles/hem.dir/src/hem_json.c.o CMakeFiles/hem.dir/src/hem_auth.c.o CMakeFiles/hem.dir/src/hem_system.c.o CMakeFiles/hem.dir/src/hem_keymgmt.c.o CMakeFiles/hem.dir/src/hem_crypto.c.o CMakeFiles/hem.dir/third_party/cJSON/cJSON.c.o
-/usr/bin/ranlib libhem.a

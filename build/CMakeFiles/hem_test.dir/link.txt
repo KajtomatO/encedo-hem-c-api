@@ -1,1 +1,0 @@
-/usr/bin/cc -g CMakeFiles/hem_test.dir/test/hem_test.c.o -o hem_test  libhem.a /usr/lib/x86_64-linux-gnu/libcurl.so /usr/lib/x86_64-linux-gnu/libcrypto.so 
