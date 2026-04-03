@@ -904,23 +904,78 @@ hem_error_t hem_auth_device_init(hem_ctx_t             *ctx,
 
 ---
 
-## Suggested implementation order
+## Implementation order
 
-Priority based on utility and safety:
+---
 
-| Priority | Steps | Why |
+## Section A — Start now
+
+These steps have no blocking open questions. They can be implemented and tested
+on the Ubuntu dev machine immediately.
+
+> **Assumptions made for steps with minor OQs:**
+> - Step 8 (`hem_key_update`): success is determined by HTTP 200 alone (OQ-6).
+> - Step 9 (`hem_key_search`): 6-byte minimum refers to raw binary before base64; test
+>   patterns will be at least 6 raw bytes (OQ-7).
+> - Steps 11 & 13 (`hem_hmac_verify`, `hem_verify`): verify endpoints return an empty
+>   body; success determined by HTTP 200 (OQ-12).
+> - Step 23 (`hem_logger_download`): implement download as raw text; field names in
+>   tests left as `TODO` until OQ-8 is resolved.
+> - Steps 24-25 (`hem_storage_unlock/lock`): scope format is `storage:diskN:rw`; read-only
+>   scope `storage:diskN:ro` assumed valid (OQ-11).
+> - Step 30 (`hem_upgrade_check_fw`): poll every 2 seconds, timeout after 120 s (OQ-10).
+
+| Priority | Steps | Topic |
 |---|---|---|
-| **P1 — High** | 6-9 (keymgmt derive/import/update/search) | Completes key management; safe integration tests |
-| **P1 — High** | 10-13 (HMAC + ExDSA) | Core crypto primitives; safe integration tests |
-| **P1 — High** | 14 (ECDH) | Needed for advanced HMAC and encryption flows |
-| **P2 — Medium** | 15-16 (wrap/unwrap) | Completes AES operations |
-| **P2 — Medium** | 17-20 (PQC) | Post-quantum crypto; growing demand |
-| **P2 — Medium** | 4-5 (selftest + attestation) | System diagnostics; safe |
-| **P3 — Low** | 21-23 (logger) | Audit trail; PPA-specific |
-| **P3 — Low** | 1-3 (config write, reboot, shutdown) | Destructive; use sparingly |
-| **P3 — Low** | 24-25 (storage) | PPA-specific; destructive |
-| **P4 — Defer** | 26-27 (provisioning, device init) | One-time, irreversible operations |
-| **P4 — Defer** | 28-33 (firmware) | High risk; needs binary upload support |
+| **P0** | Unit tests (`test_json.c`, `test_auth_ejwt.c`) | Testing infrastructure, no device needed |
+| **P1** | 6-9 | Key mgmt: derive, import, update, search |
+| **P1** | 10-13 | Crypto: HMAC hash/verify, ExDSA sign/verify |
+| **P1** | 14 | Crypto: ECDH key agreement |
+| **P2** | 15-16 | Crypto: AES wrap/unwrap |
+| **P2** | 17-20 | PQC: ML-KEM encaps/decaps, ML-DSA sign/verify |
+| **P2** | 4-5 | System: selftest, attestation |
+| **P3** | 21-23 | Audit log: key, list, download |
+| **P3** | 1-3 | System: config write, reboot, shutdown |
+| **P3** | 24-25 | Storage: unlock, lock |
+| **P4** | 26-27 | Provisioning + device init (one-time, irreversible) |
+| **P4** | 28, 30, 31, 33 | Firmware: usbmode, check_fw, install_fw, install_ui |
+
+---
+
+## Section B — Needs clarification first
+
+These steps are blocked by open questions in `OPEN-QUESTIONS.md` that must be
+answered before implementation can begin. The OQ reference is noted for each.
+
+### Steps 29 & 32 — Firmware binary upload (blocked by OQ-9)
+
+`POST /api/system/upgrade/upload_fw` and `POST /api/system/upgrade/upload_ui`
+require a new `hem_http_post_binary()` transport function, but the wire format
+is unknown:
+
+- Is it `multipart/form-data` or raw `application/octet-stream`?
+- If multipart, what is the form field name?
+- What is the maximum accepted file size?
+
+**Unblock:** resolve OQ-9, then add `hem_http_post_binary()` and implement both
+upload functions.
+
+---
+
+### `hem_auth_ext_pair` / `hem_auth_ext_login` stubs (blocked by OQ-1, OQ-2, OQ-3)
+
+These functions exist from the Phase 4 MVP but are stubbed because the
+notification broker URL returns HTTP 404.  Three separate questions must all
+be answered:
+
+- **OQ-1:** What is the correct broker URL? Does it include the device `eid`?
+- **OQ-2:** What JSON does the broker return for pairing (`pid`/`reply`?) and for
+  login (`authreply`?)? Does it block until the phone approves, or require polling?
+- **OQ-3:** Does the caller generate the `epk` keypair, or does it come from the
+  Encedo cloud? Is the broker response encrypted to `epk`?
+
+**Unblock:** resolve OQ-1 through OQ-3, then complete both ext-auth functions
+and write `test/integration/test_auth_ext.c`.
 
 ---
 
