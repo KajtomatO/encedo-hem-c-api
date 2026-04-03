@@ -3,6 +3,8 @@
 #include <string.h>
 #include <time.h>
 
+#include "hem/hem_auth.h"
+
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 
@@ -275,4 +277,60 @@ hem_error_t hem_auth_ensure(hem_ctx_t *ctx, const char *scope)
     }
 
     return hem_auth_login(ctx, scope);
+}
+
+/* -------------------------------------------------------------------------
+ * hem_auth_ext_pair
+ * One-time phone-app pairing using the /api/auth/ext/* endpoints.
+ *
+ * NOT YET FULLY IMPLEMENTED -- the notification broker URL and response
+ * format are not confirmed in the API documentation.
+ *
+ * Intended flow (once broker details are confirmed):
+ *   1. hem_auth_ensure(ctx, "system:config")
+ *   2. POST /api/auth/ext/init  {"epk": epk_b64}
+ *      -> {"eid": ..., "request": ...}
+ *   3. POST <broker_url>  (forward device response verbatim)
+ *      -> {"pid": ..., "reply": ...}  (field names TBD)
+ *   4. POST /api/auth/ext/validate  {"pid": ..., "reply": ...}
+ *      -> {"confirmation": ...}
+ *
+ * See .ai/OPEN-QUESTIONS.md for the full list of outstanding gaps.
+ * ---------------------------------------------------------------------- */
+hem_error_t hem_auth_ext_pair(hem_ctx_t *ctx, const char *epk_b64,
+                               char *confirmation_out, size_t confirmation_size)
+{
+    if (!ctx || !epk_b64 || !confirmation_out || confirmation_size == 0)
+        return HEM_ERR_INVALID_ARG;
+
+    hem_set_error(ctx, HEM_ERR_CHECKIN,
+                  "ext pair not implemented: notification broker URL/protocol undefined");
+    return HEM_ERR_CHECKIN;
+}
+
+/* -------------------------------------------------------------------------
+ * hem_auth_ext_login
+ * Authenticate via paired phone app -- no passphrase required.
+ *
+ * NOT YET FULLY IMPLEMENTED -- the notification broker URL and response
+ * format are not confirmed in the API documentation.
+ *
+ * Intended flow (once broker details are confirmed):
+ *   1. POST /api/auth/ext/request  {"epk": ..., "exp": ..., "scope": ...}
+ *      -> {"eid": ..., "challenge": ...}
+ *   2. POST <broker_url>  (forward device response verbatim)
+ *      -> {"authreply": ...}  (field name TBD)
+ *   3. POST /api/auth/ext/token  {"authreply": ...}
+ *      -> {"token": ...}  -- cache in ctx
+ *
+ * See .ai/OPEN-QUESTIONS.md for the full list of outstanding gaps.
+ * ---------------------------------------------------------------------- */
+hem_error_t hem_auth_ext_login(hem_ctx_t *ctx, const char *epk_b64,
+                                const char *scope)
+{
+    if (!ctx || !epk_b64 || !scope) return HEM_ERR_INVALID_ARG;
+
+    hem_set_error(ctx, HEM_ERR_CHECKIN,
+                  "ext login not implemented: notification broker URL/protocol undefined");
+    return HEM_ERR_CHECKIN;
 }

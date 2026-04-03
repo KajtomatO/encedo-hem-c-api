@@ -55,26 +55,70 @@ static void print_hex(const uint8_t *data, size_t len)
     if (len > 16) printf("...");
 }
 
+/* Generate a random 32-byte ephemeral session key encoded as standard base64.
+ * Output buffer must be at least 45 bytes (44 chars + NUL). */
+static void gen_epk(char *out)
+{
+    static const char T[] =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    uint8_t raw[32];
+    for (int i = 0; i < 32; i++)
+        raw[i] = (uint8_t)(rand() & 0xFF);
+
+    char *p = out;
+    /* encode 30 bytes (10 full groups of 3) */
+    for (int i = 0; i < 30; i += 3) {
+        *p++ = T[raw[i] >> 2];
+        *p++ = T[((raw[i] & 0x3) << 4) | (raw[i+1] >> 4)];
+        *p++ = T[((raw[i+1] & 0xF) << 2) | (raw[i+2] >> 6)];
+        *p++ = T[raw[i+2] & 0x3F];
+    }
+    /* encode final 2 bytes with one '=' pad */
+    *p++ = T[raw[30] >> 2];
+    *p++ = T[((raw[30] & 0x3) << 4) | (raw[31] >> 4)];
+    *p++ = T[(raw[31] & 0xF) << 2];
+    *p++ = '=';
+    *p   = '\0';
+}
+
+/* Authenticate via phone app for the given scope.
+ * Uses a freshly generated ephemeral key. Prints a prompt so the user knows
+ * to check the phone app. Returns 1 on success, 0 on failure. */
+static int phone_login(hem_ctx_t *ctx, const char *scope)
+{
+    char epk[45];
+    gen_epk(epk);
+    printf("       [phone auth: approve '%s' on your phone app]\n", scope);
+    char step[128];
+    snprintf(step, sizeof(step), "phone app login (scope: %s)", scope);
+    return check(ctx, hem_auth_ext_login(ctx, epk, scope), step);
+}
+
 int main(int argc, char *argv[])
 {
-    if (argc < 3) {
-        fprintf(stderr, "Usage: %s <device_url> <passphrase>\n", argv[0]);
+    if (argc < 2) {
+        fprintf(stderr, "Usage: %s <device_url> [passphrase]\n", argv[0]);
         fprintf(stderr, "  device_url  e.g. https://my.ence.do\n");
+        fprintf(stderr, "  passphrase  omit to use phone app authentication\n");
         return 1;
     }
 
     const char *url        = argv[1];
-    const char *passphrase = argv[2];
+    const char *passphrase = (argc >= 3) ? argv[2] : NULL;
+    int         phone_auth = (passphrase == NULL);
 
     srand((unsigned)time(NULL));
 
     printf("\nEncedo HEM Client -- MVP Test\n");
     printf("Device: %s\n", url);
+    printf("Auth  : %s\n", phone_auth ? "phone app" : "passphrase");
     sep();
 
     hem_ctx_t *ctx = hem_ctx_create(url);
     if (!ctx) { fprintf(stderr, "Failed to create context\n"); return 1; }
-    hem_ctx_set_credentials(ctx, passphrase, HEM_ROLE_USER);
+
+    if (!phone_auth)
+        hem_ctx_set_credentials(ctx, passphrase, HEM_ROLE_USER);
 
     int failures = 0;
 
@@ -104,9 +148,10 @@ int main(int argc, char *argv[])
 
     /* ------------------------------------------------------------------ */
     printf("\n[4] Authenticate + read config\n");
+    if (phone_auth && !phone_login(ctx, "system:config")) { failures++; goto done; }
     hem_config_t cfg = {0};
     if (check(ctx, hem_system_config(ctx, &cfg),
-              "GET /api/system/config (auto-auth scope: system:config)")) {
+              "GET /api/system/config (scope: system:config)")) {
         printf("       User     : %s\n", cfg.user[0]     ? cfg.user     : "(not set)");
         printf("       Hostname : %s\n", cfg.hostname[0] ? cfg.hostname : "(not set)");
         printf("       EID      : %.20s...\n", cfg.eid);
@@ -114,6 +159,7 @@ int main(int argc, char *argv[])
 
     /* ------------------------------------------------------------------ */
     printf("\n[5] Create AES256 key\n");
+    if (phone_auth && !phone_login(ctx, "keymgmt:gen")) { failures++; goto done; }
     char kid[33] = {0};
     if (check(ctx, hem_key_create(ctx, "mvp-test-key", "AES256", kid, sizeof(kid)),
               "POST /api/keymgmt/create (scope: keymgmt:gen)")) {
@@ -126,6 +172,11 @@ int main(int argc, char *argv[])
 
     /* ------------------------------------------------------------------ */
     printf("\n[6] Encrypt random message\n");
+    if (phone_auth) {
+        char use_scope[80];
+        snprintf(use_scope, sizeof(use_scope), "keymgmt:use:%s", kid);
+        if (!phone_login(ctx, use_scope)) { failures++; goto cleanup_key; }
+    }
 
     /* Generate a 32-byte random test message */
     uint8_t plaintext[32];
@@ -197,7 +248,9 @@ int main(int argc, char *argv[])
 cleanup_key:
     /* ------------------------------------------------------------------ */
     printf("\n[8] Delete test key\n");
-    {
+    if (phone_auth && !phone_login(ctx, "keymgmt:del")) {
+        failures++;
+    } else {
         char delete_step[96];
         snprintf(delete_step, sizeof(delete_step),
                  "DELETE /api/keymgmt/delete/%s (scope: keymgmt:del)", kid);

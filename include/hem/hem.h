@@ -11,6 +11,7 @@
 #include "hem_system.h"
 #include "hem_keymgmt.h"
 #include "hem_crypto.h"
+#include "hem_auth.h"
 
 #ifdef __cplusplus
 extern "C" {
