@@ -65,6 +65,41 @@ typedef struct {
     int64_t uts;            /* Last config update timestamp */
 } hem_config_t;
 
+/* Response from POST /api/system/config */
+typedef struct {
+    bool updated;           /* true if at least one field was changed */
+    bool reboot_required;   /* true if device must reboot to apply changes */
+} hem_config_update_t;
+
+/* -------------------------------------------------------------------------
+ * Device initialisation structs (POST /api/auth/init)
+ * ---------------------------------------------------------------------- */
+
+/*
+ * Optional configuration fields for hem_auth_device_init.
+ * Fields with zero/NULL/false values are omitted from the cfg payload.
+ * storage_mode of -1 is omitted; 0 is a valid mode so it IS sent.
+ */
+typedef struct {
+    char     ip[64];               /* Device IP (PPA only; empty = omit) */
+    int      storage_mode;         /* Storage config bitmask (PPA only; -1 = omit) */
+    int64_t  storage_disk0size;    /* Disk0 size in bytes (PPA only; 0 = omit) */
+    bool     dnsd;                 /* Enable DNS daemon */
+    bool     trusted_ts;           /* Trust backend timestamps */
+    bool     trusted_backend;      /* Trust backend for check-in */
+    bool     allow_keysearch;      /* Allow unauthenticated key search */
+    bool     gen_csr;              /* Generate CSR during init */
+    char     origin[128];          /* CORS origin (empty = omit) */
+} hem_init_config_t;
+
+/* Response from POST /api/auth/init */
+typedef struct {
+    char instanceid[128];   /* Device instance ID */
+    char token[2048];       /* Initial JWT (master scope) */
+    char csr[4096];         /* Certificate signing request (if gen_csr=true) */
+    char genuine[2048];     /* Attestation blob */
+} hem_init_result_t;
+
 /* -------------------------------------------------------------------------
  * Key management structs
  * ---------------------------------------------------------------------- */

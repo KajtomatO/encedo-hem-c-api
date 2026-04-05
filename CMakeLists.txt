@@ -28,6 +28,9 @@ add_library(hem STATIC
     src/hem_keymgmt.c
     src/hem_crypto.c
     src/hem_pqc.c
+    src/hem_logger.c
+    src/hem_storage.c
+    src/hem_upgrade.c
     third_party/cJSON/cJSON.c
 )
 

@@ -102,6 +102,20 @@ hem_error_t hem_auth_ensure(hem_ctx_t *ctx, const char *scope);
  * ejwt_out    output buffer (at least 1024 bytes)
  * ejwt_size   size of ejwt_out
  */
+/*
+ * Variant of hem_build_ejwt for device initialisation.
+ * Uses a `cfg` JSON object in the payload instead of a `scope` string.
+ * cfg_json must be a valid JSON object string, e.g. "{\"user\":\"Alice\",...}".
+ */
+hem_error_t hem_build_init_ejwt(const char *passphrase,
+                                 const char *eid,
+                                 const char *spk_b64,
+                                 const char *jti,
+                                 int64_t     req_exp,
+                                 const char *cfg_json,
+                                 char       *ejwt_out,
+                                 size_t      ejwt_size);
+
 hem_error_t hem_build_ejwt(const char *passphrase,
                             const char *eid,
                             const char *spk_b64,

@@ -11,7 +11,11 @@
 #include "hem_system.h"
 #include "hem_keymgmt.h"
 #include "hem_crypto.h"
+#include "hem_pqc.h"
 #include "hem_auth.h"
+#include "hem_logger.h"
+#include "hem_storage.h"
+#include "hem_upgrade.h"
 
 #ifdef __cplusplus
 extern "C" {
