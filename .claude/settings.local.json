@@ -3,7 +3,8 @@
     "allow": [
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(curl -sL \"https://raw.githubusercontent.com/DaveGamble/cJSON/master/cJSON.h\" -o \"D:/repo/encedo/test_c_api_claude/third_party/cJSON/cJSON.h\")",
-      "Bash(curl -sL \"https://raw.githubusercontent.com/DaveGamble/cJSON/master/cJSON.c\" -o \"D:/repo/encedo/test_c_api_claude/third_party/cJSON/cJSON.c\")"
+      "Bash(curl -sL \"https://raw.githubusercontent.com/DaveGamble/cJSON/master/cJSON.c\" -o \"D:/repo/encedo/test_c_api_claude/third_party/cJSON/cJSON.c\")",
+      "Bash(ctest:*)"
     ]
   }
 }

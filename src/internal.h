@@ -79,7 +79,7 @@ char   *hem_base64_encode(const uint8_t *data, size_t len);   /* caller free()s 
 uint8_t *hem_base64_decode(const char *b64, size_t *out_len); /* caller free()s result */
 
 /* -------------------------------------------------------------------------
- * Internal auth function
+ * Internal auth functions
  * ---------------------------------------------------------------------- */
 
 /*
@@ -88,6 +88,28 @@ uint8_t *hem_base64_decode(const char *b64, size_t *out_len); /* caller free()s 
  * scope, or is within TOKEN_REFRESH_MARGIN seconds of expiry.
  */
 hem_error_t hem_auth_ensure(hem_ctx_t *ctx, const char *scope);
+
+/*
+ * Build a signed eJWT for the HEM challenge-response protocol.
+ * Exposed internally for unit testing with known test vectors.
+ *
+ * passphrase  user or master passphrase
+ * eid         device entity ID (used as PBKDF2 salt)
+ * spk_b64     device X25519 public key in standard base64
+ * jti         challenge nonce
+ * req_exp     requested token expiry (Unix timestamp)
+ * scope       JWT scope string
+ * ejwt_out    output buffer (at least 1024 bytes)
+ * ejwt_size   size of ejwt_out
+ */
+hem_error_t hem_build_ejwt(const char *passphrase,
+                            const char *eid,
+                            const char *spk_b64,
+                            const char *jti,
+                            int64_t     req_exp,
+                            const char *scope,
+                            char       *ejwt_out,
+                            size_t      ejwt_size);
 
 /* -------------------------------------------------------------------------
  * Error helpers

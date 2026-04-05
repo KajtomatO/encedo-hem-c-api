@@ -69,13 +69,15 @@ typedef struct {
  * Key management structs
  * ---------------------------------------------------------------------- */
 
-/* Single key list entry from GET /api/keymgmt/list */
+/* Single key entry from GET /api/keymgmt/list or GET /api/keymgmt/get */
 typedef struct {
     char    kid[33];        /* 32-char hex key ID + NUL */
     char    label[32];      /* Key label */
     char    type[64];       /* Comma-separated type attributes */
     int64_t created;        /* Creation timestamp */
     int64_t updated;        /* Last update timestamp */
+    char    pubkey[2176];   /* Public key (base64); populated by hem_key_get, empty in list */
+    char    descr[512];     /* Binary descriptor (base64); populated by list/get if present */
 } hem_key_info_t;
 
 /* -------------------------------------------------------------------------

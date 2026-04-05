@@ -45,7 +45,7 @@ static char *b64url_encode(const uint8_t *data, size_t len)
  *   sig    = HMAC-SHA256(shared, b64url(header) + "." + b64url(payload))
  *   ejwt   = b64url(header) + "." + b64url(payload) + "." + b64url(sig)
  * ---------------------------------------------------------------------- */
-static hem_error_t build_ejwt(
+hem_error_t hem_build_ejwt(
     const char *passphrase,
     const char *eid,       /* PBKDF2 salt (device entity ID) */
     const char *spk_b64,   /* device X25519 public key, standard base64 */
@@ -223,7 +223,7 @@ hem_error_t hem_auth_login(hem_ctx_t *ctx, const char *scope)
 
     /* --- Step 2: construct the eJWT --- */
     char ejwt[2048] = {0};
-    err = build_ejwt(ctx->passphrase, eid, spk, jti, req_exp, scope,
+    err = hem_build_ejwt(ctx->passphrase, eid, spk, jti, req_exp, scope,
                      ejwt, sizeof(ejwt));
     if (err != HEM_OK) {
         hem_set_error(ctx, HEM_ERR_OPENSSL, "eJWT construction failed");
