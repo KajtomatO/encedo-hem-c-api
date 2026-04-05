@@ -72,6 +72,57 @@ if(CMOCKA_LIB AND CMOCKA_INCLUDE)
     target_include_directories(test_auth_ejwt PRIVATE src third_party/cJSON)
     target_link_libraries(test_auth_ejwt PRIVATE hem ${CMOCKA_LIB} OpenSSL::Crypto)
     add_test(NAME unit_auth_ejwt COMMAND test_auth_ejwt)
+
+    # -------------------------------------------------------------------------
+    # Integration tests (require a live device -- not run by default)
+    # Run: ctest -L integration
+    # -------------------------------------------------------------------------
+    set(INTEGRATION_TESTS
+        test_system
+        test_keymgmt
+        test_crypto_aes
+        test_crypto_hmac
+        test_crypto_ecdh
+        test_crypto_exdsa
+        test_pqc
+        test_logger
+    )
+
+    foreach(T IN LISTS INTEGRATION_TESTS)
+        add_executable(${T} test/integration/${T}.c)
+        target_include_directories(${T} PRIVATE src)
+        target_link_libraries(${T} PRIVATE hem ${CMOCKA_LIB})
+        add_test(NAME ${T} COMMAND ${T})
+        set_tests_properties(${T} PROPERTIES
+            LABELS      "integration"
+            DISABLED    TRUE
+        )
+    endforeach()
+
+    # -------------------------------------------------------------------------
+    # Destructive tests (irreversible side-effects -- disabled and labelled)
+    # Run: ctest -L destructive   (after removing DISABLED from the one you want)
+    # -------------------------------------------------------------------------
+    set(DESTRUCTIVE_TESTS
+        test_config_write
+        test_reboot
+        test_shutdown
+        test_storage
+        test_firmware
+        test_device_init
+    )
+
+    foreach(T IN LISTS DESTRUCTIVE_TESTS)
+        add_executable(${T} test/destructive/${T}.c)
+        target_include_directories(${T} PRIVATE src)
+        target_link_libraries(${T} PRIVATE hem ${CMOCKA_LIB})
+        add_test(NAME ${T} COMMAND ${T})
+        set_tests_properties(${T} PROPERTIES
+            LABELS      "destructive"
+            DISABLED    TRUE
+        )
+    endforeach()
+
 else()
     message(STATUS "CMocka not found -- unit tests disabled (install libcmocka-dev)")
 endif()
