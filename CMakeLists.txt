@@ -43,26 +43,54 @@ endif()
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
+# HTTPS transport dependency (REQ-NET-002). The FindCURL module provides the
+# imported target CURL::libcurl; no cURL type appears in public headers.
+find_package(CURL REQUIRED)
+
+# --- vendored third-party (cJSON) -----------------------------------------
+# Compiled into an OBJECT library so the vendored sources are held to their
+# own (relaxed) warning policy — our -Werror must not gate on code we don't
+# own (REQ-BUILD-003). Global hidden visibility + PIC still apply, and
+# CJSON_HIDE_SYMBOLS strips cJSON's default __declspec(dllexport) on Windows so
+# cJSON never lands in the shared library's export table (REQ-API-006).
+add_library(ehem-cjson OBJECT src/vendor/cjson/cJSON.c)
+target_compile_definitions(ehem-cjson PRIVATE CJSON_HIDE_SYMBOLS)
+
 # --- library --------------------------------------------------------------
 # Compiled twice so the export macro differs (shared → dllexport/visibility,
 # static → nothing). The source set is tiny; correctness beats sharing objects.
+# The vendored cJSON objects are shared between both (no EHEM_API on them).
 set(EHEM_SOURCES
-  src/ehem.c)
+  src/ehem.c
+  src/context.c
+  src/json.c
+  src/transport.c
+  src/transport_curl.c
+  src/proto_system.c)
 
-add_library(encedo-hem        SHARED ${EHEM_SOURCES})   # libencedo-hem.so/.dll
-add_library(encedo-hem-static STATIC ${EHEM_SOURCES})   # libencedo-hem.a
+add_library(encedo-hem        SHARED ${EHEM_SOURCES} $<TARGET_OBJECTS:ehem-cjson>)
+add_library(encedo-hem-static STATIC ${EHEM_SOURCES} $<TARGET_OBJECTS:ehem-cjson>)
 add_library(encedo-hem::encedo-hem        ALIAS encedo-hem)
 add_library(encedo-hem::encedo-hem-static ALIAS encedo-hem-static)
 
 foreach(_t encedo-hem encedo-hem-static)
-  target_include_directories(${_t} PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+  target_include_directories(${_t}
+    PUBLIC
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+      $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+    PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/src)      # internal headers (json.h, ...)
   target_compile_definitions(${_t} PRIVATE
-    EHEM_VERSION_STRING="${PROJECT_VERSION}")
+    EHEM_VERSION_STRING="${PROJECT_VERSION}"
+    CJSON_HIDE_SYMBOLS)                     # json.c includes cJSON.h; match it
   target_compile_options(${_t} PRIVATE ${EHEM_WARNING_FLAGS})
   set_target_properties(${_t} PROPERTIES OUTPUT_NAME encedo-hem)
 endforeach()
+
+# libcurl links into the shared lib privately (baked in, not re-exported), but
+# is an INTERFACE requirement of the static lib so downstream links propagate.
+target_link_libraries(encedo-hem        PRIVATE CURL::libcurl)
+target_link_libraries(encedo-hem-static PUBLIC  CURL::libcurl)
 
 # Only the shared build gets the export-enabling macro.
 target_compile_definitions(encedo-hem PRIVATE EHEM_BUILDING_SHARED)
@@ -106,6 +134,19 @@ install(FILES
   ${CMAKE_CURRENT_BINARY_DIR}/encedo-hem-config.cmake
   ${CMAKE_CURRENT_BINARY_DIR}/encedo-hem-config-version.cmake
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/encedo-hem)
+
+# --- hem-tool CLI ---------------------------------------------------------
+# Thin consumer of the PUBLIC API only (REQ-TOOL-001); links the static lib so
+# the tool is self-contained (no runtime .so lookup), with curl coming through
+# the static lib's interface link. Building it can be turned off for a
+# library-only consumer.
+option(EHEM_BUILD_TOOL "Build the hem-tool CLI" ON)
+if(EHEM_BUILD_TOOL)
+  add_executable(hem-tool src/tools/hem-tool/main.c)
+  target_link_libraries(hem-tool PRIVATE encedo-hem::encedo-hem-static)
+  target_compile_options(hem-tool PRIVATE ${EHEM_WARNING_FLAGS})
+  install(TARGETS hem-tool RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
 
 # --- tests ----------------------------------------------------------------
 include(CTest)               # defines BUILD_TESTING (default ON), enables CTest
