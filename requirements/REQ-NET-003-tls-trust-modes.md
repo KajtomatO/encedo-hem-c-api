@@ -32,7 +32,15 @@ verification: public CA (system trust), device CA / pinned cert
 - [ ] A caller-supplied CA file/pinned certificate option is honored.
 - [ ] Insecure mode requires an explicit option flag; nothing else disables
       verification.
-- [ ] OPEN (M1 gate): the dev-machine HEM's actual certificate model is
-      recorded here (self-signed? per-device CA?), and the mode that
-      `hem-tool status` needs against it is documented. Cross-check the
-      Python client's TLS handling (encedo-hem-python-api).
+- [x] RESOLVED (M1 gate, 2026-07-15): the dev-machine HEM presents a
+      **public-CA certificate** — `CN=my.ence.do`, issuer `ZeroSSL ECC Domain
+      Secure Site CA` — **not** self-signed and **not** a per-device CA. The
+      intended trust mode is therefore `EHEM_TLS_SYSTEM` (system trust store).
+      At gate time the certificate was **expired** (valid 2026-01-18 →
+      2026-04-18), so system trust correctly failed with `EHEM_ERR_NETWORK`
+      ("SSL certificate problem: certificate has expired") and the gate run
+      used `EHEM_TLS_INSECURE` (`hem-tool status --insecure`) to reach the
+      device. Conclusion: `EHEM_TLS_SYSTEM` is the correct default once the
+      cert is renewed; `--insecure` or a pinned cert via `--cacert` is needed
+      only while the cert is lapsed. (Cross-check against the Python client's
+      TLS handling still pending; not required for the M1 gate.)

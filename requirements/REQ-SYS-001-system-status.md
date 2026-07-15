@@ -33,6 +33,14 @@ fields (`hostname`, `inited`, `https`, `fw_upgrade`, `repo_stats`, ...).
 - [ ] Unknown JSON fields are ignored (tolerant parsing, §6); a missing
       required field yields `EHEM_ERR_PROTOCOL` with detail.
 - [ ] Non-2xx HTTP responses map to `ehem_rc` per REQ-API-003.
-- [ ] OPEN (M1 gate): response shape verified against the real dev-machine
-      HEM; divergence from the doc is recorded here (doc has known gaps —
-      DISCREPANCIES.md).
+- [x] RESOLVED (M1 gate, 2026-07-15): verified against the real dev-machine
+      HEM (fw `v1.2.2-DIAG`). Live `GET /api/system/status` returned
+      `{ctx, uptime, ts, time, storage, temp, fls_state}`. All four fields the
+      binding treats as required (`ctx`, `fls_state`, `uptime`, `temp`) were
+      present → OK. `ts`/`time` were present (RTC set), confirming it is safe to
+      treat them OPTIONAL (the doc marks them "if RTC is set"). `storage` is an
+      array of `"<bytes>:<flag>"` strings (e.g. `"8388607:ro"`, `"234364924:-"`),
+      not the doc's `"disk0_status"` placeholder — parsed fine as strings.
+      Optional `hostname`/`inited`/`https`/`fw_upgrade`/`format`/`tts`/`repo_stats`
+      were absent on this DIAG firmware (`repo_stats` needs auth) and correctly
+      reported absent. No struct or required-field change needed.

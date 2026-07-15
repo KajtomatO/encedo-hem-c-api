@@ -32,5 +32,10 @@ and signature blobs (`fwk`, `fws`, `blk`, `bls`), and optional `uis`,
       JSON via fake transport).
 - [ ] Unknown JSON fields are ignored; missing required fields yield
       `EHEM_ERR_PROTOCOL`.
-- [ ] OPEN (M1 gate): response shape verified against the real dev-machine
-      HEM; divergences recorded here.
+- [x] RESOLVED (M1 gate, 2026-07-15): verified against the real dev-machine
+      HEM. Live `GET /api/system/version` returned
+      `{hwv, fwv, fwk, fws, blv, blk, bls, uis}`. Required `hwv`/`fwv`/`blv`
+      present; optional `fwk`/`fws`/`blk`/`bls`/`uis` present and parsed;
+      `sd_csd`/`sd_cid` absent (require a token). `fwv` = "Encedo nGINE FW
+      v1.2.2-DIAG" (diagnostic firmware). Matches the SDK struct; no change
+      needed.
