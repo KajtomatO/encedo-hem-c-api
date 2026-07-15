@@ -1,0 +1,10 @@
+@PACKAGE_INIT@
+
+# Package config for encedo-hem. Consumers do:
+#   find_package(encedo-hem CONFIG REQUIRED)
+#   target_link_libraries(app PRIVATE encedo-hem::encedo-hem)         # shared
+#   target_link_libraries(app PRIVATE encedo-hem::encedo-hem-static)  # static
+
+include("${CMAKE_CURRENT_LIST_DIR}/encedo-hem-targets.cmake")
+
+check_required_components(encedo-hem)

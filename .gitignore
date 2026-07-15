@@ -54,5 +54,5 @@ dkms.conf
 # debug information files
 *.dwo
 
-# build folder
-build/
+# build folders (build/, build-clang/, build-mingw/, ...)
+build*/
