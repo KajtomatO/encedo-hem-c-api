@@ -2,5 +2,48 @@
 
 # Traceability matrix
 
-Generated: never — no requirements exist yet. This stub is replaced by the
-first §4.3 run.
+Generated: 2026-07-15 (M1 decomposition)
+
+Scan inputs: 18 REQ files (`requirements/`), 18 step files
+(`workplan/todo/` — 10 detailed M1 steps, 8 milestone placeholders),
+code root `src/` and test root `tests/` absent (no tags — project
+implementation not started).
+
+| REQ | Title | Status | Priority | Architecture | Steps | Code | Tests |
+|---|---|---|---|---|---|---|---|
+| REQ-API-001 | Opaque context handle with create/destroy lifecycle | approved | must | §4 | STEP-M1-040 (todo) | — | — |
+| REQ-API-002 | No mutable global state outside the context | approved | must | §4, §1 | STEP-M1-040 (todo) | — | — |
+| REQ-API-003 | Single error enum distinguishing consumer-required conditions | approved | must | §4 | STEP-M1-040 (todo) | — | — |
+| REQ-API-004 | Retrievable last-error detail on the context | approved | must | §4 | STEP-M1-040 (todo) | — | — |
+| REQ-API-005 | Library-allocated outputs freed by matching free functions | approved | must | §4 | STEP-M1-070 (todo) | — | — |
+| REQ-API-006 | Shared library exports only ehem_-prefixed symbols | approved | must | §4, §1 | STEP-M1-010 (todo) | — | — |
+| REQ-NET-001 | All network I/O behind an injectable transport vtable | approved | must | §7, §1 | STEP-M1-050 (todo) | — | — |
+| REQ-NET-002 | Default transport implemented with libcurl | approved | must | §7, §1 | STEP-M1-060 (todo) | — | — |
+| REQ-NET-003 | Three TLS trust modes selectable per context | approved | must | §7, §12 | STEP-M1-060 (todo) | — | — |
+| REQ-NET-004 | Separate connect and total-request timeouts | approved | must | §7 | STEP-M1-060 (todo) | — | — |
+| REQ-SYS-001 | Binding for GET /api/system/status | approved | must | §6, §11 | STEP-M1-070 (todo) | — | — |
+| REQ-SYS-002 | Binding for GET /api/system/version | approved | must | §6, §11 | STEP-M1-070 (todo) | — | — |
+| REQ-TOOL-001 | hem-tool status subcommand | approved | must | §8, §11 | STEP-M1-090 (todo) | — | — |
+| REQ-TEST-001 | Unit suite runs offline through injected fake transport | approved | must | §9 | STEP-M1-050 (todo) | — | — |
+| REQ-TEST-002 | Integration tests gated on EHEM_TEST_URL | approved | must | §9 | STEP-M1-080 (todo) | — | — |
+| REQ-BUILD-001 | CMake build: static+shared libs on Linux and Windows (MinGW) | approved | must | §1, §10 | STEP-M1-010 (todo) | — | — |
+| REQ-BUILD-002 | CI builds and runs unit tests on Linux and Windows | approved | must | §1 | STEP-M1-020 (todo) | — | — |
+| REQ-BUILD-003 | JSON handled by vendored cJSON | approved | must | §1, §10 | STEP-M1-030 (todo) | — | — |
+
+Steps with `implements: []` (chores/placeholders, excluded from coverage):
+STEP-M1-100 (M1 gate verification, justified in Notes); STEP-M2-000
+through STEP-M9-000 (rolling-wave placeholders per §5.3 step 5).
+
+## Coverage report
+
+- **Approved REQs with no code tag (unimplemented):** all 18 — expected;
+  implementation has not started. Every REQ is covered by exactly one
+  planned M1 step.
+- **Implemented REQs with no passing tagged test (unverified):** none
+  (no REQ is `implemented`).
+- **Orphan tags (tags naming a nonexistent REQ):** none (`src/` and
+  `tests/` absent).
+- **Steps in `done/` with empty `evidence`:** none (`done/` empty).
+- **Broken architecture anchors:** none — all declared anchors resolve to
+  ARCHITECTURE.md headings (§1, §4, §6, §7, §8, §9, §10, §11, §12).
+- **REQs in `needs-reverify`:** none.
