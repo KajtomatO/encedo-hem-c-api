@@ -4,8 +4,8 @@
     (MSYS2 / MinGW-w64 toolchain).
 
 .DESCRIPTION
-    Windows toolchain per ARCHITECTURE.md §1 (fixed decision, 2026-07-15):
-    MinGW-w64 via MSYS2 — the GCC build closest to the Linux one. This is
+    Windows toolchain per ARCHITECTURE.md Sec.1 (fixed decision, 2026-07-15):
+    MinGW-w64 via MSYS2 - the GCC build closest to the Linux one. This is
     also what the CI Windows job uses (msys2/setup-msys2).
 
     The script:
@@ -20,7 +20,7 @@
            - wolfssl                         crypto shim, M2+ (best-effort)
 
     cJSON and phc-winner-argon2 are vendored into the tree (ARCHITECTURE.md
-    §1, §10) and are intentionally NOT installed here.
+    Sec.1, Sec.10) and are intentionally NOT installed here.
 
 .PARAMETER MsysRoot
     MSYS2 install root. Default: C:\msys64.
@@ -71,7 +71,7 @@ $crypto = @("$prefix-wolfssl")
 # --- 1. Ensure MSYS2 ------------------------------------------------------
 $bash = Join-Path $MsysRoot 'usr\bin\bash.exe'
 if (-not (Test-Path $bash)) {
-    Write-Step "MSYS2 not found at $MsysRoot — attempting install via winget..."
+    Write-Step "MSYS2 not found at $MsysRoot - attempting install via winget..."
     if (Get-Command winget -ErrorAction SilentlyContinue) {
         winget install --id MSYS2.MSYS2 --accept-package-agreements --accept-source-agreements --disable-interactivity
     } elseif (Get-Command choco -ErrorAction SilentlyContinue) {
@@ -90,8 +90,12 @@ existing install), then re-run this script.
 Write-Step "Using MSYS2 at $MsysRoot (env: $Env)"
 
 # Run a command in the MSYS2 login shell; throw on non-zero exit.
+# Feed the script over stdin (bash -l -s) rather than as a `-c <arg>`: Windows
+# PowerShell 5.1 mangles the quoting of multi-line native-exe arguments, which
+# corrupts multi-line scripts (e.g. the verify block) before bash parses them.
+# Normalize CRLF -> LF so bash never sees a stray carriage return.
 function Invoke-Msys([string]$cmd) {
-    & $bash -lc $cmd
+    ($cmd -replace "`r`n", "`n") | & $bash -l -s
     if ($LASTEXITCODE -ne 0) { throw "MSYS2 command failed (exit $LASTEXITCODE): $cmd" }
 }
 
@@ -110,7 +114,7 @@ if (-not $NoCrypto) {
     try {
         Invoke-Msys ("pacman -S --needed --noconfirm " + ($crypto -join ' '))
     } catch {
-        Write-Warn "wolfSSL not installed — M2 can fall back to a vendored/FetchContent build (ARCHITECTURE.md §12). Not needed for M1."
+        Write-Warn "wolfSSL not installed - M2 can fall back to a vendored/FetchContent build (ARCHITECTURE.md Sec.12). Not needed for M1."
     }
 } else {
     Write-Step "Skipping crypto dependencies (-NoCrypto)."
