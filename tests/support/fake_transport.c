@@ -14,6 +14,7 @@ typedef struct scripted_response {
     long    status;
     char   *body;      /* owned copy, or NULL */
     size_t  body_len;
+    int     tls_expired; /* failure carries the "cert expired" classification */
 } scripted_response;
 
 typedef struct fake_state {
@@ -29,6 +30,9 @@ typedef struct fake_state {
 
     /* Detail string returned by ehem_transport_last_detail after a failure. */
     char                  *detail;
+
+    /* Whether the most recent send failed with the "cert expired" class. */
+    int                    last_tls_expired;
 } fake_state;
 
 /* --- small owned-copy helpers -------------------------------------------- */
@@ -93,10 +97,12 @@ static void capture_request(fake_state *st, const ehem_request *req)
     rec = &st->requests[st->req_count];
     memset(rec, 0, sizeof *rec);
 
-    rec->method   = req->method;
-    rec->path     = dup_str(req->path);
-    rec->body     = dup_bytes(req->body, req->body_len);
-    rec->body_len = (rec->body != NULL) ? req->body_len : 0;
+    rec->method           = req->method;
+    rec->path             = dup_str(req->path);
+    rec->body             = dup_bytes(req->body, req->body_len);
+    rec->body_len         = (rec->body != NULL) ? req->body_len : 0;
+    rec->tls_override     = req->tls_override;
+    rec->fresh_connection = req->fresh_connection;
 
     if (req->header_count > 0 && req->headers != NULL) {
         rec->headers = calloc(req->header_count, sizeof *rec->headers);
@@ -120,6 +126,7 @@ static ehem_rc fake_send(void *state, const ehem_request *req, ehem_response *re
 
     memset(resp, 0, sizeof *resp);
     capture_request(st, req);
+    st->last_tls_expired = 0;
 
     if (st->resp_cursor >= st->resp_count) {
         return st->default_rc;   /* script exhausted */
@@ -127,6 +134,7 @@ static ehem_rc fake_send(void *state, const ehem_request *req, ehem_response *re
     scr = &st->responses[st->resp_cursor++];
 
     if (scr->rc != EHEM_OK) {
+        st->last_tls_expired = scr->tls_expired;
         return scr->rc;          /* simulated transport-level failure */
     }
 
@@ -145,6 +153,12 @@ static const char *fake_last_detail(void *state)
 {
     const fake_state *st = (const fake_state *)state;
     return (st != NULL && st->detail != NULL) ? st->detail : "";
+}
+
+static int fake_last_tls_expired(void *state)
+{
+    const fake_state *st = (const fake_state *)state;
+    return (st != NULL) ? st->last_tls_expired : 0;
 }
 
 static void fake_destroy(void *state)
@@ -169,6 +183,7 @@ static void fake_destroy(void *state)
 static const ehem_transport_ops FAKE_OPS = {
     fake_send,
     fake_last_detail,
+    fake_last_tls_expired,
     fake_destroy,
 };
 
@@ -228,6 +243,17 @@ int fake_transport_push_response(ehem_transport *t, ehem_rc rc,
         slot->body_len = strlen(body);
     }
     st->resp_count++;
+    return 0;
+}
+
+int fake_transport_push_tls_expired(ehem_transport *t, ehem_rc rc)
+{
+    fake_state *st;
+    if (fake_transport_push_response(t, rc, 0, NULL) != 0) {
+        return -1;
+    }
+    st = (fake_state *)t->state;
+    st->responses[st->resp_count - 1].tls_expired = 1;
     return 0;
 }
 

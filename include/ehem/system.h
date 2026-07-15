@@ -116,6 +116,40 @@ EHEM_API ehem_rc ehem_system_version(ehem_ctx *ctx, ehem_version_info **out);
 /* Release a version struct from ehem_system_version(). NULL is a no-op. */
 EHEM_API void ehem_system_version_free(ehem_version_info *version);
 
+/*
+ * Result of the check-in handshake (filled by ehem_system_checkin()). The
+ * device reports what the cloud response delivered; all fields are optional
+ * strings (NULL when absent — tolerant parsing, firmware variants differ).
+ */
+typedef struct ehem_checkin_info {
+    char *status;   /* general check-in status */
+    char *newcrt;   /* TLS certificate update status */
+    char *newfws;   /* available firmware update info */
+    char *newuis;   /* available Manager UI update info */
+    bool  cert_updated;  /* derived: newcrt present and non-empty */
+} ehem_checkin_info;
+
+/*
+ * Run the three-step check-in handshake — how the device verifies firmware,
+ * sets its RTC, and refreshes its TLS certificate:
+ *   1. GET /api/system/checkin on the device (challenge),
+ *   2. POST the challenge to the Encedo cloud (ehem_options.checkin_url,
+ *      default EHEM_DEFAULT_CHECKIN_URL; always TLS-verified),
+ *   3. POST the cloud's verified response back to the device.
+ * No authentication required. Run it at session start, after long offline
+ * periods, or when the device clock/certificate is stale; the SDK also runs
+ * it automatically on an expired-certificate failure unless
+ * ehem_options.no_auto_checkin is set.
+ *
+ * On success writes *out (caller frees with ehem_checkin_result_free) and
+ * returns EHEM_OK; otherwise returns an ehem_rc, leaves *out NULL, and
+ * records detail on the context.
+ */
+EHEM_API ehem_rc ehem_system_checkin(ehem_ctx *ctx, ehem_checkin_info **out);
+
+/* Release a check-in result from ehem_system_checkin(). NULL is a no-op. */
+EHEM_API void ehem_checkin_result_free(ehem_checkin_info *result);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

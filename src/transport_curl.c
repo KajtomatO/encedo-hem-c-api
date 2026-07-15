@@ -24,6 +24,9 @@
 typedef struct curl_state {
     CURL  *handle;                 /* reused across sends → connection reuse */
     char  *base_url;               /* owned; requests append their path to this */
+    ehem_tls_mode tls_mode;        /* context TLS mode (per-request overridable) */
+    char  *ca_file;                /* owned pinned-CA path (CA_FILE mode), or NULL */
+    bool   tls_expired;            /* last send failed on an EXPIRED peer cert */
     char   errbuf[CURL_ERROR_SIZE];/* libcurl's per-transfer error detail */
     char   detail[CURL_ERROR_SIZE];/* last_detail() view (errbuf or strerror) */
 } curl_state;
@@ -108,10 +111,24 @@ static size_t write_cb(char *ptr, size_t size, size_t nmemb, void *userdata)
 /* URL joining                                                                */
 /* -------------------------------------------------------------------------- */
 
-/* Join base + path with exactly one '/' between them. Caller frees. */
+/* Join base + path with exactly one '/' between them. An absolute http(s)://
+ * path is used verbatim (the check-in cloud leg targets a different host
+ * through this same transport). Caller frees. */
 static char *join_url(const char *base, const char *path)
 {
-    size_t bl = strlen(base);
+    size_t bl;
+
+    if (path != NULL && (strncmp(path, "https://", 8) == 0 ||
+                         strncmp(path, "http://", 7) == 0)) {
+        size_t n = strlen(path) + 1;
+        char *abs = malloc(n);
+        if (abs != NULL) {
+            memcpy(abs, path, n);
+        }
+        return abs;
+    }
+
+    bl = strlen(base);
     size_t pl = (path != NULL) ? strlen(path) : 0;
     bool base_slash = (bl > 0 && base[bl - 1] == '/');
     bool path_slash = (pl > 0 && path[0] == '/');
@@ -186,6 +203,35 @@ static bool build_headers(const ehem_request *req, struct curl_slist **out)
     return true;
 }
 
+/* Apply the TLS posture for this request: the context TLS mode unless the
+ * request overrides it (REQ-SYS-003 — RELAX for device check-in legs while the
+ * cert is invalid, VERIFY to force the cloud leg secure even in an INSECURE
+ * context). The pinned CA (CA_FILE mode) applies only to context-default
+ * requests: an overridden VERIFY request targets the cloud, which must be
+ * checked against the system trust store, not the device's pinned cert
+ * (CAINFO NULL restores curl's default bundle). Called every send, so no
+ * restore step is needed. */
+static void apply_tls_verify(CURL *h, const curl_state *st,
+                             ehem_tls_req_override ov)
+{
+    long peer = 1;
+    long host = 2;
+
+    if (ov == EHEM_TLS_REQ_RELAX ||
+        (ov == EHEM_TLS_REQ_DEFAULT && st->tls_mode == EHEM_TLS_INSECURE)) {
+        peer = 0;
+        host = 0;
+    }
+    curl_easy_setopt(h, CURLOPT_SSL_VERIFYPEER, peer);
+    curl_easy_setopt(h, CURLOPT_SSL_VERIFYHOST, host);
+
+    if (st->tls_mode == EHEM_TLS_CA_FILE) {
+        curl_easy_setopt(h, CURLOPT_CAINFO,
+                         (ov == EHEM_TLS_REQ_DEFAULT) ? st->ca_file
+                                                      : (char *)NULL);
+    }
+}
+
 /* Reset the easy handle's method-sticky options to a clean GET baseline so a
  * reused handle never carries a previous request's method/body. */
 static void reset_method(CURL *h)
@@ -238,6 +284,7 @@ static ehem_rc curl_send(void *state, const ehem_request *req, ehem_response *re
     memset(resp, 0, sizeof *resp);
     st->errbuf[0] = '\0';
     st->detail[0] = '\0';
+    st->tls_expired = false;
 
     url = join_url(st->base_url, req->path);
     if (url == NULL) {
@@ -250,6 +297,12 @@ static ehem_rc curl_send(void *state, const ehem_request *req, ehem_response *re
 
     reset_method(h);
     apply_method(h, req);
+    apply_tls_verify(h, st, req->tls_override);
+    /* Force a re-handshake when asked (retry after a cert refresh) or when
+     * this request's TLS posture differs from the pooled connections'. */
+    curl_easy_setopt(h, CURLOPT_FRESH_CONNECT,
+                     (req->fresh_connection ||
+                      req->tls_override != EHEM_TLS_REQ_DEFAULT) ? 1L : 0L);
     curl_easy_setopt(h, CURLOPT_URL, url);
     curl_easy_setopt(h, CURLOPT_HTTPHEADER, hdrs);
     if (req->connect_timeout_ms > 0) {
@@ -278,6 +331,18 @@ static ehem_rc curl_send(void *state, const ehem_request *req, ehem_response *re
         free(body.data);
         msg = (st->errbuf[0] != '\0') ? st->errbuf : curl_easy_strerror(cc);
         snprintf(st->detail, sizeof st->detail, "%s", msg);
+        /* Classify the one recoverable verification failure (REQ-NET-005):
+         * peer certificate EXPIRED. Primary signal is the TLS backend's verify
+         * result (OpenSSL/GnuTLS X509_V_ERR_CERT_HAS_EXPIRED == 10 via
+         * CURLINFO_SSL_VERIFYRESULT); fallback is the error text. Any other
+         * verification failure (self-signed, wrong host) stays unclassified. */
+        if (cc == CURLE_PEER_FAILED_VERIFICATION) {
+            long vr = 0;
+            curl_easy_getinfo(h, CURLINFO_SSL_VERIFYRESULT, &vr);
+            if (vr == 10 || strstr(msg, "expired") != NULL) {
+                st->tls_expired = true;
+            }
+        }
         return ehem_curl_map_error(cc, connect_time);
     }
 
@@ -298,6 +363,12 @@ static const char *curl_last_detail(void *state)
     return st->detail;
 }
 
+static int curl_last_tls_expired(void *state)
+{
+    curl_state *st = (curl_state *)state;
+    return st->tls_expired ? 1 : 0;
+}
+
 static void curl_destroy(void *state)
 {
     curl_state *st = (curl_state *)state;
@@ -308,12 +379,14 @@ static void curl_destroy(void *state)
         curl_easy_cleanup(st->handle);
     }
     free(st->base_url);
+    free(st->ca_file);
     free(st);
 }
 
 static const ehem_transport_ops CURL_OPS = {
     curl_send,
     curl_last_detail,
+    curl_last_tls_expired,
     curl_destroy,
 };
 
@@ -356,32 +429,27 @@ ehem_transport *ehem_transport_default_new(const char *base_url,
         return NULL;
     }
     memcpy(st->base_url, base_url, strlen(base_url) + 1);
-    st->handle = h;
+    st->handle   = h;
+    st->tls_mode = tls_mode;
+    if (tls_mode == EHEM_TLS_CA_FILE && ca_file != NULL) {
+        st->ca_file = malloc(strlen(ca_file) + 1);
+        if (st->ca_file == NULL) {
+            curl_easy_cleanup(h);
+            free(st->base_url);
+            free(t);
+            free(st);
+            return NULL;
+        }
+        memcpy(st->ca_file, ca_file, strlen(ca_file) + 1);
+    }
 
-    /* Per-context, non-method options set once here. */
+    /* Per-context, non-method options set once here. The whole TLS posture
+     * (verify pair + CA bundle) is applied per send (apply_tls_verify) because
+     * the check-in flow overrides it per request (REQ-SYS-003). */
     curl_easy_setopt(h, CURLOPT_ERRORBUFFER, st->errbuf);
     curl_easy_setopt(h, CURLOPT_NOSIGNAL, 1L);          /* thread-safe timeouts */
     curl_easy_setopt(h, CURLOPT_FOLLOWLOCATION, 0L);    /* device API: no redirects */
     curl_easy_setopt(h, CURLOPT_USERAGENT, "encedo-hem/" EHEM_VERSION_STRING);
-
-    /* TLS trust mode (REQ-NET-003). */
-    switch (tls_mode) {
-    case EHEM_TLS_SYSTEM:
-        curl_easy_setopt(h, CURLOPT_SSL_VERIFYPEER, 1L);
-        curl_easy_setopt(h, CURLOPT_SSL_VERIFYHOST, 2L);
-        break;
-    case EHEM_TLS_CA_FILE:
-        curl_easy_setopt(h, CURLOPT_SSL_VERIFYPEER, 1L);
-        curl_easy_setopt(h, CURLOPT_SSL_VERIFYHOST, 2L);
-        if (ca_file != NULL) {
-            curl_easy_setopt(h, CURLOPT_CAINFO, ca_file);
-        }
-        break;
-    case EHEM_TLS_INSECURE:
-        curl_easy_setopt(h, CURLOPT_SSL_VERIFYPEER, 0L);
-        curl_easy_setopt(h, CURLOPT_SSL_VERIFYHOST, 0L);
-        break;
-    }
 
     t->ops   = &CURL_OPS;
     t->state = st;

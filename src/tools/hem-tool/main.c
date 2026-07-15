@@ -1,7 +1,8 @@
 /*
  * hem-tool — a thin CLI over the Encedo HEM C SDK public API.
  *
- * implements: REQ-TOOL-001 (the `status` subcommand)
+ * implements: REQ-TOOL-001 (the `status` subcommand),
+ *             REQ-TOOL-002 (certificate-refresh notice, `checkin` subcommand)
  *
  * Consumes ONLY the public headers in include/ehem/ — it doubles as living
  * documentation of the API and as the manual driver for the M1 gate. Argument
@@ -9,7 +10,7 @@
  * / `keys rm` (M3) slot in without reworking main().
  *
  * Usage:
- *   hem-tool [--url URL] [--cacert FILE | --insecure] status
+ *   hem-tool [--url URL] [--cacert FILE | --insecure] <status|checkin>
  * Connection URL comes from --url or the EHEM_URL environment variable.
  */
 #include <stdio.h>
@@ -38,7 +39,20 @@ static void usage(FILE *f)
         "  -h, --help       show this help\n"
         "\n"
         "commands:\n"
-        "  status           print device status and version\n");
+        "  status           print device status and version\n"
+        "  checkin          run the check-in handshake (refreshes the device\n"
+        "                   TLS certificate and clock via the Encedo cloud)\n");
+}
+
+/* REQ-TOOL-002: a security-relevant event (the device presented an invalid
+ * certificate; the SDK refreshed it via check-in) must be visible. */
+static void print_cert_notice(const ehem_ctx *ctx)
+{
+    if (ehem_cert_refreshed(ctx)) {
+        fprintf(stderr,
+                "notice: device TLS certificate was invalid (expired) — "
+                "refreshed via check-in; connection re-verified\n");
+    }
 }
 
 /* Print the last-error detail recorded on the context to stderr. */
@@ -59,14 +73,12 @@ static void print_last_error(ehem_ctx *ctx, ehem_rc rc, const char *what)
     }
 }
 
-static int cmd_status(const cli_opts *o)
+/* Create a context from the CLI connection options. Returns 0 and writes *out
+ * on success; nonzero exit code otherwise (message already printed). */
+static int make_ctx(const cli_opts *o, ehem_ctx **out)
 {
     ehem_options opts;
-    ehem_ctx *ctx = NULL;
-    ehem_status_info *st = NULL;
-    ehem_version_info *ver = NULL;
     ehem_rc rc;
-    size_t i;
 
     if (o->url == NULL || o->url[0] == '\0') {
         fprintf(stderr, "error: no device URL — pass --url or set EHEM_URL\n");
@@ -81,10 +93,26 @@ static int cmd_status(const cli_opts *o)
         opts.ca_file  = o->cacert;
     }
 
-    rc = ehem_ctx_create(o->url, &opts, &ctx);
+    rc = ehem_ctx_create(o->url, &opts, out);
     if (rc != EHEM_OK) {
         fprintf(stderr, "error: invalid URL or options: %s\n", ehem_rc_str(rc));
         return 1;
+    }
+    return 0;
+}
+
+static int cmd_status(const cli_opts *o)
+{
+    ehem_ctx *ctx = NULL;
+    ehem_status_info *st = NULL;
+    ehem_version_info *ver = NULL;
+    ehem_rc rc;
+    size_t i;
+    int ret;
+
+    ret = make_ctx(o, &ctx);
+    if (ret != 0) {
+        return ret;
     }
 
     rc = ehem_system_status(ctx, &st);
@@ -124,8 +152,45 @@ static int cmd_status(const cli_opts *o)
     printf("  firmware:   %s\n", ver->fwv);
     printf("  bootloader: %s\n", ver->blv);
 
+    print_cert_notice(ctx);
     ehem_system_version_free(ver);
     ehem_system_status_free(st);
+    ehem_ctx_destroy(ctx);
+    return 0;
+}
+
+static int cmd_checkin(const cli_opts *o)
+{
+    ehem_ctx *ctx = NULL;
+    ehem_checkin_info *res = NULL;
+    ehem_rc rc;
+    int ret;
+
+    ret = make_ctx(o, &ctx);
+    if (ret != 0) {
+        return ret;
+    }
+
+    rc = ehem_system_checkin(ctx, &res);
+    if (rc != EHEM_OK) {
+        print_last_error(ctx, rc, "check-in");
+        ehem_ctx_destroy(ctx);
+        return 1;
+    }
+
+    printf("Check-in with %s completed\n", o->url);
+    if (res->status != NULL) {
+        printf("  status:           %s\n", res->status);
+    }
+    printf("  cert refreshed:   %s\n", res->cert_updated ? "yes" : "no");
+    if (res->newfws != NULL && res->newfws[0] != '\0') {
+        printf("  firmware update:  available (%s)\n", res->newfws);
+    }
+    if (res->newuis != NULL && res->newuis[0] != '\0') {
+        printf("  manager update:   available (%s)\n", res->newuis);
+    }
+
+    ehem_checkin_result_free(res);
     ehem_ctx_destroy(ctx);
     return 0;
 }
@@ -179,6 +244,8 @@ int main(int argc, char **argv)
 
     if (strcmp(cmd, "status") == 0) {
         ret = cmd_status(&o);
+    } else if (strcmp(cmd, "checkin") == 0) {
+        ret = cmd_checkin(&o);
     } else {
         fprintf(stderr, "error: unknown command '%s'\n", cmd);
         usage(stderr);

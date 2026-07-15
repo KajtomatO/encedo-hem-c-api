@@ -310,8 +310,10 @@ sequenceDiagram
   (§12 risk 4).
 - Timeouts: separate connect and total-request timeouts; the
   mobile-confirm flow passes its longer wait explicitly per request.
-- No retries in 1.x beyond token re-acquisition; retry policy is the
-  caller's.
+- No retries in 1.x beyond token re-acquisition and the automatic check-in
+  certificate recovery (expired device cert → check-in → single retry on a
+  fresh connection, opt-out via options — user decision 2026-07-15); any
+  further retry policy is the caller's.
 
 ## 8. hem-tool CLI
 
@@ -380,6 +382,9 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   `GET /api/system/status` and `/api/system/version` bindings;
   `hem-tool status` prints live device data. **Gate:** `hem-tool status`
   against the real dev-machine HEM succeeds; TLS trust model confirmed.
+  *Post-gate addition (user decision 2026-07-15):* `/api/system/checkin`
+  binding with automatic expired-certificate recovery (the gate found the
+  device cert expired; check-in is how it renews) — STEP-M1-110.
 - **M2 — login:** crypto shim (wolfCrypt X25519/HMAC + vendored Argon2);
   eJWT encode; `POST /api/auth/token` flow; token cache with silent
   refresh; error mapping for auth failures. **Gate:** authenticated

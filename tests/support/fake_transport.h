@@ -32,6 +32,8 @@ typedef struct fake_captured_request {
     size_t           header_count;
     uint8_t         *body;         /* owned copy, NUL-terminated; NULL if none */
     size_t           body_len;
+    ehem_tls_req_override tls_override;  /* per-request TLS posture the caller asked for */
+    int              fresh_connection;
 } fake_captured_request;
 
 /* Construct a fake transport. Returns NULL on allocation failure. */
@@ -48,6 +50,14 @@ void fake_transport_free(ehem_transport *t);
  */
 int fake_transport_push_response(ehem_transport *t, ehem_rc rc,
                                  long status, const char *body);
+
+/*
+ * Queue a transport failure that reports "peer certificate expired": send()
+ * returns `rc` (typically EHEM_ERR_NETWORK) and ehem_transport_last_tls_expired
+ * reports 1 until the next send — the REQ-NET-005 auto-recovery trigger.
+ * Returns 0 on success, -1 on allocation failure.
+ */
+int fake_transport_push_tls_expired(ehem_transport *t, ehem_rc rc);
 
 /* If send() is called with no queued response, it returns this rc (default
  * EHEM_ERR_NETWORK) — set it to make "ran out of script" explicit in a test. */

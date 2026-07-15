@@ -92,6 +92,8 @@ void ehem_options_init(ehem_options *opts)
     opts->tls_mode           = EHEM_TLS_SYSTEM;
     opts->ca_file            = NULL;
     opts->transport          = NULL;
+    opts->no_auto_checkin    = 0;      /* automatic cert recovery on by default */
+    opts->checkin_url        = NULL;   /* NULL → EHEM_DEFAULT_CHECKIN_URL */
 }
 
 /* Copy options into the context, applying defaults for absent/zero fields.
@@ -105,9 +107,12 @@ static ehem_rc apply_options(ehem_ctx *ctx, const ehem_options *opts)
     ctx->ca_file            = NULL;
     ctx->transport          = NULL;
     ctx->owns_transport     = false;
+    ctx->no_auto_checkin    = false;
+    ctx->checkin_url        = NULL;   /* set below (owned copy) */
 
     if (opts == NULL) {
-        return EHEM_OK;
+        ctx->checkin_url = ehem_strdup(EHEM_DEFAULT_CHECKIN_URL);
+        return (ctx->checkin_url != NULL) ? EHEM_OK : EHEM_ERR_NOMEM;
     }
 
     if (EHEM_OPT_HAS(opts, connect_timeout_ms) && opts->connect_timeout_ms > 0) {
@@ -129,6 +134,16 @@ static ehem_rc apply_options(ehem_ctx *ctx, const ehem_options *opts)
         /* Caller override: borrowed, so the context must not destroy it. */
         ctx->transport      = opts->transport;
         ctx->owns_transport = false;
+    }
+    if (EHEM_OPT_HAS(opts, no_auto_checkin)) {
+        ctx->no_auto_checkin = (opts->no_auto_checkin != 0);
+    }
+    ctx->checkin_url = ehem_strdup(
+        (EHEM_OPT_HAS(opts, checkin_url) && opts->checkin_url != NULL)
+            ? opts->checkin_url
+            : EHEM_DEFAULT_CHECKIN_URL);
+    if (ctx->checkin_url == NULL) {
+        return EHEM_ERR_NOMEM;
     }
 
     /* CA_FILE trust mode is meaningless without a certificate to trust. */
@@ -208,6 +223,11 @@ const ehem_transport *ehem_ctx_transport(const ehem_ctx *ctx)
     return ctx->transport;
 }
 
+int ehem_cert_refreshed(const ehem_ctx *ctx)
+{
+    return (ctx != NULL && ctx->cert_refreshed) ? 1 : 0;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Context lifecycle (REQ-API-001, REQ-API-002)                               */
 /* -------------------------------------------------------------------------- */
@@ -277,6 +297,7 @@ void ehem_ctx_destroy(ehem_ctx *ctx)
     }
     free(ctx->url);
     free(ctx->ca_file);
+    free(ctx->checkin_url);
     free(ctx->err_payload);
     /* Zeroize before releasing: credential material (added in M2) lives in this
      * struct, and wiping now both sets that policy and clears dangling pointers. */

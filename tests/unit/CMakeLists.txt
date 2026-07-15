@@ -17,6 +17,9 @@ ehem_add_unit_test(test_transport_curl SOURCES test_transport_curl.c)
 # REQ-SYS-001, REQ-SYS-002, REQ-API-005: system status/version bindings.
 ehem_add_unit_test(test_system SOURCES test_system.c)
 
+# REQ-SYS-003, REQ-NET-005: check-in flow + automatic certificate recovery.
+ehem_add_unit_test(test_checkin SOURCES test_checkin.c)
+
 # REQ-NET-002: the public headers must not reference libcurl.
 add_test(NAME public_headers_curl_free
   COMMAND ${CMAKE_COMMAND}

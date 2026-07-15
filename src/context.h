@@ -35,6 +35,12 @@ struct ehem_ctx {
     const ehem_transport *transport;
     bool                  owns_transport;
 
+    /* Check-in / automatic certificate recovery (REQ-SYS-003, REQ-NET-005). */
+    char *checkin_url;     /* owned; cloud endpoint (default EHEM_DEFAULT_CHECKIN_URL) */
+    bool  no_auto_checkin; /* opt-out of automatic expired-cert recovery */
+    bool  cert_refreshed;  /* sticky: an automatic recovery refreshed the cert */
+    bool  in_checkin;      /* recursion guard: check-in legs never auto-recover */
+
     /* Last-error detail (REQ-API-004). `last_error` is what ehem_last_error()
      * returns; its string pointers reference the two buffers below, both owned
      * by the context. Valid until the next API call mutates them. */

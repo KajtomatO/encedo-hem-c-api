@@ -116,6 +116,10 @@ typedef enum ehem_tls_mode {
 #define EHEM_DEFAULT_CONNECT_TIMEOUT_MS 10000L   /* 10 s to establish a connection */
 #define EHEM_DEFAULT_TOTAL_TIMEOUT_MS   30000L   /* 30 s for the whole request */
 
+/* Default cloud endpoint for the check-in handshake (see ehem_system_checkin
+ * in <ehem/system.h> and the automatic recovery notes below). */
+#define EHEM_DEFAULT_CHECKIN_URL "https://api.encedo.com/checkin"
+
 typedef struct ehem_options {
     size_t         abi_size;            /* set by ehem_options_init(); do not touch */
     long           connect_timeout_ms;  /* connect timeout; <=0 → default */
@@ -123,6 +127,19 @@ typedef struct ehem_options {
     ehem_tls_mode  tls_mode;            /* default EHEM_TLS_SYSTEM */
     const char    *ca_file;             /* CA bundle / pinned cert path for CA_FILE mode */
     const ehem_transport *transport;    /* transport override; NULL → built-in default */
+
+    /*
+     * Automatic certificate recovery. When a device request fails TLS
+     * verification because the device certificate has EXPIRED (the one
+     * classifiable, check-in-recoverable failure), the SDK runs the check-in
+     * handshake to refresh the certificate and retries the request once on a
+     * fresh connection. Enabled by default; set no_auto_checkin to a nonzero
+     * value to opt out (zero keeps the default, per the abi_size discipline).
+     * A performed refresh is reported by ehem_cert_refreshed().
+     */
+    int            no_auto_checkin;     /* 0 = automatic recovery on (default) */
+    const char    *checkin_url;         /* cloud check-in endpoint override;
+                                         * NULL → EHEM_DEFAULT_CHECKIN_URL */
 } ehem_options;
 
 /*
@@ -177,6 +194,16 @@ typedef struct ehem_error {
  * message ""). Returns NULL only if `ctx` is NULL.
  */
 EHEM_API const ehem_error *ehem_last_error(const ehem_ctx *ctx);
+
+/*
+ * True once an automatic certificate recovery (expired device cert →
+ * check-in → retry; see ehem_options.no_auto_checkin) has taken effect on
+ * this context — i.e. the check-in completed AND the retried request then
+ * verified against the device. Sticky for the context's lifetime, so a
+ * consumer can inform the user after its operations completed. False for a
+ * NULL ctx.
+ */
+EHEM_API int ehem_cert_refreshed(const ehem_ctx *ctx);
 
 /* ==========================================================================
  * Process-global init / cleanup

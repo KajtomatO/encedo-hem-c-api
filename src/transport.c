@@ -33,6 +33,14 @@ const char *ehem_transport_last_detail(const ehem_transport *t)
     return "";
 }
 
+int ehem_transport_last_tls_expired(const ehem_transport *t)
+{
+    if (t != NULL && t->ops != NULL && t->ops->last_tls_expired != NULL) {
+        return t->ops->last_tls_expired(t->state);
+    }
+    return 0;
+}
+
 void ehem_transport_destroy(ehem_transport *t)
 {
     if (t == NULL) {

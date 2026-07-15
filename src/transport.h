@@ -37,18 +37,34 @@ typedef struct ehem_header {
     const char *value;
 } ehem_header;
 
+/* Per-request TLS handling override (REQ-SYS-003 security constraints). Only
+ * the check-in flow sets a non-default value; bindings never expose this. */
+typedef enum ehem_tls_req_override {
+    EHEM_TLS_REQ_DEFAULT = 0,  /* use the context/transport TLS mode */
+    EHEM_TLS_REQ_RELAX,        /* skip verification: device check-in legs that
+                                * must work while the device cert is invalid */
+    EHEM_TLS_REQ_VERIFY        /* force full verification: the cloud leg, even
+                                * when the context runs in INSECURE mode */
+} ehem_tls_req_override;
+
 /* An outgoing request. `path` is appended to the context's base URL by the
- * transport. Timeouts travel per-request (REQ-NET-001) so a later long-wait
- * flow (mobile confirm, M8) needs no vtable change. */
+ * transport — unless it is an absolute http(s):// URL, which is used verbatim
+ * (the check-in cloud leg targets api.encedo.com through the same transport,
+ * keeping it fake-injectable). Timeouts travel per-request (REQ-NET-001) so a
+ * later long-wait flow (mobile confirm, M8) needs no vtable change. */
 typedef struct ehem_request {
     ehem_http_method   method;
-    const char        *path;               /* e.g. "/api/system/status" */
+    const char        *path;               /* "/api/..." or absolute "https://..." */
     const ehem_header *headers;            /* array, or NULL */
     size_t             header_count;
     const uint8_t     *body;               /* request body, or NULL */
     size_t             body_len;
     long               connect_timeout_ms; /* <=0 → transport default */
     long               total_timeout_ms;   /* <=0 → transport default */
+    ehem_tls_req_override tls_override;    /* default 0 = context TLS mode */
+    int                fresh_connection;   /* nonzero → do not reuse a cached
+                                            * connection (retry after cert
+                                            * refresh must re-handshake) */
 } ehem_request;
 
 /* A response. `body` is NUL-terminated for convenience (body_len excludes the
@@ -82,6 +98,11 @@ typedef struct ehem_transport_ops {
      * "" when there is nothing to add. Valid until the next send() on the same
      * instance. Bindings surface it through ehem_last_error (REQ-API-004). */
     const char *(*last_detail)(void *state);
+    /* Optional: nonzero iff the most recent send() failed TLS verification
+     * specifically because the peer certificate has EXPIRED — the one
+     * verification-failure class the auto check-in recovery (REQ-NET-005) may
+     * act on. Other TLS failures must report 0. May be NULL (never expired). */
+    int (*last_tls_expired)(void *state);
     void    (*destroy)(void *state);
 } ehem_transport_ops;
 
@@ -101,6 +122,10 @@ ehem_rc ehem_transport_send(const ehem_transport *t,
 /* Human-readable detail of the last send() failure on `t`, or "" if none /
  * unsupported. Never NULL. Valid until the next send() on the same instance. */
 const char *ehem_transport_last_detail(const ehem_transport *t);
+
+/* Nonzero iff the last send() on `t` failed because the peer certificate has
+ * expired (REQ-NET-005 trigger classification). 0 if unsupported. */
+int ehem_transport_last_tls_expired(const ehem_transport *t);
 
 /* -------------------------------------------------------------------------- */
 /* Default transport backend (libcurl). Declared here with a libcurl-free      */
