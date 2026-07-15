@@ -30,33 +30,50 @@ set(_symbols "")
 # Key off the artifact, not the host OS, so the correct tool is used even when
 # cross-inspecting (e.g. checking a cross-built .dll from a Linux host).
 if(EHEM_SHARED_LIB MATCHES "\\.dll$")
-  find_program(_objdump NAMES objdump llvm-objdump x86_64-w64-mingw32-objdump)
-  if(NOT _objdump)
-    message(WARNING "objdump not found; skipping export check for ${EHEM_SHARED_LIB}")
-    return()
-  endif()
-  execute_process(COMMAND "${_objdump}" -p "${EHEM_SHARED_LIB}"
-                  OUTPUT_VARIABLE _out RESULT_VARIABLE _rc)
-  if(NOT _rc EQUAL 0)
-    message(FATAL_ERROR "objdump failed on ${EHEM_SHARED_LIB}")
-  endif()
-  # objdump -p prints many "[  N] token" rows (exports, base relocations, ...).
-  # Only the block under "[Ordinal/Name Pointer] Table" holds export names —
-  # scan exactly that block so .reloc rows (DIR64/ABSOLUTE) aren't mistaken
-  # for exports.
-  string(REGEX REPLACE "\r?\n" ";" _lines "${_out}")
-  set(_in_names OFF)
-  foreach(_line IN LISTS _lines)
-    if(_line MATCHES "\\[Ordinal/Name Pointer\\] Table")
-      set(_in_names ON)
-    elseif(_in_names)
-      if(_line MATCHES "^[ \t]*\\[ *[0-9]+\\][ \t]+([A-Za-z_][A-Za-z0-9_]*)[ \t]*$")
-        list(APPEND _symbols "${CMAKE_MATCH_1}")
-      elseif(_line MATCHES "[^ \t]")   # any other non-blank line ends the table
-        set(_in_names OFF)
+  # Preferred: parse the linker-emitted .def next to the DLL (see CMakeLists
+  # "--output-def"). Its "EXPORTS" list is stable across toolchain versions,
+  # unlike `objdump -p`'s human-readable export table.
+  string(REGEX REPLACE "\\.dll$" ".def" _def "${EHEM_SHARED_LIB}")
+  if(EXISTS "${_def}")
+    file(STRINGS "${_def}" _deflines)
+    set(_in_exports OFF)
+    foreach(_line IN LISTS _deflines)
+      if(_line MATCHES "^[ \t]*EXPORTS")
+        set(_in_exports ON)
+      elseif(_in_exports)
+        # Export rows: "name @ordinal [DATA] [PRIVATE] ..."; comments start ';'.
+        if(_line MATCHES "^[ \t]*([A-Za-z_][A-Za-z0-9_$?@]*)")
+          set(_sym "${CMAKE_MATCH_1}")
+          string(REGEX REPLACE "@.*$" "" _sym "${_sym}")   # drop glued @ordinal
+          list(APPEND _symbols "${_sym}")
+        endif()
       endif()
+    endforeach()
+  else()
+    # Fallback: objdump -p (best effort; format varies by binutils version).
+    find_program(_objdump NAMES objdump llvm-objdump x86_64-w64-mingw32-objdump)
+    if(NOT _objdump)
+      message(FATAL_ERROR "no .def (${_def}) and objdump not found; cannot check exports")
     endif()
-  endforeach()
+    execute_process(COMMAND "${_objdump}" -p "${EHEM_SHARED_LIB}"
+                    OUTPUT_VARIABLE _out RESULT_VARIABLE _rc)
+    if(NOT _rc EQUAL 0)
+      message(FATAL_ERROR "objdump failed on ${EHEM_SHARED_LIB}")
+    endif()
+    string(REGEX REPLACE "\r?\n" ";" _lines "${_out}")
+    set(_in_names OFF)
+    foreach(_line IN LISTS _lines)
+      if(_line MATCHES "\\[Ordinal/Name Pointer\\] Table")
+        set(_in_names ON)
+      elseif(_in_names)
+        if(_line MATCHES "^[ \t]*\\[ *[0-9]+\\][ \t]+([A-Za-z_][A-Za-z0-9_]*)[ \t]*$")
+          list(APPEND _symbols "${CMAKE_MATCH_1}")
+        elseif(_line MATCHES "[^ \t]")
+          set(_in_names OFF)
+        endif()
+      endif()
+    endforeach()
+  endif()
 else()
   find_program(_nm NAMES nm llvm-nm)
   if(NOT _nm)

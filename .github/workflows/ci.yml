@@ -1,0 +1,75 @@
+# CI — build the library and run the unit suite on Linux and Windows (MinGW).
+# implements: REQ-BUILD-002
+#
+# Only the `unit` label runs here: integration tests need the dev-machine HEM
+# and stay local (REQ-TEST-002 gates them on EHEM_TEST_URL, which CI never
+# sets); dangerous tests never run automatically. See ARCHITECTURE.md §9.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# Cancel superseded runs on the same ref to save minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: Linux (${{ matrix.cc }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v5
+
+      # Dogfood the project's own installer (keeps it honest). --no-crypto:
+      # wolfSSL isn't needed until M2.
+      - name: Install dependencies
+        run: ./scripts/install-deps-linux.sh --yes --no-crypto
+
+      - name: Configure
+        run: cmake -B build -G Ninja -DCMAKE_C_COMPILER=${{ matrix.cc }}
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Unit tests
+        run: ctest --test-dir build -L unit --output-on-failure
+
+  windows-mingw:
+    name: Windows (MinGW)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}          # every run step executes in the MSYS2 shell
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up MSYS2 / MinGW-w64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          # Explicit package list (pinning the toolset we build against —
+          # §12 risk 5). The PowerShell installer covers the same set locally.
+          install: >-
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-pkgconf
+            mingw-w64-x86_64-curl
+            mingw-w64-x86_64-cmocka
+
+      - name: Configure
+        run: cmake -B build -G Ninja
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Unit tests
+        run: ctest --test-dir build -L unit --output-on-failure

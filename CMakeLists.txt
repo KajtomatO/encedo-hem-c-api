@@ -70,10 +70,15 @@ set_target_properties(encedo-hem PROPERTIES
   VERSION   ${PROJECT_VERSION}
   SOVERSION ${PROJECT_VERSION_MAJOR})
 
-# MinGW: with dllexport present, restrict the DLL to those symbols only.
+# MinGW: with dllexport present, restrict the DLL to those symbols only, and
+# emit a .def file listing the exports. The .def is a stable, machine-readable
+# export list (unlike `objdump -p`, whose format drifts across binutils
+# versions) that the symbol-export check parses on Windows.
 if(WIN32 AND NOT MSVC)
   set_target_properties(encedo-hem PROPERTIES
     WINDOWS_EXPORT_ALL_SYMBOLS OFF)
+  target_link_options(encedo-hem PRIVATE
+    "-Wl,--output-def,${CMAKE_CURRENT_BINARY_DIR}/libencedo-hem.def")
 endif()
 
 # --- install / export -----------------------------------------------------

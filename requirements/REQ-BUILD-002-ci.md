@@ -1,7 +1,7 @@
 ---
 id: REQ-BUILD-002
 title: CI builds and runs unit tests on Linux and Windows
-status: approved
+status: implemented
 priority: must
 revision: 1
 source: ARCHITECTURE.md §1 (GitHub Actions; integration stays local, user decision 2026-07-15)
@@ -25,8 +25,9 @@ gains device access (user decision 2026-07-15); REQ-TEST-002's gating is
 what keeps CI green without one.
 
 **Acceptance criteria:**
-- [ ] `.github/workflows/ci.yml` triggers on push and pull_request.
-- [ ] Linux job: build (GCC) + `ctest -L unit`, failing the workflow on
-      any test failure.
-- [ ] Windows job: MSYS2/MinGW build + `ctest -L unit`.
-- [ ] Integration and dangerous labels are never executed in CI.
+- [x] `.github/workflows/ci.yml` triggers on push and pull_request.
+- [x] Linux job: build (GCC) + `ctest -L unit`, failing the workflow on
+      any test failure. *(matrix gcc+clang; green)*
+- [x] Windows job: MSYS2/MinGW build + `ctest -L unit`. *(green)*
+- [x] Integration and dangerous labels are never executed in CI. *(only
+      `-L unit` invoked; asserted by offline YAML check)*

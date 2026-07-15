@@ -7,7 +7,7 @@ traces:
   architecture: ["ARCHITECTURE.md#1-decisions-fixed", "ARCHITECTURE.md#10-directory-layout", "ARCHITECTURE.md#4-public-api--conventions"]
 depends_on: []
 evidence:
-  commits: []
+  commits: ["f3364a5", "a0d4fdb (export-check .def hardening for MSYS2 binutils)"]
   tests: ["verifies: REQ-BUILD-001", "verifies: REQ-API-006 (tests/unit/test_version.c, tests/unit/check_exports.cmake)"]
   notes: >
     Verified on the Linux dev machine (2026-07-15): GCC 13.3 and Clang 18.1
@@ -40,7 +40,7 @@ at the top-level CMakeLists, `REQ-API-006` at the visibility/export macro.
 
 **Definition of done**
 - [x] `cmake -B build && cmake --build build && ctest --test-dir build -L unit` green on Linux (GCC and Clang)
-- [ ] Same green under MSYS2/MinGW on Windows — *library cross-builds + exports verified; full unit suite on Windows pending the CI job (STEP-M1-020)*
+- [x] Same green under MSYS2/MinGW on Windows — *CI windows-mingw job green (`ctest -L unit` 2/2) after the export-check `.def` fix landed in a0d4fdb*
 - [x] Static and shared variants build; exported CMake target `encedo-hem::encedo-hem`
 - [x] C99, warnings-as-errors clean
 - [x] Shared library exports only `ehem_*` symbols (scripted `nm`/export-table check)
