@@ -1,6 +1,6 @@
 # Requirements & Work Management (AI-Assisted)
 
-How requirements and implementation work are managed for **<PROJECT_NAME>**.
+How requirements and implementation work are managed for **encedo-hem-c-api**.
 This document has two audiences: **engineers** and **Claude Code**. Sections
 labeled **PROCEDURE** are step-by-step instructions meant to be executed
 literally by either. What is being built is defined in
@@ -54,15 +54,20 @@ workplan/
 
 `requirements/REQ-<AREA>-<NNN>-<slug>.md`
 
-<!-- SETUP: define this project's area codes before drafting the first REQ.
-     Codes are short (2–6 chars), uppercase, and together partition the
-     project's requirement space. Add rows as needed; adding a new area
-     later is fine, renaming an existing one is not (IDs are permanent). -->
+<!-- Area codes are permanent once used; adding a new area later is fine,
+     renaming an existing one is not. -->
 
 | Area | Covers |
 |---|---|
-| `<AREA>` | <what this area covers> |
-| `<AREA>` | <what this area covers> |
+| `API` | public API surface: context lifecycle, memory/ownership conventions, error model, versioning/ABI |
+| `AUTH` | auth & session engine: eJWT flow, KDF, token & scope caches, logout, mobile-app confirmation |
+| `KEY` | key-management bindings: list/search/get/create/delete/import/update, KID/LABEL/DESCR handling |
+| `OPS` | cryptographic operation bindings: sign/verify, ECDH, AES, HMAC, ML-KEM/ML-DSA, random |
+| `SYS` | system/logger/storage bindings, incl. dangerous operations (reboot, firmware) |
+| `NET` | transport layer: vtable, libcurl implementation, TLS trust, timeouts |
+| `TOOL` | hem-tool CLI behavior, incl. protected-key removal policy |
+| `TEST` | testing policy & infrastructure: suite gating, device policy, fixtures |
+| `BUILD` | build system, packaging, dependency vendoring, CI |
 
 `NNN` is three digits, sequential within an area, and **never reused** — not
 even for rejected or superseded requirements. The filename never changes after
@@ -284,14 +289,16 @@ Claude SHOULD propose capturing it as a REQ on the spot.
   memory or plausibility. When sources conflict, name which source says
   what.
 
-  <!-- SETUP: list this project's authoritative external sources
-       (spec documents, API references, sibling repos, standards).
-       If there are none, replace the list with "None — this project
-       has no external ground-truth sources." -->
-
   | Source | Authoritative for |
   |---|---|
-  | `<path or URL>` | <what claims it settles> |
+  | the real HEM device (dev machine, later CI) | final arbiter for all device behavior; wins over every document |
+  | Encedo Manager (implementation) | the auth flow: KDF choice and exact Argon2 parameters (user decision 2026-07-15) |
+  | https://github.com/KajtomatO/encedo-hem-api-doc | HEM REST API endpoints, request/response payloads, error codes; its `DISCREPANCIES.md` records known doc/implementation divergences |
+  | https://github.com/KajtomatO/encedo-hem-python-api | working client reference: auth/token caching behavior, TLS handling, `wipe_keys.py` protected-key policy |
+  | `requirements/start_point/encedo-pkcs11/` (`hem.h`, `REQUIREMENTS-hem.md`) | the consumer contract: what encedo-pkcs11 needs from this SDK (HEM-SDK-1…9, error-condition set) |
+
+  Precedence when sources conflict: device > Encedo Manager > API doc;
+  conflicts are recorded in the affected REQ, not silently resolved.
 
 - **No silent state changes.** Every status transition, folder move, or
   generated-file update appears in a commit and/or a chat report.
