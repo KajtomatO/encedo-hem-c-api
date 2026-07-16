@@ -4,6 +4,7 @@
  * implements: REQ-API-001, REQ-API-002, REQ-API-003, REQ-API-004
  */
 #include "context.h"
+#include "proto_auth.h"
 #include "transport.h"
 
 #include <stdarg.h>
@@ -94,6 +95,7 @@ void ehem_options_init(ehem_options *opts)
     opts->transport          = NULL;
     opts->no_auto_checkin    = 0;      /* automatic cert recovery on by default */
     opts->checkin_url        = NULL;   /* NULL → EHEM_DEFAULT_CHECKIN_URL */
+    opts->no_credential_retention = 0; /* retain the passphrase for silent refresh */
 }
 
 /* Copy options into the context, applying defaults for absent/zero fields.
@@ -109,6 +111,7 @@ static ehem_rc apply_options(ehem_ctx *ctx, const ehem_options *opts)
     ctx->owns_transport     = false;
     ctx->no_auto_checkin    = false;
     ctx->checkin_url        = NULL;   /* set below (owned copy) */
+    ctx->no_credential_retention = false;
 
     if (opts == NULL) {
         ctx->checkin_url = ehem_strdup(EHEM_DEFAULT_CHECKIN_URL);
@@ -137,6 +140,9 @@ static ehem_rc apply_options(ehem_ctx *ctx, const ehem_options *opts)
     }
     if (EHEM_OPT_HAS(opts, no_auto_checkin)) {
         ctx->no_auto_checkin = (opts->no_auto_checkin != 0);
+    }
+    if (EHEM_OPT_HAS(opts, no_credential_retention)) {
+        ctx->no_credential_retention = (opts->no_credential_retention != 0);
     }
     ctx->checkin_url = ehem_strdup(
         (EHEM_OPT_HAS(opts, checkin_url) && opts->checkin_url != NULL)
@@ -295,12 +301,15 @@ void ehem_ctx_destroy(ehem_ctx *ctx)
     if (ctx->owns_transport && ctx->transport != NULL) {
         ehem_transport_destroy((ehem_transport *)ctx->transport);
     }
+    /* Destroy implies logout: scrub + free the retained passphrase and drop the
+     * token cache (REQ-AUTH-002, REQ-API-001 zeroization). */
+    ehem_auth_destroy(ctx->auth);
     free(ctx->url);
     free(ctx->ca_file);
     free(ctx->checkin_url);
     free(ctx->err_payload);
-    /* Zeroize before releasing: credential material (added in M2) lives in this
-     * struct, and wiping now both sets that policy and clears dangling pointers. */
+    /* Zeroize before releasing: credential material lives behind ctx->auth
+     * (already scrubbed above); wiping the struct clears dangling pointers. */
     memset(ctx, 0, sizeof *ctx);
     free(ctx);
 }

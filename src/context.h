@@ -19,6 +19,11 @@
 /* Capacity of the inline last-error message buffer (backs ehem_error.message). */
 #define EHEM_ERR_MSG_MAX 256
 
+/* Session/auth state (passphrase + scope-keyed token cache). Opaque here — the
+ * full layout lives in proto_auth.c so credential handling stays contained to
+ * the auth component (REQ-AUTH-002). NULL until the first ehem_login(). */
+struct ehem_auth;
+
 struct ehem_ctx {
     /* Immutable connection configuration (set at create, owned copies). */
     char          *url;
@@ -40,6 +45,12 @@ struct ehem_ctx {
     bool  no_auto_checkin; /* opt-out of automatic expired-cert recovery */
     bool  cert_refreshed;  /* sticky: an automatic recovery refreshed the cert */
     bool  in_checkin;      /* recursion guard: check-in legs never auto-recover */
+
+    /* Auth / session (REQ-AUTH-001, REQ-AUTH-002). `auth` is lazily allocated
+     * by ehem_login() and torn down (zeroizing credentials) by ehem_logout() /
+     * ehem_ctx_destroy(). no_credential_retention mirrors the option. */
+    struct ehem_auth *auth;
+    bool  no_credential_retention;
 
     /* Last-error detail (REQ-API-004). `last_error` is what ehem_last_error()
      * returns; its string pointers reference the two buffers below, both owned

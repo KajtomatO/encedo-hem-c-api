@@ -77,6 +77,7 @@ set(EHEM_SOURCES
   src/transport_curl.c
   src/proto_common.c
   src/proto_system.c
+  src/proto_auth.c
   src/crypto_shim.c
   src/ejwt.c)
 

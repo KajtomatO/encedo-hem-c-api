@@ -140,6 +140,18 @@ typedef struct ehem_options {
     int            no_auto_checkin;     /* 0 = automatic recovery on (default) */
     const char    *checkin_url;         /* cloud check-in endpoint override;
                                          * NULL → EHEM_DEFAULT_CHECKIN_URL */
+
+    /*
+     * Credential retention (REQ-AUTH-002). By default ehem_login() keeps a
+     * zeroized copy of the passphrase inside the context so the session engine
+     * can silently re-acquire bearer tokens for the context's lifetime (silent
+     * refresh). Set no_credential_retention to a nonzero value to keep only the
+     * tokens already acquired: the passphrase is scrubbed as soon as it has
+     * been used, and a later cache miss/expiry then fails with
+     * EHEM_ERR_AUTH_EXPIRED until the caller calls ehem_login() again (zero
+     * keeps the default retaining behavior, per the abi_size discipline).
+     */
+    int            no_credential_retention; /* 0 = retain passphrase (default) */
 } ehem_options;
 
 /*

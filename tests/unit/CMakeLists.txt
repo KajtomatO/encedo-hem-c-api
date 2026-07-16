@@ -26,6 +26,9 @@ ehem_add_unit_test(test_crypto SOURCES test_crypto.c)
 # REQ-AUTH-001: base64/base64url codecs + eJWT builder vs the python fixture.
 ehem_add_unit_test(test_ejwt SOURCES test_ejwt.c)
 
+# REQ-AUTH-001, REQ-AUTH-002: login sequence + scope-keyed token cache.
+ehem_add_unit_test(test_auth SOURCES test_auth.c)
+
 # REQ-NET-002 + REQ-AUTH-001: public headers must not reference libcurl/wolfSSL.
 add_test(NAME public_headers_dep_free
   COMMAND ${CMAKE_COMMAND}
