@@ -9,7 +9,7 @@ depends_on: []
 evidence:
   commits:
     - "db06d91 — initial crypto shim"
-    - "<pending> — [STEP-M2-010] fix: X25519 portable scalarmult (MinGW CI)"
+    - "3fde0fd — fix: X25519 portable base-point scalarmult (MinGW CI)"
   tests:
     - "verifies: REQ-AUTH-001 — tests/unit/test_crypto.c (PBKDF2/HMAC/X25519 vectors, zeroize)"
     - "verifies: REQ-AUTH-001 — tests/unit/check_public_headers.cmake (no wolfSSL in include/ehem/)"
