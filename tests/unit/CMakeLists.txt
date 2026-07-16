@@ -36,6 +36,10 @@ if(TARGET hem-tool-core)
   # REQ-TOOL-007: `keys pub` — material formats, classification, exit codes.
   ehem_add_unit_test(test_keys_pub SOURCES test_keys_pub.c)
   target_link_libraries(test_keys_pub PRIVATE hem-tool-core)
+
+  # REQ-TOOL-008: `sign` — inputs, default-alg lookup, formats, exit codes.
+  ehem_add_unit_test(test_sign_tool SOURCES test_sign_tool.c)
+  target_link_libraries(test_sign_tool PRIVATE hem-tool-core)
 endif()
 
 # REQ-SYS-004, REQ-SYS-005: config GET / cert install / reboot bindings.

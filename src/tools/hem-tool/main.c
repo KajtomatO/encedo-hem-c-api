@@ -6,7 +6,8 @@
  *             REQ-TOOL-003 (the `cert-install` subcommand),
  *             REQ-TOOL-004 (the `keys list` subcommand),
  *             REQ-TOOL-006 (the `keys rm` subcommand),
- *             REQ-TOOL-007 (the `keys pub` subcommand)
+ *             REQ-TOOL-007 (the `keys pub` subcommand),
+ *             REQ-TOOL-008 (the `sign` subcommand)
  *
  * Consumes ONLY the public headers in include/ehem/ — it doubles as living
  * documentation of the API and as the manual driver for the M1/M2 gates.
@@ -28,6 +29,7 @@
 
 #include "cert_install.h"
 #include "keys.h"
+#include "sign.h"
 
 #define MAX_LABEL_PREFIXES 32
 
@@ -45,9 +47,14 @@ typedef struct {
     const char *prefixes[MAX_LABEL_PREFIXES];  /* --label-prefix (repeatable) */
     size_t      prefix_count;
 
-    /* keys pub output format (REQ-TOOL-007). */
+    /* keys pub / sign output format (REQ-TOOL-007/008). */
     int         hex;          /* --hex */
     int         raw;          /* --raw */
+
+    /* sign inputs (REQ-TOOL-008). */
+    const char *alg;          /* --alg (verbatim selector; NULL → default) */
+    const char *in_path;      /* --in (message file; NULL → stdin) */
+    const char *sigctx;       /* --sigctx (RFC 8032 context string) */
 } cli_opts;
 
 static void usage(FILE *f)
@@ -67,8 +74,12 @@ static void usage(FILE *f)
         "                   (repeatable; exact match required for protected keys)\n"
         "  --dry-run        keys rm: show what would be deleted, delete nothing\n"
         "  --yes            keys rm: skip the bulk prompt (never for protected keys)\n"
-        "  --hex            keys pub: print the material as lowercase hex\n"
-        "  --raw            keys pub: write ONLY the raw material bytes to stdout\n"
+        "  --hex            keys pub / sign: print the output as lowercase hex\n"
+        "  --raw            keys pub / sign: write ONLY the raw bytes to stdout\n"
+        "  --alg ALG        sign: algorithm selector (e.g. Ed25519,\n"
+        "                   SHA256WithECDSA); omitted → derived from the key type\n"
+        "  --in FILE        sign: read the message from FILE (default: stdin)\n"
+        "  --sigctx STR     sign: RFC 8032 context for the Ed*ctx/Ed*ph selectors\n"
         "  -h, --help       show this help\n"
         "\n"
         "commands:\n"
@@ -83,7 +94,10 @@ static void usage(FILE *f)
         "  keys pub KID     print a key's public material and typed metadata\n"
         "                   (read-only; --hex / --raw select the encoding)\n"
         "  keys rm          delete keys: --all (non-protected) or --label-prefix P;\n"
-        "                   protected keys need an exact label + per-key 'YES'\n");
+        "                   protected keys need an exact label + per-key 'YES'\n"
+        "  sign KID         sign a message (stdin or --in FILE, max 2048 bytes)\n"
+        "                   with the device key KID; prints the signature as\n"
+        "                   base64 (--hex / --raw select the encoding)\n");
 }
 
 /* REQ-TOOL-002: a security-relevant event (the device presented an invalid
@@ -352,6 +366,44 @@ static int cmd_keys_pub(const cli_opts *o, const char *kid)
     return ret;
 }
 
+/* REQ-TOOL-008: sign a message with a device key; the input handling,
+ * default-alg lookup, and formatting live in hem-tool-core. */
+static int cmd_sign(const cli_opts *o, const char *kid)
+{
+    ehem_ctx *ctx = NULL;
+    hem_sign_opts so;
+    int ret;
+
+    if (o->hex && o->raw) {
+        fprintf(stderr, "error: --hex and --raw are mutually exclusive\n");
+        return 2;
+    }
+
+    ret = make_ctx(o, &ctx);
+    if (ret != 0) {
+        return ret;
+    }
+
+    memset(&so, 0, sizeof so);
+    so.passphrase = o->passphrase;
+    so.kid        = kid;
+    so.alg        = o->alg;
+    so.in_path    = o->in_path;
+    so.sigctx     = o->sigctx;
+    so.format     = o->raw ? HEM_SIGN_OUT_RAW
+                           : (o->hex ? HEM_SIGN_OUT_HEX : HEM_SIGN_OUT_B64);
+    so.out        = stdout;
+    so.err        = stderr;
+    so.in         = stdin;
+
+    ret = hem_sign_run(ctx, &so);
+    if (so.format != HEM_SIGN_OUT_RAW) {
+        print_cert_notice(ctx);       /* raw mode keeps stdout bytes-only */
+    }
+    ehem_ctx_destroy(ctx);
+    return ret;
+}
+
 /* Dispatch the `keys` command group (list / pub / rm). */
 static int cmd_keys(const cli_opts *o, const char *subcmd, const char *arg)
 {
@@ -428,6 +480,18 @@ int main(int argc, char **argv)
                 return 2;
             }
             o.prefixes[o.prefix_count++] = a + 15;
+        } else if (strcmp(a, "--alg") == 0 && i + 1 < argc) {
+            o.alg = argv[++i];
+        } else if (strncmp(a, "--alg=", 6) == 0) {
+            o.alg = a + 6;
+        } else if (strcmp(a, "--in") == 0 && i + 1 < argc) {
+            o.in_path = argv[++i];
+        } else if (strncmp(a, "--in=", 5) == 0) {
+            o.in_path = a + 5;
+        } else if (strcmp(a, "--sigctx") == 0 && i + 1 < argc) {
+            o.sigctx = argv[++i];
+        } else if (strncmp(a, "--sigctx=", 9) == 0) {
+            o.sigctx = a + 9;
         } else if (strcmp(a, "--insecure") == 0) {
             o.insecure = 1;
         } else if (strcmp(a, "--hex") == 0) {
@@ -471,6 +535,14 @@ int main(int argc, char **argv)
         ret = cmd_cert_install(&o);
     } else if (strcmp(cmd, "keys") == 0) {
         ret = cmd_keys(&o, subcmd, arg);
+    } else if (strcmp(cmd, "sign") == 0) {
+        if (arg != NULL) {
+            fprintf(stderr, "error: unexpected argument '%s'\n", arg);
+            usage(stderr);
+            ret = 2;
+        } else {
+            ret = cmd_sign(&o, subcmd);   /* subcmd is the KID */
+        }
     } else {
         fprintf(stderr, "error: unknown command '%s'\n", cmd);
         usage(stderr);

@@ -15,6 +15,7 @@
 #define HEM_KEYS_H
 
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 
 #include "ehem/ehem.h"
@@ -31,6 +32,12 @@ typedef struct {
     FILE       *out;          /* listing output (NULL → stdout) */
     FILE       *err;          /* diagnostics (NULL → stderr) */
 } hem_keys_opts;
+
+/* Small helpers shared across hem-tool-core subcommands (keys pub, sign):
+ * kid validation (32 hex chars) and material/output encoders. */
+bool hem_tool_kid_ok(const char *s);
+void hem_tool_fprint_b64(FILE *f, const uint8_t *raw, size_t len);
+void hem_tool_fprint_hex(FILE *f, const uint8_t *raw, size_t len);
 
 /*
  * Protected-key classifier (REQ-TOOL-005) — by LABEL only (a client-side

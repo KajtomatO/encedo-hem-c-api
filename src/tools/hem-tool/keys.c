@@ -140,7 +140,7 @@ int hem_keys_list_run(ehem_ctx *ctx, const hem_keys_opts *o)
 /* True iff `s` is exactly 32 hex chars (a wire-format kid). Tool-side copy —
  * hem-tool-core is public-API-only, so it cannot borrow the SDK's internal
  * validator; the SDK re-validates anyway (defense in depth). */
-static bool kid_ok(const char *s)
+bool hem_tool_kid_ok(const char *s)
 {
     size_t i;
     if (s == NULL) {
@@ -158,7 +158,7 @@ static bool kid_ok(const char *s)
 
 /* Emit `raw` to `f` as padded std base64 (RFC 4648). Local, dependency-free —
  * the public SDK API hands back decoded bytes and offers no encoder. */
-static void fprint_b64(FILE *f, const uint8_t *raw, size_t len)
+void hem_tool_fprint_b64(FILE *f, const uint8_t *raw, size_t len)
 {
     static const char T[] =
         "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -179,7 +179,7 @@ static void fprint_b64(FILE *f, const uint8_t *raw, size_t len)
     }
 }
 
-static void fprint_hex(FILE *f, const uint8_t *raw, size_t len)
+void hem_tool_fprint_hex(FILE *f, const uint8_t *raw, size_t len)
 {
     size_t i;
     for (i = 0; i < len; i++) {
@@ -203,7 +203,7 @@ int hem_keys_pub_run(ehem_ctx *ctx, const hem_keys_pub_opts *o)
                      "EHEM_PASSPHRASE\n");
         return HEM_KEYS_USAGE;
     }
-    if (!kid_ok(o->kid)) {
+    if (!hem_tool_kid_ok(o->kid)) {
         fprintf(err, "error: 'keys pub' needs a key id "
                      "(exactly 32 hex chars)\n");
         return HEM_KEYS_USAGE;
@@ -269,9 +269,9 @@ int hem_keys_pub_run(ehem_ctx *ctx, const hem_keys_pub_opts *o)
         fprintf(out, "%s:%s", material_name,
                 strcmp(material_name, "der") == 0 ? "      " : "   ");
         if (o->format == HEM_KEYS_PUB_HEX) {
-            fprint_hex(out, material, material_len);
+            hem_tool_fprint_hex(out, material, material_len);
         } else {
-            fprint_b64(out, material, material_len);
+            hem_tool_fprint_b64(out, material, material_len);
         }
         fprintf(out, "\n");
     } else {
