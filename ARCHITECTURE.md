@@ -335,8 +335,9 @@ sequenceDiagram
   and the manual integration driver.
 - Subcommands (grow with milestones): `hem-tool status` (MVP connection
   test), `hem-tool checkin`, `hem-tool cert-install` (M2), `hem-tool
-  keys list` / `hem-tool keys rm` (M3), and `hem-tool keys pub` /
-  `hem-tool sign` (M4, user decision 2026-07-16).
+  keys list` / `hem-tool keys rm` (M3), `hem-tool keys pub` /
+  `hem-tool sign` (M4, user decision 2026-07-16), and `hem-tool keys
+  gen` (M5, user decision 2026-07-16).
 - **`cert-install`** (REQ-TOOL-003): harvests the cloud certificate
   (REQ-SYS-006), skips if the device already serves it (leg-1 `csn` vs the
   harvested leaf serial, or the broker suppressing the chain), else
@@ -436,13 +437,24 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   the signing path drivable by hand and living documentation for the
   first OPS binding. **Gate:** signature produced via the SDK verifies
   locally with wolfCrypt.
-- **M5 — key generation & random:** `create`/generate for all key
-  families (EC, EdDSA, X25519/448, AES, HMAC, ML-KEM, ML-DSA); hardware
-  `random`. **Gate:** generate → list → sign → delete cycle per family on
-  the real device.
+- **M5 — key generation:** `create`/generate for all key families (EC,
+  EdDSA, X25519/448, AES, HMAC, ML-KEM, ML-DSA) exercised per family;
+  `hem-tool keys gen`. *Decomposition note (user decision 2026-07-16):*
+  hardware `random` moved out of M5 — fw v1.2.2 exposes **no random
+  endpoint** (complete handler inventory in api.h), and the cipher-wrap
+  "empty msg → generate" path suggested by a stale firmware comment and
+  the python client's docstring is unreachable (the handler rejects
+  missing/empty `msg` with 400; cipher-wrap.md records the same).
+  HEM-SDK-7's hardware-random demand is planned for M6 as `ehem_random`
+  emulated via **encrypt-IV harvest** — `cipher/encrypt` always returns
+  a fresh 16-byte hardware-RNG IV (FIRMWARE_NOTES.md:49) — draft
+  REQ-OPS-002. **Gate:** generate → list → sign where ExDSA-capable →
+  delete cycle per family on the real device.
 - **M6 — remaining crypto ops:** `verify`, ECDH derive, AES
   encrypt/decrypt (GCM IV/tag handling), HMAC ops, ML-KEM
-  encapsulate/decapsulate, remaining ML-DSA parameter sets.
+  encapsulate/decapsulate, remaining ML-DSA parameter sets; hardware
+  random emulation (`ehem_random` via encrypt-IV harvest, REQ-OPS-002 —
+  moved from M5, user decision 2026-07-16).
 - **M7 — system, logger, storage, key import/update:** remaining endpoint
   groups including firmware upgrade and reboot (disruptive-gated tests);
   `keymgmt` import and update (LABEL/DESCR).

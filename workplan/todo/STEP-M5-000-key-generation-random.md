@@ -11,7 +11,7 @@ evidence:
   tests: []
   notes: null
 reopened: []
-cancelled: null
+cancelled: "M5 decomposed 2026-07-16 — replaced by STEP-M5-010..040; hardware random moved out of M5 (no endpoint in fw v1.2.2; plan = REQ-OPS-002 encrypt-IV harvest at M6, user decision 2026-07-16)"
 ---
 
 **Goal:** Milestone M5 per ARCHITECTURE.md §11: `create`/generate for all
