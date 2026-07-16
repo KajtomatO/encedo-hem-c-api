@@ -11,7 +11,7 @@ evidence:
   tests: []
   notes: null
 reopened: []
-cancelled: null
+cancelled: "M3 decomposed 2026-07-16 (§5.3) — replaced by STEP-M3-010..070"
 ---
 
 **Goal:** Milestone M3 per ARCHITECTURE.md §11: keymgmt
