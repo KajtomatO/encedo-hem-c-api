@@ -160,7 +160,9 @@ if(EHEM_BUILD_TOOL)
   # The cert-install orchestration (REQ-TOOL-003) lives in a small static lib so
   # the tool binary and the unit/disruptive tests share ONE copy of it. Like the
   # rest of the tool it uses only the public API (through the static SDK).
-  add_library(hem-tool-core STATIC src/tools/hem-tool/cert_install.c)
+  add_library(hem-tool-core STATIC
+    src/tools/hem-tool/cert_install.c
+    src/tools/hem-tool/keys.c)
   target_link_libraries(hem-tool-core PUBLIC encedo-hem::encedo-hem-static)
   target_include_directories(hem-tool-core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tools/hem-tool)

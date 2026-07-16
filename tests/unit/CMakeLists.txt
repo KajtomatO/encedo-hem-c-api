@@ -28,6 +28,10 @@ ehem_add_unit_test(test_cert SOURCES test_cert.c)
 if(TARGET hem-tool-core)
   ehem_add_unit_test(test_cert_install SOURCES test_cert_install.c)
   target_link_libraries(test_cert_install PRIVATE hem-tool-core)
+
+  # REQ-TOOL-004/005: protected-key classifier + `keys list` (hem-tool-core).
+  ehem_add_unit_test(test_keys SOURCES test_keys.c)
+  target_link_libraries(test_keys PRIVATE hem-tool-core)
 endif()
 
 # REQ-SYS-004, REQ-SYS-005: config GET / cert install / reboot bindings.

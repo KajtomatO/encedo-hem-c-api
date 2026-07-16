@@ -31,12 +31,19 @@ cert-install, the listing/formatting logic lives in the shared
 path.
 
 **Acceptance criteria:**
-- [ ] Against the fake transport: multi-page repo prints every key once,
+- [x] Against the fake transport: multi-page repo prints every key once,
       protected entries marked, summary counts correct (unit test on the
-      hem-tool-core function).
-- [ ] Missing URL/passphrase → exit 2 with a usage message; auth failure →
-      exit 1 with the mapped error text (unit tests).
-- [ ] Read-only: no request other than auth + list is issued (unit test
-      asserting the request sequence).
-- [ ] Live: `hem-tool keys list` against the dev device shows its keys
-      with the TLS pair marked `[PROTECTED]` (M3 gate, manual/integration).
+      hem-tool-core function). — test_keys_list_marks_and_counts (12 keys
+      over 2 pages, 3 protected marked, "12 key(s), 3 protected").
+- [x] Missing URL/passphrase → exit 2 with a usage message; auth failure →
+      exit 1 with the mapped error text (unit tests). —
+      test_keys_list_no_passphrase (exit 2, no I/O), test_keys_list_auth_failure
+      (exit 1); missing URL → make_ctx exit 2 (verified via the CLI).
+- [x] Read-only: no request other than auth + list is issued (unit test
+      asserting the request sequence). — test_keys_list_marks_and_counts
+      asserts exactly 4 requests (login 2 + 2 list pages).
+- [x] Live: `hem-tool keys list` against the dev device shows its keys
+      with the TLS pair marked `[PROTECTED]` (M3 gate, manual/integration). —
+      run 2026-07-16 (see step evidence): 6 keys, `TLS PrivateKey` /
+      `TLS Certificate` / `SM-S938B (Android)` marked `[PROTECTED]`,
+      "6 key(s), 3 protected".

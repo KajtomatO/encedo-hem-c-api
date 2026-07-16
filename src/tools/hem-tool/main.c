@@ -24,12 +24,13 @@
 #include "ehem/system.h"
 
 #include "cert_install.h"
+#include "keys.h"
 
 typedef struct {
     const char *url;
     const char *cacert;
     int         insecure;
-    const char *passphrase;   /* --passphrase / EHEM_PASSPHRASE (cert-install) */
+    const char *passphrase;   /* --passphrase / EHEM_PASSPHRASE (cert-install, keys) */
     int         force;        /* --force (cert-install) */
 } cli_opts;
 
@@ -53,7 +54,9 @@ static void usage(FILE *f)
         "                   TLS certificate and clock via the Encedo cloud)\n"
         "  cert-install     harvest the cloud certificate and install it on a\n"
         "                   device whose firmware cannot apply it itself\n"
-        "                   (authenticates, installs, REBOOTS, and verifies)\n");
+        "                   (authenticates, installs, REBOOTS, and verifies)\n"
+        "  keys list        list every key on the device (read-only), marking\n"
+        "                   protected device keys [PROTECTED] (needs a passphrase)\n");
 }
 
 /* REQ-TOOL-002: a security-relevant event (the device presented an invalid
@@ -234,10 +237,51 @@ static int cmd_cert_install(const cli_opts *o)
     return ret;
 }
 
+/* REQ-TOOL-004: read-only inventory of the device's keys, protected keys
+ * marked. The listing/marking lives in hem-tool-core (shared with keys rm). */
+static int cmd_keys_list(const cli_opts *o)
+{
+    ehem_ctx *ctx = NULL;
+    hem_keys_opts ko;
+    int ret;
+
+    ret = make_ctx(o, &ctx);
+    if (ret != 0) {
+        return ret;
+    }
+
+    memset(&ko, 0, sizeof ko);
+    ko.passphrase = o->passphrase;
+    ko.out        = stdout;
+    ko.err        = stderr;
+
+    ret = hem_keys_list_run(ctx, &ko);
+    print_cert_notice(ctx);
+    ehem_ctx_destroy(ctx);
+    return ret;
+}
+
+/* Dispatch the `keys` command group (keys list; keys rm lands in M3-060). */
+static int cmd_keys(const cli_opts *o, const char *subcmd)
+{
+    if (subcmd == NULL) {
+        fprintf(stderr, "error: 'keys' needs a subcommand (list)\n");
+        usage(stderr);
+        return 2;
+    }
+    if (strcmp(subcmd, "list") == 0) {
+        return cmd_keys_list(o);
+    }
+    fprintf(stderr, "error: unknown keys subcommand '%s'\n", subcmd);
+    usage(stderr);
+    return 2;
+}
+
 int main(int argc, char **argv)
 {
     cli_opts o;
     const char *cmd = NULL;
+    const char *subcmd = NULL;
     int i;
     int ret;
 
@@ -272,6 +316,8 @@ int main(int argc, char **argv)
             return 2;
         } else if (cmd == NULL) {
             cmd = a;
+        } else if (subcmd == NULL) {
+            subcmd = a;                 /* e.g. the `list` in `keys list` */
         } else {
             fprintf(stderr, "error: unexpected argument '%s'\n", a);
             usage(stderr);
@@ -294,6 +340,8 @@ int main(int argc, char **argv)
         ret = cmd_checkin(&o);
     } else if (strcmp(cmd, "cert-install") == 0) {
         ret = cmd_cert_install(&o);
+    } else if (strcmp(cmd, "keys") == 0) {
+        ret = cmd_keys(&o, subcmd);
     } else {
         fprintf(stderr, "error: unknown command '%s'\n", cmd);
         usage(stderr);
