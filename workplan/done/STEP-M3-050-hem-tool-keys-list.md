@@ -7,7 +7,8 @@ traces:
   architecture: ["ARCHITECTURE.md#8-hem-tool-cli"]
 depends_on: ["STEP-M3-010"]
 evidence:
-  commits: []
+  commits:
+    - "47b4b16 — hem-tool keys list + protected-key classifier (REQ-TOOL-004/005)"
   tests:
     - "tests/unit/test_keys.c — classifier table (exact TLS labels; near-misses tls privatekey / 'TLS PrivateKey 2' / trailing-space unprotected; (Android)/(iPhone) any case+position protected; ordinary/NULL unprotected — 17 rows), keys list multi-page marks+counts (12 keys/2 pages, 3 protected, summary), read-only (4 requests = login+2 list), no-passphrase → exit 2 (no I/O), auth-failure → exit 1 (4 cases)"
   notes: >

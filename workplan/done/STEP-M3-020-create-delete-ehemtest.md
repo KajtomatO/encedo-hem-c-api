@@ -7,7 +7,8 @@ traces:
   architecture: ["ARCHITECTURE.md#6-protocol-bindings", "ARCHITECTURE.md#9-testing-policy"]
 depends_on: ["STEP-M3-010"]
 evidence:
-  commits: []
+  commits:
+    - "8c3fb80 — keymgmt create/delete (REQ-KEY-004/005, REQ-TEST-003); fix device no-keep-alive transport (CURLOPT_FORBID_REUSE, REQ-NET-002)"
   tests:
     - "tests/unit/test_keymgmt.c — create: byte-exact body {type,label[,mode][,descr(b64)]}, kid parsed, label >31/non-printable → ARG (0 requests), 400/406 → DEVICE w/ payload, missing kid → PROTOCOL, scope keymgmt:gen (eJWT decode), arg guards; delete: DELETE+kid path/no body, empty-200 → OK, 200-with-body → OK, malformed kid (short/33/non-hex/NULL) → ARG (0 requests), 406 → NOT_FOUND, 403 → SCOPE_DENIED, scope keymgmt:del (eJWT decode) (25 cases total incl. M3-010 list)"
     - "tests/integration/test_keymgmt_mutate_live.c — live create EHEMTEST ED25519 + descr → found in list_all w/ label+descr (exact bytes) → delete → gone → second delete → NOT_FOUND; setup sweep + teardown cleanup (pass-or-fail)"

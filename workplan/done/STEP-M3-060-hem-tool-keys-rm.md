@@ -7,7 +7,8 @@ traces:
   architecture: ["ARCHITECTURE.md#8-hem-tool-cli"]
 depends_on: ["STEP-M3-050", "STEP-M3-020"]
 evidence:
-  commits: []
+  commits:
+    - "e4dd511 — hem-tool keys rm + protected-key guard (REQ-TOOL-006)"
   tests:
     - "tests/unit/test_keys.c — keys rm (11 cases): --all deletes exactly the non-protected keys (TLS pair not touched); --dry-run no DELETE exit 0; no-selection / --all+--label-prefix / no-passphrase → exit 2 (no I/O); partial protected prefix → warn+skip (regular sibling still deleted); exact protected label → per-key prompt, only literal YES deletes ('yes' declines); --yes skips bulk but protected still prompts (declined); one failed delete → rest processed, exit 1; bulk decline w/o protected → exit 1. Scripted stdin + captured out via tmpfile()."
     - "tests/integration/test_keys_rm_live.c — live: create 2 EHEMTEST ED25519 keys → hem_keys_rm_run(--label-prefix EHEMTEST --yes) → both deleted → verified gone via list_all (REQ-TOOL-006 / REQ-TEST-003)"

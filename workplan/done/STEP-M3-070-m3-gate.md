@@ -7,7 +7,8 @@ traces:
   architecture: ["ARCHITECTURE.md#11-milestones", "ARCHITECTURE.md#12-risks--open-questions"]
 depends_on: ["STEP-M3-030", "STEP-M3-040", "STEP-M3-060"]
 evidence:
-  commits: []
+  commits:
+    - "1ac96b1 — M3 gate: goal.txt tool milestone live, regenerate TRACE (KEY-001..005, TOOL-004..006, TEST-003 verified)"
   tests:
     - "ctest -L unit: 17/17 green on GCC + Clang (./dev ci); ASan/LSan clean (./dev test asan); export/header gates green (./dev check); MinGW cross-compile of proto_keymgmt.c + keys.c + main.c clean"
     - "ctest -L integration: 9/9 green against my.ence.do — system/checkin/config/auth live + the full keymgmt round-trips (list, create→list→delete, search, get, keys rm)"

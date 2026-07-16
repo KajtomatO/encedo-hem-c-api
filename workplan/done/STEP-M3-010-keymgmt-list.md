@@ -7,7 +7,9 @@ traces:
   architecture: ["ARCHITECTURE.md#6-protocol-bindings"]
 depends_on: ["STEP-M2-040"]
 evidence:
-  commits: []
+  commits:
+    - "db15a95 — keymgmt list binding + full-repo walk (REQ-KEY-001)"
+    - "ea82c87 — fix Windows CI: %zu → %u in ehem_ctx_fail (MinGW ms_printf)"
   tests:
     - "tests/unit/test_keymgmt.c — full+minimal entry parse, descr base64 decode, missing kid/type → PROTOCOL, unknown field ignored, path construction, 401 re-acquire+retry, 403/406/409 mapping, multi-page walk (listed<limit mid-walk continues), single-page walk, arg guards, _free NULL-safe (12 cases)"
     - "tests/integration/test_keymgmt_live.c — live ehem_key_list_all against my.ence.do: 6 keys incl. protected TLS pair, kid(32-hex)/type populated (REQ-KEY-001 live gate)"

@@ -7,7 +7,8 @@ traces:
   architecture: ["ARCHITECTURE.md#6-protocol-bindings"]
 depends_on: ["STEP-M3-020"]
 evidence:
-  commits: []
+  commits:
+    - "dd121ff — keymgmt descr search (REQ-KEY-002); no-match is 200-empty on fw v1.2.2"
   tests:
     - "tests/unit/test_keymgmt.c — search: prefix/suffix/substring body byte-exact (^b64 / b64$ / b64) + {descr,offset,limit}, scope keymgmt:search (eJWT decode) + Authorization, 404 → EHEM_OK+empty page, 400/410 → DEVICE w/ payload, full-walk (listed<limit mid-walk continues; offset advances 0/10/18), no-match walk → empty, arg guards (NULL ctx/out, bad mode, NULL pattern w/ len>0) (9 search cases; 34 keymgmt total)"
     - "tests/integration/test_keymgmt_search_live.c — live: create EHEMTEST key (descr=label) → prefix search finds it → no-match search returns empty (REQ-KEY-002 live gate)"

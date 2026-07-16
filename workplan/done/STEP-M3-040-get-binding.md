@@ -7,7 +7,8 @@ traces:
   architecture: ["ARCHITECTURE.md#6-protocol-bindings", "ARCHITECTURE.md#12-risks--open-questions"]
 depends_on: ["STEP-M3-020"]
 evidence:
-  commits: []
+  commits:
+    - "a708af6 — keymgmt get binding (REQ-KEY-003); record fw scope + descr findings (§12 risk 3)"
   tests:
     - "tests/unit/test_keymgmt.c — get: 4 response shapes (asymmetric pubkey / CERT der / DER_PKEY der / symmetric none) w/ correct absent-field semantics + unknown-field-ignored + descr decode, missing type → PROTOCOL, 406 → NOT_FOUND, 403 → SCOPE_DENIED, per-kid scope keymgmt:use:<kid> + cache reuse (2 kids → 2 acquisitions, repeat = cache hit; 7-request assert), malformed kid → ARG (no I/O), arg guards, _free NULL-safe (9 get cases; 43 keymgmt total)"
     - "tests/integration/test_keymgmt_get_live.c — live get of a created EHEMTEST ED25519 key → type + 32-byte pubkey + updated (descr NOT returned — fw quirk); internal-linking test (like test_auth_live) that also PROBES keymgmt:get / keymgmt:gen scopes"
