@@ -378,12 +378,16 @@ static ehem_rc map_406_not_found(ehem_ctx *ctx, ehem_rc rc, const char *what)
                          "%s: key not found", what);
 }
 
-/* Label policy (REQ-KEY-005): 1..31 printable-ASCII bytes. */
+/* Label policy (REQ-KEY-005): 1..32 printable-ASCII bytes. The device's
+ * isvalid_label enforces STOREDKEY_LABEL_MAX_LENGTH == 32 (firmware repo.h:64;
+ * a 32-byte label is accepted live, 33 → 400 — STEP-M5-010 probe 2026-07-16).
+ * The python client's stricter ≤31 is over-strict. */
+#define KEYMGMT_LABEL_MAX 32
 static bool label_ok(const char *label)
 {
     size_t n = strlen(label);
     size_t i;
-    if (n < 1 || n > 31) {
+    if (n < 1 || n > KEYMGMT_LABEL_MAX) {
         return false;
     }
     for (i = 0; i < n; i++) {
@@ -393,6 +397,15 @@ static bool label_ok(const char *label)
     }
     return true;
 }
+
+/* DESCR cap (REQ-KEY-005): 64 raw bytes (STOREDKEY_DESCR_MAX_LENGTH). The
+ * device's create-side length check is broken (isvalid_base64 tests the
+ * base64 length after its own loop has decremented the counter to -1, so
+ * over-long descr is accepted on create — STEP-M5-010 probe: 65 bytes stored),
+ * but the get-side readback buffer is a fixed 64 bytes with a clamped copy, so
+ * anything beyond 64 is silently truncated on read. The SDK caps at 64 to
+ * refuse silent-data-loss keys, matching ARCHITECTURE §2 and the doc intent. */
+#define KEYMGMT_DESCR_MAX 64
 
 ehem_rc ehem_key_create(ehem_ctx *ctx, const ehem_key_create_params *params,
                         char *kid_out)
@@ -410,7 +423,11 @@ ehem_rc ehem_key_create(ehem_ctx *ctx, const ehem_key_create_params *params,
     ehem_ctx_clear_error(ctx);
     if (!label_ok(params->label)) {
         return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
-                             "keymgmt/create: label must be 1..31 printable bytes");
+                             "keymgmt/create: label must be 1..32 printable bytes");
+    }
+    if (params->descr != NULL && params->descr_len > KEYMGMT_DESCR_MAX) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                             "keymgmt/create: descr must be at most 64 bytes");
     }
 
     /* Body {type,label[,mode][,descr(b64)]} in that exact order (the JSON layer

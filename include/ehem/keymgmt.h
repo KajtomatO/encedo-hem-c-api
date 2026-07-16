@@ -113,9 +113,9 @@ typedef struct ehem_key_create_params {
      * (Note the device vocabulary: AES has no dash; HMAC uses the raw hash name.) */
     const char    *type;
 
-    /* Human label, pre-validated client-side: printable ASCII, 1..31 bytes
-     * (the stricter of the doc's ≤32 and the python client's ≤31 — REQ-KEY-005
-     * open criterion). A label outside this bound is EHEM_ERR_ARG with no I/O. */
+    /* Human label, pre-validated client-side: printable ASCII, 1..32 bytes
+     * (the device max, live-probed 2026-07-16 — 32 accepted, 33 → 400). A
+     * label outside this bound is EHEM_ERR_ARG with no I/O. */
     const char    *label;
 
     /* Optional role mode, only meaningful for NIST-P ECC: one of "ECDH",
@@ -125,7 +125,10 @@ typedef struct ehem_key_create_params {
     const char    *mode;
 
     /* Optional opaque blob stored with the key; the SDK base64-encodes these raw
-     * bytes for the wire. NULL / descr_len 0 omits the field. */
+     * bytes for the wire. NULL / descr_len 0 omits the field. Capped at 64
+     * bytes (the device's readback buffer size — a longer descr is silently
+     * truncated on read, so the SDK refuses it): descr_len > 64 is
+     * EHEM_ERR_ARG with no I/O. */
     const uint8_t *descr;
     size_t         descr_len;
 } ehem_key_create_params;

@@ -539,7 +539,10 @@ static void test_create_full_body(void **state)
     fake_transport_free(fake);
 }
 
-/* A label longer than 31 bytes → EHEM_ERR_ARG with NO transport call. */
+/* Label boundary (REQ-KEY-005, STEP-M5-010): the device max is 32 bytes.
+ * A 33-byte label → EHEM_ERR_ARG with NO transport call; a 32-byte label is
+ * accepted client-side (and would reach the device — proven by the request
+ * count and body below). */
 static void test_create_label_too_long(void **state)
 {
     (void)state;
@@ -551,10 +554,94 @@ static void test_create_label_too_long(void **state)
     ehem_ctx *ctx = logged_in_ctx(fake);   /* lazy login: no traffic yet */
     ehem_key_create_params p = {0};
     p.type = "ED25519";
-    p.label = "0123456789012345678901234567890123";   /* 34 chars */
+    p.label = "012345678901234567890123456789012";   /* 33 chars */
+    assert_int_equal(strlen(p.label), 33);
     char kid[EHEM_KID_HEX_SIZE] = {0};
     assert_int_equal(ehem_key_create(ctx, &p, kid), EHEM_ERR_ARG);
     assert_int_equal((int)fake_transport_request_count(fake), 0);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* A 32-byte label is at the boundary and passes client validation → it reaches
+ * the device (body carries the full 32-char label). */
+static void test_create_label_max_ok(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "klmax");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"kid\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    ehem_key_create_params p = {0};
+    p.type = "ED25519";
+    p.label = "01234567890123456789012345678901";   /* 32 chars */
+    assert_int_equal(strlen(p.label), 32);
+    char kid[EHEM_KID_HEX_SIZE] = {0};
+    assert_int_equal(ehem_key_create(ctx, &p, kid), EHEM_OK);
+
+    assert_string_equal((const char *)fake_transport_request(fake, 2)->body,
+        "{\"type\":\"ED25519\","
+        "\"label\":\"01234567890123456789012345678901\"}");
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* DESCR boundary (REQ-KEY-005, STEP-M5-010): 65 raw bytes → EHEM_ERR_ARG,
+ * no transport call; 64 bytes is accepted and reaches the device. */
+static void test_create_descr_too_long(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    uint8_t descr[65];
+    memset(descr, 0x41, sizeof descr);
+    ehem_key_create_params p = {0};
+    p.type = "ED25519";
+    p.label = "k";
+    p.descr = descr;
+    p.descr_len = sizeof descr;                 /* 65 > 64 */
+    char kid[EHEM_KID_HEX_SIZE] = {0};
+    assert_int_equal(ehem_key_create(ctx, &p, kid), EHEM_ERR_ARG);
+    assert_int_equal((int)fake_transport_request_count(fake), 0);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+static void test_create_descr_max_ok(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "kdmax");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"kid\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    uint8_t descr[64];
+    memset(descr, 0x41, sizeof descr);
+    ehem_key_create_params p = {0};
+    p.type = "ED25519";
+    p.label = "k";
+    p.descr = descr;
+    p.descr_len = sizeof descr;                 /* 64 == max */
+    char kid[EHEM_KID_HEX_SIZE] = {0};
+    assert_int_equal(ehem_key_create(ctx, &p, kid), EHEM_OK);
+    /* login (challenge GET + token POST) + the create POST = 3 requests. */
+    assert_int_equal((int)fake_transport_request_count(fake), 3);
 
     ehem_ctx_destroy(ctx);
     fake_transport_free(fake);
@@ -1343,6 +1430,9 @@ int main(void)
         cmocka_unit_test(test_create_minimal),
         cmocka_unit_test(test_create_full_body),
         cmocka_unit_test(test_create_label_too_long),
+        cmocka_unit_test(test_create_label_max_ok),
+        cmocka_unit_test(test_create_descr_too_long),
+        cmocka_unit_test(test_create_descr_max_ok),
         cmocka_unit_test(test_create_label_nonprintable),
         cmocka_unit_test(test_create_400_device),
         cmocka_unit_test(test_create_406_device),
