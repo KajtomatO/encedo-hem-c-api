@@ -57,6 +57,7 @@ static void test_live_token_scope_claim(void **state)
     ehem_ctx *ctx = NULL;
     const char *token = NULL;
     const char *scope_claim = NULL, *sub = NULL;
+    int64_t iat = 0, exp = 0, ttl;
     ehem_json *payload;
     ehem_rc rc;
 
@@ -82,18 +83,23 @@ static void test_live_token_scope_claim(void **state)
     assert_string_equal(scope_claim, LIVE_SCOPE);
     assert_true(ehem_json_get_string(payload, "sub", &sub));
 
-    printf("[test_auth_live] scope=%s sub=%s — login/token round-trip OK\n",
-           scope_claim, sub);
+    /* The token is LONG-LIVED, not the ~60 s challenge deadline: STEP-M2-045
+     * stopped capping the eJWT `exp` at challenge.exp, so the device grants the
+     * full requested lifetime (~3600 s). Before the fix this was ~59 s. */
+    assert_true(ehem_json_get_int64(payload, "iat", &iat));
+    assert_true(ehem_json_get_int64(payload, "exp", &exp));
+    ttl = exp - iat;
+    printf("[test_auth_live] scope=%s sub=%s TTL=%llds — long-lived token OK\n",
+           scope_claim, sub, (long long)ttl);
+    assert_true(ttl >= 3000);   /* ~3600 in practice; far above the 60 s deadline */
 
-    /* NOTE: no same-scope cache-reuse assertion here. This DIAG firmware ties
-     * the bearer's `exp` to the challenge's ~60 s response deadline (TTL ≈ 59 s
-     * observed), which is below the 60 s cache skew, so a just-issued token is
-     * already at (or past) its skew boundary — whether a second ensure_token
-     * hits the cache or re-acquires depends on sub-second device/host clock
-     * skew. The reference python client behaves identically. Cache reuse is
-     * proven deterministically in the unit suite (test_auth.c) with a pinned
-     * clock; here we only assert the live login/derivation round-trip. `token`
-     * is borrowed and must not be used past another auth op (it is not). */
+    /* TTL >> the 60 s skew now, so same-scope reuse reliably hits the cache: a
+     * second ensure returns the SAME token with no re-login (REQ-AUTH-002). A
+     * cache hit does not re-acquire, so `token` stays valid across this call. */
+    const char *token2 = NULL;
+    assert_int_equal(ehem_auth_ensure_token(ctx, LIVE_SCOPE, &token2), EHEM_OK);
+    assert_string_equal(token, token2);
+
     ehem_json_free(payload);
     assert_int_equal(ehem_logout(ctx), EHEM_OK);
     ehem_ctx_destroy(ctx);

@@ -198,19 +198,21 @@ static void test_login_full_sequence(void **state)
     fake_transport_free(fake);
 }
 
-/* challenge.exp shorter than now+lifetime caps the token's exp claim. */
-static void test_login_exp_capped_by_challenge(void **state)
+/* The token's exp claim is the requested lifetime (now + 3600), NOT capped by
+ * the challenge's short response deadline (STEP-M2-045). */
+static void test_login_exp_is_requested_lifetime(void **state)
 {
     (void)state;
     set_now(EJWT_FX_NOW);
 
     ehem_transport *fake = fake_transport_new();
     assert_non_null(fake);
-    /* challenge.exp = now + 10 < now + 3600 → exp claim should be now + 10. */
+    /* challenge.exp = now + 10 (a short SUBMIT deadline) must NOT shorten the
+     * token; the eJWT exp should still be now + 3600. */
     assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
         "{\"eid\":\"" EJWT_FX_EID "\",\"spk\":\"" EJWT_FX_SPK "\","
         "\"jti\":\"" EJWT_FX_JTI "\",\"exp\":1700000010}"), 0);
-    push_token(fake, EJWT_FX_NOW + 100000, "cap");
+    push_token(fake, EJWT_FX_NOW + 100000, "life");
 
     ehem_ctx *ctx = ctx_with(fake, NULL);
     assert_int_equal(ehem_login(ctx, EJWT_FX_PASSPHRASE), EHEM_OK);
@@ -228,7 +230,7 @@ static void test_login_exp_capped_by_challenge(void **state)
 
     char payload[400];
     decode_payload(ejwt, payload, sizeof payload);
-    assert_non_null(strstr(payload, "\"exp\":1700000010"));
+    assert_non_null(strstr(payload, "\"exp\":1700003600"));   /* now + 3600, uncapped */
 
     ehem_ctx_destroy(ctx);
     fake_transport_free(fake);
@@ -835,7 +837,7 @@ int main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_login_full_sequence),
-        cmocka_unit_test(test_login_exp_capped_by_challenge),
+        cmocka_unit_test(test_login_exp_is_requested_lifetime),
         cmocka_unit_test(test_login_post_401_auth_failed),
         cmocka_unit_test(test_rtc_unset_recovery),
         cmocka_unit_test(test_rtc_unset_optout),

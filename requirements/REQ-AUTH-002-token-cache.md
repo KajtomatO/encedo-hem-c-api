@@ -16,10 +16,15 @@ traces:
 
 The context SHALL cache bearer tokens keyed by scope string. A cached token
 is reused while valid; expiry uses the token's own `exp` claim when its
-payload is readable (the device shortens lifetimes for some scopes), else
+payload is readable (the device may shorten lifetimes for some scopes), else
 the requested lifetime (3600 s), minus a 60 s safety skew. On a cache miss
 or expiry the SDK silently re-acquires a token via the REQ-AUTH-001 flow —
 possible only while credential material is retained.
+
+Since STEP-M2-045 the requested lifetime is no longer capped at the ~60 s
+challenge deadline, so the device issues bearers with the full lifetime
+(~3600 s live-proven) and this cache genuinely holds across many calls
+(TTL 3600 s ≫ 60 s skew) instead of re-logging-in almost every request.
 
 **Credential retention:** `ehem_login` retains the passphrase inside the
 context (zeroized copy) by default so silent refresh works for the

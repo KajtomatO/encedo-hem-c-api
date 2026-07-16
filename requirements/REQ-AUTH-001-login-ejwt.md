@@ -22,10 +22,29 @@ challenge–response authentication flow:
 3. ECDH(user_private, `spk`) → shared secret;
 4. build a compact eJWT — header `{"ecdh":"x25519","alg":"HS256","typ":"JWT"}`
    (hardcoded byte string, never re-serialized), claims
-   `{jti, aud: spk, exp: min(requested, challenge.exp), iat, iss: user
+   `{jti, aud: spk, exp: now + requested lifetime, iat, iss: user
    public key (standard base64 WITH padding), scope}`, segments base64url
    WITHOUT padding, HMAC-SHA256 tag keyed with the raw shared secret;
 5. `POST /api/auth/token {"auth": "<ejwt>"}` → `{token}` (scoped bearer).
+
+**Token lifetime — `exp` is the requested lifetime, NOT capped at the
+challenge (amended STEP-M2-045, firmware-confirmed):** the eJWT `exp` claim
+is `now + AUTH_TOKEN_LIFETIME` (the client's requested lifetime, currently
+3600 s) emitted verbatim. It is deliberately NOT `min(requested,
+challenge.exp)`. The challenge `exp` is the response DEADLINE — enforced
+server-side by the time-based `jti` nonce (`nonce_validate_time_based`) — and
+on the dev device is a hardcoded `now+60 s` (`gen_auth_token`, `crypto.c`).
+The firmware copies the eJWT `exp` straight into the issued bearer
+(`api_post_auth_token`, `api_auth.c:252-299`; no `exp ≤ challenge.exp`
+check), so capping at the ~60 s deadline yielded ~60 s bearers and a re-login
+on almost every authenticated call. Live-proven 2026-07-16: requesting
+`now+3600` returns a 3600 s bearer; `now+8h` returns a ~28800 s bearer;
+`exp=0` is rejected (the eJWT would itself be expired at the device). NOTE:
+this diverges from the reference python client's `build_ejwt`, which still
+caps at `challenge.exp` (and thereby re-logins per call — its own MVP-OQ-2
+fix does not actually take effect on this firmware); the byte-exact fixture
+is unaffected because its inputs have `requested < challenge` (so capped ==
+uncapped). Divergence recorded here per REQ-MGMT §8.
 
 **KDF (pinned to the proven implementation):** PBKDF2-HMAC-SHA256,
 **600 000 iterations**, output 32 bytes, salt = the challenge `eid` value

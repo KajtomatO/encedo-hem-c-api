@@ -34,7 +34,10 @@
 #define EJWT_FX_NOW          1700000000
 #define EJWT_FX_REQUESTED_EXP 1700003600
 #define EJWT_FX_CHALLENGE_EXP 2000000000
-/* exp claim = min(requested_exp, challenge_exp) = 1700003600 */
+/* exp claim = requested_exp = 1700003600. STEP-M2-045 stopped capping at
+ * challenge_exp; because requested_exp (1700003600) < challenge_exp here, the
+ * expected token below is byte-identical to the pre-M2-045 (capped) vector, so
+ * it still matches the reference python client's build_ejwt for these inputs. */
 
 /* --- expected outputs ----------------------------------------------------- */
 /* user X25519 public key, standard base64 (padded) — the "iss" claim. */

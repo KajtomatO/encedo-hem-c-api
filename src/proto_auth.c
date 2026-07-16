@@ -285,7 +285,7 @@ static ehem_rc acquire_token(ehem_ctx *ctx, struct ehem_auth *a,
     ehem_json *challenge = NULL;
     ehem_json *result = NULL;
     const char *eid, *spk, *jti, *lbl, *token;
-    int64_t challenge_exp, real_exp;
+    int64_t real_exp;
     uint8_t peer_pub[EHEM_X25519_KEYSIZE];
     uint8_t seed[EHEM_X25519_KEYSIZE];
     uint8_t priv[EHEM_X25519_KEYSIZE];
@@ -301,15 +301,16 @@ static ehem_rc acquire_token(ehem_ctx *ctx, struct ehem_auth *a,
         return rc;   /* last-error already recorded by the request path */
     }
 
-    /* Required challenge fields. */
+    /* Required challenge fields. The challenge `exp` is deliberately NOT read:
+     * it is the response deadline (enforced server-side by the `jti` nonce), not
+     * a token-lifetime input (STEP-M2-045). */
     if (!ehem_json_get_string(challenge, "eid", &eid) ||
         !ehem_json_get_string(challenge, "spk", &spk) ||
-        !ehem_json_get_string(challenge, "jti", &jti) ||
-        !ehem_json_get_int64(challenge, "exp", &challenge_exp)) {
+        !ehem_json_get_string(challenge, "jti", &jti)) {
         ehem_json_free(challenge);
         return ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 0, NULL,
                              AUTH_TOKEN_PATH ": malformed challenge "
-                             "(need eid, spk, jti, exp)");
+                             "(need eid, spk, jti)");
     }
     /* Optional username, kept for debugging / last-error context. */
     if (ehem_json_get_string(challenge, "lbl", &lbl)) {
@@ -340,7 +341,7 @@ static ehem_rc acquire_token(ehem_ctx *ctx, struct ehem_auth *a,
         rc = ehem_x25519_shared(priv, peer_pub, shared);
     }
     if (rc == EHEM_OK) {
-        rc = ehem_ejwt_build(jti, spk, challenge_exp, scope, user_pub, shared,
+        rc = ehem_ejwt_build(jti, spk, scope, user_pub, shared,
                              now, now + AUTH_TOKEN_LIFETIME, &ejwt);
     }
     /* Secret intermediates are done with — scrub regardless of success. */

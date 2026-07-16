@@ -135,7 +135,7 @@ size_t ehem_b64url_decode(const char *in, size_t in_len, uint8_t *out, size_t ou
     return b64_decode(in, in_len, out, out_cap, B64_URL_ALPHA);
 }
 
-ehem_rc ehem_ejwt_build(const char *jti, const char *spk, int64_t challenge_exp,
+ehem_rc ehem_ejwt_build(const char *jti, const char *spk,
                         const char *scope,
                         const uint8_t user_pub[32], const uint8_t shared[32],
                         int64_t now, int64_t requested_exp,
@@ -150,7 +150,14 @@ ehem_rc ehem_ejwt_build(const char *jti, const char *spk, int64_t challenge_exp,
         return EHEM_ERR_ARG;
     }
 
-    int64_t exp = (requested_exp < challenge_exp) ? requested_exp : challenge_exp;
+    /* The token's `exp` claim is the requested lifetime verbatim. It is NOT
+     * capped at the challenge's `exp`: firmware treats challenge.exp as the
+     * response DEADLINE (enforced separately by the time-based `jti` nonce), and
+     * copies our `exp` straight into the issued bearer (STEP-M2-045). Capping at
+     * the ~60 s challenge deadline is what produced ~60 s bearers + re-login per
+     * call. The eJWT itself must still be un-expired when it reaches the device,
+     * which requested_exp (now + lifetime) always is. */
+    int64_t exp = requested_exp;
 
     /* iss = user public key in STANDARD base64 (with padding). 32 → 44 chars. */
     char iss[64];

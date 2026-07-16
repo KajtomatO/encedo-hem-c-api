@@ -56,12 +56,18 @@ size_t ehem_b64url_decode(const char *in, size_t in_len,
  *
  *   jti           challenge.jti           → "jti" claim (string)
  *   spk           challenge.spk           → "aud" claim (verbatim passthrough)
- *   challenge_exp challenge.exp           → caps the token lifetime
  *   scope         requested scope         → "scope" claim
  *   user_pub[32]  user X25519 public key  → "iss" (standard base64, padded)
  *   shared[32]    ECDH shared secret      → HMAC-SHA256 key
  *   now           current unix time       → "iat" claim
- *   requested_exp now + desired lifetime  → "exp" = min(requested_exp, challenge_exp)
+ *   requested_exp now + desired lifetime  → "exp" claim (verbatim)
+ *
+ * The "exp" claim is `requested_exp` as given — it is NOT capped at the
+ * challenge's `exp`. The challenge `exp` is the response DEADLINE (enforced by
+ * the time-based `jti` nonce server-side), not a token-lifetime bound; the
+ * device copies our `exp` into the issued bearer, so capping it produced
+ * ~60 s tokens and re-login per request (STEP-M2-045). The caller passes
+ * `now + lifetime`, which keeps the eJWT itself un-expired at the device.
  *
  * The header is the fixed byte string {"ecdh":"x25519","alg":"HS256","typ":"JWT"}
  * (base64url, no pad); claims are emitted compactly in order
@@ -71,7 +77,7 @@ size_t ehem_b64url_decode(const char *in, size_t in_len,
  * a NULL argument, EHEM_ERR_NOMEM on allocation failure, EHEM_ERR_PROTOCOL if a
  * crypto step fails.
  */
-ehem_rc ehem_ejwt_build(const char *jti, const char *spk, int64_t challenge_exp,
+ehem_rc ehem_ejwt_build(const char *jti, const char *spk,
                         const char *scope,
                         const uint8_t user_pub[32], const uint8_t shared[32],
                         int64_t now, int64_t requested_exp,

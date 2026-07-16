@@ -135,8 +135,10 @@ static void test_ejwt_matches_python_fixture(void **state)
     assert_int_equal(spk_n, 32);
     assert_int_equal(ehem_x25519_shared(priv, spk_raw, shared), EHEM_OK);
 
+    /* requested_exp < the fixture's challenge deadline, so removing the old
+     * min(requested, challenge) cap leaves this vector byte-identical. */
     char *ejwt = NULL;
-    assert_int_equal(ehem_ejwt_build(EJWT_FX_JTI, EJWT_FX_SPK, EJWT_FX_CHALLENGE_EXP,
+    assert_int_equal(ehem_ejwt_build(EJWT_FX_JTI, EJWT_FX_SPK,
                                      EJWT_FX_SCOPE, pub, shared,
                                      EJWT_FX_NOW, EJWT_FX_REQUESTED_EXP, &ejwt),
                      EHEM_OK);
@@ -149,26 +151,27 @@ static void test_ejwt_matches_python_fixture(void **state)
     ehem_zeroize(shared, sizeof shared);
 }
 
-/* --- exp claim capping + arg validation (crypto-independent) ---------------- */
-static void test_ejwt_exp_cap_and_args(void **state)
+/* --- exp claim (verbatim, uncapped) + arg validation (crypto-independent) --- */
+static void test_ejwt_exp_and_args(void **state)
 {
     (void)state;
     uint8_t pub[32] = {0}, shared[32] = {0};
     char *ejwt = NULL;
     char payload[300];
 
-    /* requested_exp overshoots challenge.exp → exp claim capped at challenge. */
-    assert_int_equal(ehem_ejwt_build("jti", "aud", 2000000000, "sc",
+    /* The exp claim is the requested value verbatim — NOT capped at any
+     * challenge deadline (STEP-M2-045). Even a far-future request is emitted
+     * as-is. */
+    assert_int_equal(ehem_ejwt_build("jti", "aud", "sc",
                                      pub, shared, 1700000000, 2000000999, &ejwt),
                      EHEM_OK);
     decode_payload(ejwt, payload, sizeof payload);
-    assert_non_null(strstr(payload, "\"exp\":2000000000"));
+    assert_non_null(strstr(payload, "\"exp\":2000000999"));
     assert_non_null(strstr(payload, "\"iat\":1700000000"));
     ehem_ejwt_free(ejwt);
 
-    /* requested_exp below challenge.exp → exp claim uses requested. */
     ejwt = NULL;
-    assert_int_equal(ehem_ejwt_build("jti", "aud", 2000000000, "sc",
+    assert_int_equal(ehem_ejwt_build("jti", "aud", "sc",
                                      pub, shared, 1700000000, 1700003600, &ejwt),
                      EHEM_OK);
     decode_payload(ejwt, payload, sizeof payload);
@@ -177,12 +180,12 @@ static void test_ejwt_exp_cap_and_args(void **state)
 
     /* NULL arguments rejected. */
     ejwt = (char *)0x1;
-    assert_int_equal(ehem_ejwt_build(NULL, "a", 1, "s", pub, shared, 1, 1, &ejwt),
+    assert_int_equal(ehem_ejwt_build(NULL, "a", "s", pub, shared, 1, 1, &ejwt),
                      EHEM_ERR_ARG);
     assert_null(ejwt);
-    assert_int_equal(ehem_ejwt_build("j", "a", 1, "s", NULL, shared, 1, 1, &ejwt),
+    assert_int_equal(ehem_ejwt_build("j", "a", "s", NULL, shared, 1, 1, &ejwt),
                      EHEM_ERR_ARG);
-    assert_int_equal(ehem_ejwt_build("j", "a", 1, "s", pub, shared, 1, 1, NULL),
+    assert_int_equal(ehem_ejwt_build("j", "a", "s", pub, shared, 1, 1, NULL),
                      EHEM_ERR_ARG);
 
     ehem_ejwt_free(NULL);  /* NULL-safe */
@@ -195,7 +198,7 @@ int main(void)
         cmocka_unit_test(test_base64_known_vectors),
         cmocka_unit_test(test_base64_reject),
         cmocka_unit_test(test_ejwt_matches_python_fixture),
-        cmocka_unit_test(test_ejwt_exp_cap_and_args),
+        cmocka_unit_test(test_ejwt_exp_and_args),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }
