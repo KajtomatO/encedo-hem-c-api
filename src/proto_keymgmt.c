@@ -25,9 +25,10 @@
 #include "proto_common.h"
 #include "transport.h"
 
-#define KEYMGMT_LIST_SCOPE "keymgmt:list"
-#define KEYMGMT_GEN_SCOPE  "keymgmt:gen"
-#define KEYMGMT_DEL_SCOPE  "keymgmt:del"
+#define KEYMGMT_LIST_SCOPE   "keymgmt:list"
+#define KEYMGMT_GEN_SCOPE    "keymgmt:gen"
+#define KEYMGMT_DEL_SCOPE    "keymgmt:del"
+#define KEYMGMT_SEARCH_SCOPE "keymgmt:search"
 
 /* A key id is exactly 32 hex chars (16 bytes); EHEM_KID_HEX_SIZE == 33 with NUL. */
 #define KID_HEX_LEN 32
@@ -494,4 +495,186 @@ ehem_rc ehem_key_delete(ehem_ctx *ctx, const char *kid)
     }
 
     return rc;                      /* 401/403/transport/etc. already recorded */
+}
+
+/* -------------------------------------------------------------------------- */
+/* search                                                                     */
+/* -------------------------------------------------------------------------- */
+
+/* Build the wire `descr` for a search: base64(pattern) with the mode's anchor
+ * ('^' prefix / '$' suffix / none). *out is heap, caller frees. */
+static ehem_rc build_search_descr(ehem_key_search_mode mode,
+                                  const uint8_t *pattern, size_t pattern_len,
+                                  char **out)
+{
+    size_t enc = ehem_b64_std_encoded_len(pattern_len);
+    char *descr = malloc(enc + 2);   /* +1 anchor, +1 NUL */
+    size_t w;
+
+    if (descr == NULL) {
+        return EHEM_ERR_NOMEM;
+    }
+    if (mode == EHEM_KEY_SEARCH_PREFIX) {
+        descr[0] = '^';
+        w = ehem_b64_std_encode(pattern, pattern_len, descr + 1, enc + 1);
+    } else {
+        w = ehem_b64_std_encode(pattern, pattern_len, descr, enc + 1);
+    }
+    if (w == (size_t)-1) {
+        free(descr);
+        return EHEM_ERR_NOMEM;        /* only fails on bad args/capacity */
+    }
+    if (mode == EHEM_KEY_SEARCH_SUFFIX) {
+        descr[w] = '$';
+        descr[w + 1] = '\0';
+    }
+    *out = descr;
+    return EHEM_OK;
+}
+
+/* One search POST → a page. A device 404 ("no keys matched") becomes EHEM_OK
+ * with an empty page (REQ-KEY-002: precedence device > doc). */
+static ehem_rc search_one_page(ehem_ctx *ctx, const char *descr,
+                               size_t offset, size_t limit,
+                               ehem_key_page **out)
+{
+    ehem_json *body_obj;
+    ehem_json *root = NULL;
+    char *body;
+    ehem_rc rc;
+
+    /* Body {descr, offset, limit} in that order. */
+    body_obj = ehem_json_new_object();
+    if (body_obj == NULL) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    if (!ehem_json_add_string(body_obj, "descr", descr) ||
+        !ehem_json_add_int64(body_obj, "offset", (int64_t)offset) ||
+        !ehem_json_add_int64(body_obj, "limit", (int64_t)limit)) {
+        ehem_json_free(body_obj);
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    body = ehem_json_print(body_obj);
+    ehem_json_free(body_obj);
+    if (body == NULL) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+
+    rc = ehem_proto_request_json(ctx, EHEM_HTTP_POST, "/api/keymgmt/search",
+                                 body, KEYMGMT_SEARCH_SCOPE, EHEM_TLS_REQ_DEFAULT,
+                                 &root);
+    ehem_json_string_free(body);
+
+    if (rc == EHEM_ERR_NOT_FOUND) {
+        /* 404 = nothing matched → empty page, clean success. */
+        ehem_key_page *page = calloc(1, sizeof *page);
+        if (page == NULL) {
+            return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+        }
+        ehem_ctx_clear_error(ctx);
+        *out = page;
+        return EHEM_OK;
+    }
+    if (rc != EHEM_OK) {
+        return rc;   /* 400/406/410 → mapped with payload; 401/403 per AUTH-003 */
+    }
+
+    rc = parse_key_page(ctx, root, out);
+    ehem_json_free(root);
+    return rc;
+}
+
+/* Validate the shared search arguments (no I/O). */
+static bool search_args_ok(const ehem_ctx *ctx, const uint8_t *pattern,
+                           size_t pattern_len, ehem_key_search_mode mode,
+                           const void *out)
+{
+    if (ctx == NULL || out == NULL) {
+        return false;
+    }
+    if (pattern == NULL && pattern_len > 0) {
+        return false;
+    }
+    return (mode == EHEM_KEY_SEARCH_SUBSTRING ||
+            mode == EHEM_KEY_SEARCH_PREFIX ||
+            mode == EHEM_KEY_SEARCH_SUFFIX);
+}
+
+ehem_rc ehem_key_search(ehem_ctx *ctx, const uint8_t *pattern, size_t pattern_len,
+                        ehem_key_search_mode mode, size_t offset, size_t limit,
+                        ehem_key_page **out)
+{
+    char *descr;
+    ehem_rc rc;
+
+    if (!search_args_ok(ctx, pattern, pattern_len, mode, out)) {
+        return EHEM_ERR_ARG;
+    }
+    *out = NULL;
+    ehem_ctx_clear_error(ctx);
+
+    rc = build_search_descr(mode, pattern, pattern_len, &descr);
+    if (rc != EHEM_OK) {
+        return ehem_ctx_fail(ctx, rc, 0, NULL, "out of memory");
+    }
+    rc = search_one_page(ctx, descr, offset, limit, out);
+    free(descr);
+    return rc;
+}
+
+ehem_rc ehem_key_search_all(ehem_ctx *ctx, const uint8_t *pattern,
+                            size_t pattern_len, ehem_key_search_mode mode,
+                            ehem_key_page **out)
+{
+    char *descr;
+    ehem_key_page *acc;
+    size_t offset = 0;
+    ehem_rc rc;
+
+    if (!search_args_ok(ctx, pattern, pattern_len, mode, out)) {
+        return EHEM_ERR_ARG;
+    }
+    *out = NULL;
+    ehem_ctx_clear_error(ctx);
+
+    rc = build_search_descr(mode, pattern, pattern_len, &descr);
+    if (rc != EHEM_OK) {
+        return ehem_ctx_fail(ctx, rc, 0, NULL, "out of memory");
+    }
+
+    acc = calloc(1, sizeof *acc);
+    if (acc == NULL) {
+        free(descr);
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+
+    for (;;) {
+        ehem_key_page *page = NULL;
+        size_t listed;
+
+        rc = search_one_page(ctx, descr, offset, KEYMGMT_WALK_PAGE, &page);
+        if (rc != EHEM_OK) {
+            free(descr);
+            ehem_key_page_free(acc);
+            return rc;
+        }
+        acc->total = page->total;
+        listed = page->listed;
+        if (!page_append(acc, page)) {
+            ehem_key_page_free(page);
+            free(descr);
+            ehem_key_page_free(acc);
+            return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+        }
+        ehem_key_page_free(page);
+
+        offset += listed;
+        if (listed == 0 || (int64_t)offset >= acc->total) {
+            break;
+        }
+    }
+
+    free(descr);
+    *out = acc;
+    return EHEM_OK;
 }

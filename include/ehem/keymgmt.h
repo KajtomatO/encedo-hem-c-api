@@ -155,6 +155,54 @@ EHEM_API ehem_rc ehem_key_create(ehem_ctx *ctx,
  */
 EHEM_API ehem_rc ehem_key_delete(ehem_ctx *ctx, const char *kid);
 
+/* ==========================================================================
+ * Key search by descr pattern (authenticated, scope "keymgmt:search").
+ * implements: REQ-KEY-002
+ * ========================================================================== */
+
+/*
+ * How a search pattern matches against a key's stored `descr` blob. The device
+ * selects the mode from the raw query's shape (a leading '^', a trailing '$', or
+ * neither); this enum is the SDK's typed spelling — the caller passes raw bytes
+ * and the SDK forms the base64 + anchor itself.
+ */
+typedef enum ehem_key_search_mode {
+    EHEM_KEY_SEARCH_SUBSTRING = 0,  /* descr contains the pattern (no anchor) */
+    EHEM_KEY_SEARCH_PREFIX,         /* descr starts with the pattern ('^')    */
+    EHEM_KEY_SEARCH_SUFFIX          /* descr ends with the pattern ('$')      */
+} ehem_key_search_mode;
+
+/*
+ * Search the repository by `descr` pattern: POST /api/keymgmt/search (scope
+ * "keymgmt:search"). `pattern`/`pattern_len` are RAW bytes (the SDK base64-encodes
+ * them and prepends/appends the '^'/'$' anchor for `mode`); `pattern` may be NULL
+ * only when `pattern_len` is 0. `offset`/`limit` page the results (sent verbatim;
+ * the device caps the effective limit at 15). The result is the same
+ * caller-owned ehem_key_page as ehem_key_list() (free with ehem_key_page_free).
+ *
+ * Returns EHEM_OK with a populated (or, when nothing matched, EMPTY) page. A
+ * device "no keys matched" is HTTP 404 → EHEM_OK with an empty page (offset 0,
+ * total 0, listed 0). EHEM_ERR_ARG (no I/O) on a NULL ctx/out, an invalid mode,
+ * or a NULL pattern with pattern_len > 0; 400/406/410 are EHEM_ERR_DEVICE with
+ * the device payload in ehem_last_error(); 401/403 map per REQ-AUTH-003.
+ */
+EHEM_API ehem_rc ehem_key_search(ehem_ctx *ctx,
+                                 const uint8_t *pattern, size_t pattern_len,
+                                 ehem_key_search_mode mode,
+                                 size_t offset, size_t limit,
+                                 ehem_key_page **out);
+
+/*
+ * Walk EVERY match for `pattern`/`mode` and return them merged into one page
+ * (out->offset 0, out->total the device's reported total). Same pagination rule
+ * and ownership/error contract as ehem_key_list_all(); a no-match search yields
+ * an empty page (EHEM_OK).
+ */
+EHEM_API ehem_rc ehem_key_search_all(ehem_ctx *ctx,
+                                     const uint8_t *pattern, size_t pattern_len,
+                                     ehem_key_search_mode mode,
+                                     ehem_key_page **out);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

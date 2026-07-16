@@ -790,6 +790,269 @@ static void test_delete_403_scope(void **state)
 }
 
 /* -------------------------------------------------------------------------- */
+/* search                                                                     */
+/* -------------------------------------------------------------------------- */
+
+/* base64("EXTAID") == "RVhUQUlE" (the doc's worked example). */
+#define PAT     ((const uint8_t *)"EXTAID")
+#define PAT_LEN 6
+#define PAT_B64 "RVhUQUlE"
+
+static const char SEARCH_HIT[] =
+    "{\"offset\":0,\"total\":1,\"listed\":1,\"list\":["
+    "{\"kid\":\"" TEST_KID "\",\"type\":\"ED25519\",\"label\":\"paired app\","
+    "\"descr\":\"" PAT_B64 "\"}]}";
+
+/* PREFIX → descr "^<b64>"; body {descr,offset,limit} byte-exact; POST to
+ * /api/keymgmt/search; scope keymgmt:search; page parses like list. */
+static void test_search_prefix_body(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "ks");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200, SEARCH_HIT), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    ehem_key_page *page = NULL;
+    assert_int_equal(
+        ehem_key_search(ctx, PAT, PAT_LEN, EHEM_KEY_SEARCH_PREFIX, 0, 15, &page),
+        EHEM_OK);
+    assert_non_null(page);
+    assert_int_equal((int)page->listed, 1);
+    assert_string_equal(page->entries[0].kid, TEST_KID);
+
+    const fake_captured_request *post = fake_transport_request(fake, 2);
+    assert_int_equal(post->method, EHEM_HTTP_POST);
+    assert_string_equal(post->path, "/api/keymgmt/search");
+    assert_string_equal((const char *)post->body,
+        "{\"descr\":\"^" PAT_B64 "\",\"offset\":0,\"limit\":15}");
+    assert_non_null(fake_transport_request_header(fake, 2, "Authorization"));
+    assert_token_scope(fake, 1, "keymgmt:search");
+
+    ehem_key_page_free(page);
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* SUFFIX → descr "<b64>$". */
+static void test_search_suffix_body(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "kss");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200, SEARCH_HIT), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    ehem_key_page *page = NULL;
+    assert_int_equal(
+        ehem_key_search(ctx, PAT, PAT_LEN, EHEM_KEY_SEARCH_SUFFIX, 5, 10, &page),
+        EHEM_OK);
+    assert_string_equal((const char *)fake_transport_request(fake, 2)->body,
+        "{\"descr\":\"" PAT_B64 "$\",\"offset\":5,\"limit\":10}");
+
+    ehem_key_page_free(page);
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* SUBSTRING → descr "<b64>" (no anchor). */
+static void test_search_substring_body(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "ksu");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200, SEARCH_HIT), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    ehem_key_page *page = NULL;
+    assert_int_equal(
+        ehem_key_search(ctx, PAT, PAT_LEN, EHEM_KEY_SEARCH_SUBSTRING, 0, 15, &page),
+        EHEM_OK);
+    assert_string_equal((const char *)fake_transport_request(fake, 2)->body,
+        "{\"descr\":\"" PAT_B64 "\",\"offset\":0,\"limit\":15}");
+
+    ehem_key_page_free(page);
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* Device 404 (no match) → EHEM_OK with an empty page; last-error clean. */
+static void test_search_404_empty(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "k404");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 404,
+        "{\"error\":\"not found\"}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    ehem_key_page *page = NULL;
+    assert_int_equal(
+        ehem_key_search(ctx, PAT, PAT_LEN, EHEM_KEY_SEARCH_PREFIX, 0, 15, &page),
+        EHEM_OK);
+    assert_non_null(page);
+    assert_int_equal((int)page->listed, 0);
+    assert_null(page->entries);
+    assert_int_equal((int)page->total, 0);
+    assert_int_equal(ehem_last_error(ctx)->http_status, 0);   /* cleaned */
+
+    ehem_key_page_free(page);
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* 400 (malformed / descr decode fail) → EHEM_ERR_DEVICE with payload. */
+static void test_search_400_device(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "ks4");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 400,
+        "{\"error\":\"bad descr\"}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    ehem_key_page *page = NULL;
+    assert_int_equal(
+        ehem_key_search(ctx, PAT, PAT_LEN, EHEM_KEY_SEARCH_PREFIX, 0, 15, &page),
+        EHEM_ERR_DEVICE);
+    assert_null(page);
+    assert_int_equal(ehem_last_error(ctx)->http_status, 400);
+    assert_non_null(strstr(ehem_last_error(ctx)->device_payload, "bad descr"));
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* 410 (repo filter failure) → EHEM_ERR_DEVICE. */
+static void test_search_410_device(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "ks410");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 410,
+        "{\"error\":\"filter failure\"}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    ehem_key_page *page = NULL;
+    assert_int_equal(
+        ehem_key_search(ctx, PAT, PAT_LEN, EHEM_KEY_SEARCH_PREFIX, 0, 15, &page),
+        EHEM_ERR_DEVICE);
+    assert_int_equal(ehem_last_error(ctx)->http_status, 410);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* Full-walk search: three pages (listed 10,8,7 of total 25) merge to 25; a
+ * mid-walk listed<limit does NOT stop early; body offset advances 0,10,18. */
+static void test_search_all_walk(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "ksa");
+    push_walk_page(fake, 25, 0, 10);
+    push_walk_page(fake, 25, 10, 8);
+    push_walk_page(fake, 25, 18, 7);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    ehem_key_page *page = NULL;
+    assert_int_equal(
+        ehem_key_search_all(ctx, PAT, PAT_LEN, EHEM_KEY_SEARCH_PREFIX, &page),
+        EHEM_OK);
+    assert_non_null(page);
+    assert_int_equal((int)page->listed, 25);
+    assert_int_equal((int)page->total, 25);
+
+    assert_int_equal((int)fake_transport_request_count(fake), 5);
+    assert_non_null(strstr((const char *)fake_transport_request(fake, 2)->body, "\"offset\":0"));
+    assert_non_null(strstr((const char *)fake_transport_request(fake, 3)->body, "\"offset\":10"));
+    assert_non_null(strstr((const char *)fake_transport_request(fake, 4)->body, "\"offset\":18"));
+
+    ehem_key_page_free(page);
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* Full-walk search with no match (404 on the first page) → empty page. */
+static void test_search_all_no_match(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "ksn");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 404, NULL), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    ehem_key_page *page = NULL;
+    assert_int_equal(
+        ehem_key_search_all(ctx, PAT, PAT_LEN, EHEM_KEY_SEARCH_SUBSTRING, &page),
+        EHEM_OK);
+    assert_non_null(page);
+    assert_int_equal((int)page->listed, 0);
+    assert_null(page->entries);
+    /* login(2) + one search page only. */
+    assert_int_equal((int)fake_transport_request_count(fake), 3);
+
+    ehem_key_page_free(page);
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+static void test_search_arg_guards(void **state)
+{
+    (void)state;
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    ehem_ctx *ctx = ctx_with(fake);
+    ehem_key_page *page = NULL;
+
+    assert_int_equal(
+        ehem_key_search(NULL, PAT, PAT_LEN, EHEM_KEY_SEARCH_PREFIX, 0, 15, &page),
+        EHEM_ERR_ARG);
+    assert_int_equal(
+        ehem_key_search(ctx, PAT, PAT_LEN, EHEM_KEY_SEARCH_PREFIX, 0, 15, NULL),
+        EHEM_ERR_ARG);
+    /* invalid mode */
+    assert_int_equal(
+        ehem_key_search(ctx, PAT, PAT_LEN, (ehem_key_search_mode)99, 0, 15, &page),
+        EHEM_ERR_ARG);
+    /* NULL pattern with non-zero length */
+    assert_int_equal(
+        ehem_key_search(ctx, NULL, 5, EHEM_KEY_SEARCH_PREFIX, 0, 15, &page),
+        EHEM_ERR_ARG);
+    assert_int_equal(
+        ehem_key_search_all(NULL, PAT, PAT_LEN, EHEM_KEY_SEARCH_PREFIX, &page),
+        EHEM_ERR_ARG);
+    assert_int_equal((int)fake_transport_request_count(fake), 0);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* -------------------------------------------------------------------------- */
 /* misc                                                                       */
 /* -------------------------------------------------------------------------- */
 
@@ -841,6 +1104,15 @@ int main(void)
         cmocka_unit_test(test_delete_malformed_kid),
         cmocka_unit_test(test_delete_406_not_found),
         cmocka_unit_test(test_delete_403_scope),
+        cmocka_unit_test(test_search_prefix_body),
+        cmocka_unit_test(test_search_suffix_body),
+        cmocka_unit_test(test_search_substring_body),
+        cmocka_unit_test(test_search_404_empty),
+        cmocka_unit_test(test_search_400_device),
+        cmocka_unit_test(test_search_410_device),
+        cmocka_unit_test(test_search_all_walk),
+        cmocka_unit_test(test_search_all_no_match),
+        cmocka_unit_test(test_search_arg_guards),
         cmocka_unit_test(test_arg_guards),
         cmocka_unit_test(test_free_null_safe),
     };

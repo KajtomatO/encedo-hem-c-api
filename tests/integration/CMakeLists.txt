@@ -16,6 +16,9 @@ ehem_add_integration_test(test_keymgmt_live SOURCES test_keymgmt_live.c)
 # EHEMTEST key hygiene (public API only).
 ehem_add_integration_test(test_keymgmt_mutate_live SOURCES test_keymgmt_mutate_live.c)
 
+# REQ-KEY-002: live descr prefix search (hit + no-match) (public API only).
+ehem_add_integration_test(test_keymgmt_search_live SOURCES test_keymgmt_search_live.c)
+
 # REQ-AUTH-001/002/003: live authenticated token acquisition. Exception to the
 # public-API-only rule for integration tests — no public authenticated binding
 # exists until M2-050, so this drives the INTERNAL ehem_auth_ensure_token and
