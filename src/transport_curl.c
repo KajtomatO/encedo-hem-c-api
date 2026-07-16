@@ -450,6 +450,14 @@ ehem_transport *ehem_transport_default_new(const char *base_url,
     curl_easy_setopt(h, CURLOPT_NOSIGNAL, 1L);          /* thread-safe timeouts */
     curl_easy_setopt(h, CURLOPT_FOLLOWLOCATION, 0L);    /* device API: no redirects */
     curl_easy_setopt(h, CURLOPT_USERAGENT, "encedo-hem/" EHEM_VERSION_STRING);
+    /* The HEM device closes the TCP connection after every response (it does not
+     * keep-alive; the reference python client forces Connection: close for the
+     * same reason). Never pool a device connection for reuse: a reused socket is
+     * already dead, and curl's silent retry on a dead-reused connection can
+     * exhaust ("Connection died, tried N times") — observed on DELETE after a
+     * request sequence. FORBID_REUSE closes each connection after use so the next
+     * request always dials fresh, matching the device's one-shot model. */
+    curl_easy_setopt(h, CURLOPT_FORBID_REUSE, 1L);
 
     t->ops   = &CURL_OPS;
     t->state = st;

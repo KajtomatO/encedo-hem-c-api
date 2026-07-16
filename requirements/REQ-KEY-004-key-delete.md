@@ -33,11 +33,15 @@ HEM-SDK-6 (pkcs11 `hem_destroy_object`). The `EHEMTEST` integration
 policy (REQ-TEST-003) also needs it for cleanup.
 
 **Acceptance criteria:**
-- [ ] Sends method DELETE with the kid in the path and no body; empty-200
-      → `EHEM_OK` (fake-transport unit tests).
-- [ ] Malformed kid → `EHEM_ERR_ARG` without any transport call; 406 →
-      `EHEM_ERR_NOT_FOUND`; 401/403 map per REQ-AUTH-003 (unit tests).
-- [ ] Declares scope `keymgmt:del` (unit test).
-- [ ] Live: a created `EHEMTEST` key is deleted; a follow-up
+- [x] Sends method DELETE with the kid in the path and no body; empty-200
+      → `EHEM_OK` (fake-transport unit tests). — test_delete_empty_200_ok
+      (asserts DELETE + path + NULL body), test_delete_200_with_body_ok.
+- [x] Malformed kid → `EHEM_ERR_ARG` without any transport call; 406 →
+      `EHEM_ERR_NOT_FOUND`; 401/403 map per REQ-AUTH-003 (unit tests). —
+      test_delete_malformed_kid (short/33-char/non-hex/NULL, 0 requests),
+      test_delete_406_not_found, test_delete_403_scope.
+- [x] Declares scope `keymgmt:del` (unit test). — test_delete_empty_200_ok
+      decodes the token eJWT and asserts `"scope":"keymgmt:del"`.
+- [x] Live: a created `EHEMTEST` key is deleted; a follow-up
       get/list confirms it is gone; deleting the same kid again returns
-      `EHEM_ERR_NOT_FOUND` (integration test).
+      `EHEM_ERR_NOT_FOUND` (integration test). — tests/integration/test_keymgmt_mutate_live.c.

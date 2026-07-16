@@ -79,6 +79,56 @@ static ehem_ctx *logged_in_ctx(ehem_transport *fake)
     return ctx;
 }
 
+/* Decode the base64url payload segment of an eJWT into a NUL-terminated JSON
+ * string (mirrors test_auth.c). */
+static void decode_payload(const char *ejwt, char *buf, size_t buf_cap)
+{
+    const char *d1 = strchr(ejwt, '.');
+    const char *d2;
+    uint8_t raw[512];
+    size_t n;
+    assert_non_null(d1);
+    d2 = strchr(d1 + 1, '.');
+    assert_non_null(d2);
+    n = ehem_b64url_decode(d1 + 1, (size_t)(d2 - (d1 + 1)), raw, sizeof raw);
+    assert_int_not_equal(n, (size_t)-1);
+    assert_true(n < buf_cap);
+    memcpy(buf, raw, n);
+    buf[n] = '\0';
+}
+
+/* Assert the token-acquisition POST at request `token_req` requested `scope`:
+ * its body is {"auth":"<ejwt>"} and the eJWT payload carries "scope":"<scope>". */
+static void assert_token_scope(ehem_transport *fake, size_t token_req,
+                               const char *scope)
+{
+    const fake_captured_request *r = fake_transport_request(fake, token_req);
+    const char *q;
+    const char *end;
+    char ejwt[700];
+    char payload[512];
+    char needle[80];
+    size_t len;
+
+    assert_non_null(r);
+    assert_non_null(r->body);
+    q = strstr((const char *)r->body, "\"auth\":\"");
+    assert_non_null(q);
+    q += 8;                              /* past "auth":" */
+    end = strchr(q, '"');
+    assert_non_null(end);
+    len = (size_t)(end - q);
+    assert_true(len < sizeof ejwt);
+    memcpy(ejwt, q, len);
+    ejwt[len] = '\0';
+
+    decode_payload(ejwt, payload, sizeof payload);
+    snprintf(needle, sizeof needle, "\"scope\":\"%s\"", scope);
+    assert_non_null(strstr(payload, needle));
+}
+
+#define TEST_KID "09bd0958e1499ecfd51ea62a3f49a84c"
+
 /* -------------------------------------------------------------------------- */
 /* single-page list                                                           */
 /* -------------------------------------------------------------------------- */
@@ -416,6 +466,330 @@ static void test_list_all_single_page(void **state)
 }
 
 /* -------------------------------------------------------------------------- */
+/* create                                                                     */
+/* -------------------------------------------------------------------------- */
+
+/* Minimal params: type + label only → body {type,label}; kid parsed back;
+ * scope keymgmt:gen; POST to /api/keymgmt/create with a bearer. */
+static void test_create_minimal(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "kc");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"kid\":\"" TEST_KID "\"}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    ehem_key_create_params p = {0};
+    p.type = "ED25519";
+    p.label = "sign key";
+    char kid[EHEM_KID_HEX_SIZE] = {0};
+    assert_int_equal(ehem_key_create(ctx, &p, kid), EHEM_OK);
+    assert_string_equal(kid, TEST_KID);
+
+    const fake_captured_request *post = fake_transport_request(fake, 2);
+    assert_int_equal(post->method, EHEM_HTTP_POST);
+    assert_string_equal(post->path, "/api/keymgmt/create");
+    assert_non_null(post->body);
+    assert_string_equal((const char *)post->body,
+                        "{\"type\":\"ED25519\",\"label\":\"sign key\"}");
+    assert_non_null(fake_transport_request_header(fake, 2, "Authorization"));
+    assert_string_equal(fake_transport_request_header(fake, 2, "Content-Type"),
+                        "application/json");
+    assert_token_scope(fake, 1, "keymgmt:gen");
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* Full params: mode + descr → body carries all four keys in order, descr is
+ * std-base64 of the raw bytes ({0x01,0x02,0x03} → "AQID"). */
+static void test_create_full_body(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "kcf");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"kid\":\"" TEST_KID "\"}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    const uint8_t descr[] = {0x01, 0x02, 0x03};
+    ehem_key_create_params p = {0};
+    p.type = "SECP256R1";
+    p.label = "k";
+    p.mode = "ECDH,ExDSA";
+    p.descr = descr;
+    p.descr_len = sizeof descr;
+    char kid[EHEM_KID_HEX_SIZE] = {0};
+    assert_int_equal(ehem_key_create(ctx, &p, kid), EHEM_OK);
+
+    assert_string_equal((const char *)fake_transport_request(fake, 2)->body,
+        "{\"type\":\"SECP256R1\",\"label\":\"k\",\"mode\":\"ECDH,ExDSA\","
+        "\"descr\":\"AQID\"}");
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* A label longer than 31 bytes → EHEM_ERR_ARG with NO transport call. */
+static void test_create_label_too_long(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);   /* lazy login: no traffic yet */
+    ehem_key_create_params p = {0};
+    p.type = "ED25519";
+    p.label = "0123456789012345678901234567890123";   /* 34 chars */
+    char kid[EHEM_KID_HEX_SIZE] = {0};
+    assert_int_equal(ehem_key_create(ctx, &p, kid), EHEM_ERR_ARG);
+    assert_int_equal((int)fake_transport_request_count(fake), 0);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* A non-printable byte in the label → EHEM_ERR_ARG with NO transport call. */
+static void test_create_label_nonprintable(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    ehem_key_create_params p = {0};
+    p.type = "ED25519";
+    p.label = "bad\tlabel";               /* tab is not printable */
+    char kid[EHEM_KID_HEX_SIZE] = {0};
+    assert_int_equal(ehem_key_create(ctx, &p, kid), EHEM_ERR_ARG);
+    assert_int_equal((int)fake_transport_request_count(fake), 0);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* Device 400 (unsupported type / invalid mode) → EHEM_ERR_DEVICE with payload. */
+static void test_create_400_device(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "kc4");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 400,
+        "{\"error\":\"unsupported type\"}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    ehem_key_create_params p = {0};
+    p.type = "NOPE";
+    p.label = "k";
+    char kid[EHEM_KID_HEX_SIZE] = {0};
+    assert_int_equal(ehem_key_create(ctx, &p, kid), EHEM_ERR_DEVICE);
+    assert_int_equal(ehem_last_error(ctx)->http_status, 400);
+    assert_non_null(strstr(ehem_last_error(ctx)->device_payload, "unsupported type"));
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* Device 406 (repo full / write failed) → EHEM_ERR_DEVICE. */
+static void test_create_406_device(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "kc6");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 406,
+        "{\"error\":\"repo full\"}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    ehem_key_create_params p = {0};
+    p.type = "ED25519";
+    p.label = "k";
+    char kid[EHEM_KID_HEX_SIZE] = {0};
+    assert_int_equal(ehem_key_create(ctx, &p, kid), EHEM_ERR_DEVICE);
+    assert_int_equal(ehem_last_error(ctx)->http_status, 406);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* A 200 reply missing kid → EHEM_ERR_PROTOCOL. */
+static void test_create_missing_kid(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "kcm");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"ok\":1}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    ehem_key_create_params p = {0};
+    p.type = "ED25519";
+    p.label = "k";
+    char kid[EHEM_KID_HEX_SIZE] = {0};
+    assert_int_equal(ehem_key_create(ctx, &p, kid), EHEM_ERR_PROTOCOL);
+    assert_non_null(strstr(ehem_last_error(ctx)->message, "kid"));
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+static void test_create_arg_guards(void **state)
+{
+    (void)state;
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    ehem_ctx *ctx = ctx_with(fake);
+    ehem_key_create_params p = {0};
+    p.type = "ED25519";
+    p.label = "k";
+    char kid[EHEM_KID_HEX_SIZE] = {0};
+
+    assert_int_equal(ehem_key_create(NULL, &p, kid), EHEM_ERR_ARG);
+    assert_int_equal(ehem_key_create(ctx, NULL, kid), EHEM_ERR_ARG);
+    assert_int_equal(ehem_key_create(ctx, &p, NULL), EHEM_ERR_ARG);
+    p.type = NULL;
+    assert_int_equal(ehem_key_create(ctx, &p, kid), EHEM_ERR_ARG);
+    p.type = "ED25519"; p.label = NULL;
+    assert_int_equal(ehem_key_create(ctx, &p, kid), EHEM_ERR_ARG);
+    assert_int_equal((int)fake_transport_request_count(fake), 0);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* -------------------------------------------------------------------------- */
+/* delete                                                                     */
+/* -------------------------------------------------------------------------- */
+
+/* Empty-200 → EHEM_OK; sends DELETE + kid path, no body, with a bearer;
+ * scope keymgmt:del. */
+static void test_delete_empty_200_ok(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "kd");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200, NULL), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    assert_int_equal(ehem_key_delete(ctx, TEST_KID), EHEM_OK);
+
+    const fake_captured_request *del = fake_transport_request(fake, 2);
+    assert_int_equal(del->method, EHEM_HTTP_DELETE);
+    assert_string_equal(del->path, "/api/keymgmt/delete/" TEST_KID);
+    assert_null(del->body);
+    assert_non_null(fake_transport_request_header(fake, 2, "Authorization"));
+    assert_token_scope(fake, 1, "keymgmt:del");
+
+    /* last-error left clean on success. */
+    assert_int_equal(ehem_last_error(ctx)->http_status, 0);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* A non-empty 200 body is tolerated as success too. */
+static void test_delete_200_with_body_ok(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "kdb");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"status\":\"ok\"}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    assert_int_equal(ehem_key_delete(ctx, TEST_KID), EHEM_OK);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* Malformed kids → EHEM_ERR_ARG with NO transport call. */
+static void test_delete_malformed_kid(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    ehem_ctx *ctx = logged_in_ctx(fake);
+
+    assert_int_equal(ehem_key_delete(ctx, "xyz"), EHEM_ERR_ARG);            /* too short */
+    assert_int_equal(ehem_key_delete(ctx, TEST_KID "0"), EHEM_ERR_ARG);    /* 33 chars */
+    assert_int_equal(ehem_key_delete(ctx,
+        "09bd0958e1499ecfd51ea62a3f49a84g"), EHEM_ERR_ARG);                /* non-hex 'g' */
+    assert_int_equal(ehem_key_delete(ctx, NULL), EHEM_ERR_ARG);
+    assert_int_equal((int)fake_transport_request_count(fake), 0);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* 406 (kid not in repo) → EHEM_ERR_NOT_FOUND (REQ-KEY-004). */
+static void test_delete_406_not_found(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "kd6");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 406,
+        "{\"error\":\"not found\"}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    assert_int_equal(ehem_key_delete(ctx, TEST_KID), EHEM_ERR_NOT_FOUND);
+    assert_int_equal(ehem_last_error(ctx)->http_status, 406);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* 403 (wrong scope) → EHEM_ERR_SCOPE_DENIED (REQ-AUTH-003). */
+static void test_delete_403_scope(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "kd3");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 403,
+        "{\"error\":\"forbidden\"}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    assert_int_equal(ehem_key_delete(ctx, TEST_KID), EHEM_ERR_SCOPE_DENIED);
+    assert_int_equal(ehem_last_error(ctx)->http_status, 403);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* -------------------------------------------------------------------------- */
 /* misc                                                                       */
 /* -------------------------------------------------------------------------- */
 
@@ -454,6 +828,19 @@ int main(void)
         cmocka_unit_test(test_list_409_device),
         cmocka_unit_test(test_list_all_multipage_walk),
         cmocka_unit_test(test_list_all_single_page),
+        cmocka_unit_test(test_create_minimal),
+        cmocka_unit_test(test_create_full_body),
+        cmocka_unit_test(test_create_label_too_long),
+        cmocka_unit_test(test_create_label_nonprintable),
+        cmocka_unit_test(test_create_400_device),
+        cmocka_unit_test(test_create_406_device),
+        cmocka_unit_test(test_create_missing_kid),
+        cmocka_unit_test(test_create_arg_guards),
+        cmocka_unit_test(test_delete_empty_200_ok),
+        cmocka_unit_test(test_delete_200_with_body_ok),
+        cmocka_unit_test(test_delete_malformed_kid),
+        cmocka_unit_test(test_delete_406_not_found),
+        cmocka_unit_test(test_delete_403_scope),
         cmocka_unit_test(test_arg_guards),
         cmocka_unit_test(test_free_null_safe),
     };

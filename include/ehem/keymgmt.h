@@ -91,6 +91,70 @@ EHEM_API ehem_rc ehem_key_list_all(ehem_ctx *ctx, ehem_key_page **out);
 /* Release a key page from ehem_key_list()/ehem_key_list_all(). NULL is a no-op. */
 EHEM_API void ehem_key_page_free(ehem_key_page *page);
 
+/* ==========================================================================
+ * Key creation + deletion (authenticated).
+ * implements: REQ-KEY-005 (create, scope "keymgmt:gen"),
+ *             REQ-KEY-004 (delete, scope "keymgmt:del")
+ * ========================================================================== */
+
+/* Buffer size — including the NUL — an ehem_key_create() caller must provide for
+ * the returned key id (16 bytes rendered as 32 hex chars). */
+#define EHEM_KID_HEX_SIZE 33
+
+/*
+ * Parameters for ehem_key_create(). `type` and `label` are required; `mode` and
+ * `descr` are optional (NULL / 0 to omit). The SDK keeps no allowlist and no
+ * default: every field is passed through as given and the device is the
+ * authority (an unsupported type or invalid mode is a device 400 with payload).
+ */
+typedef struct ehem_key_create_params {
+    /* Algorithm literal, per encedo-hem-api-doc keymgmt/create.md — e.g.
+     * "ED25519", "SECP256R1", "CURVE25519", "SHA2-256", "AES256", "MLKEM768".
+     * (Note the device vocabulary: AES has no dash; HMAC uses the raw hash name.) */
+    const char    *type;
+
+    /* Human label, pre-validated client-side: printable ASCII, 1..31 bytes
+     * (the stricter of the doc's ≤32 and the python client's ≤31 — REQ-KEY-005
+     * open criterion). A label outside this bound is EHEM_ERR_ARG with no I/O. */
+    const char    *label;
+
+    /* Optional role mode, only meaningful for NIST-P ECC: one of "ECDH",
+     * "ExDSA", or "ECDH,ExDSA". The device defaults NIST-P keys to ECDH-only,
+     * so a signing key must pass a mode containing "ExDSA" (python OQ-19). NULL
+     * omits the field (the SDK imposes no default). */
+    const char    *mode;
+
+    /* Optional opaque blob stored with the key; the SDK base64-encodes these raw
+     * bytes for the wire. NULL / descr_len 0 omits the field. */
+    const uint8_t *descr;
+    size_t         descr_len;
+} ehem_key_create_params;
+
+/*
+ * Generate a key on the device: POST /api/keymgmt/create (scope "keymgmt:gen").
+ * On success writes the new key id (32 hex chars + NUL) into `kid_out` — a
+ * caller-provided buffer of at least EHEM_KID_HEX_SIZE bytes — and returns
+ * EHEM_OK. Returns EHEM_ERR_ARG (no network I/O) on a NULL argument, a missing
+ * type/label, or a label that is not 1..31 printable-ASCII bytes; a device
+ * validation failure is HTTP 400 and a full/failed repo write is HTTP 406, both
+ * EHEM_ERR_DEVICE with the device payload in ehem_last_error(); 401/403 map per
+ * REQ-AUTH-003. The returned kid is suitable for ehem_key_delete() and the
+ * per-key crypto scopes.
+ */
+EHEM_API ehem_rc ehem_key_create(ehem_ctx *ctx,
+                                 const ehem_key_create_params *params,
+                                 char *kid_out);
+
+/*
+ * Delete a key: DELETE /api/keymgmt/delete/{kid} (scope "keymgmt:del"). `kid`
+ * is validated client-side (exactly 32 hex chars, else EHEM_ERR_ARG with no
+ * network I/O). Deletion is immediate and irreversible. Returns EHEM_OK on the
+ * device's empty 200; a kid the device does not hold is HTTP 406 →
+ * EHEM_ERR_NOT_FOUND; 401/403 map per REQ-AUTH-003. The SDK applies no
+ * protected-key policy — that safeguard lives in hem-tool (REQ-TOOL-005/006).
+ */
+EHEM_API ehem_rc ehem_key_delete(ehem_ctx *ctx, const char *kid);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

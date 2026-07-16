@@ -14,17 +14,23 @@
  */
 #include "ehem/keymgmt.h"
 
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "context.h"
-#include "ejwt.h"            /* ehem_b64_std_decode — descr blobs */
+#include "ejwt.h"            /* ehem_b64_std_decode/encode — descr blobs */
 #include "json.h"
 #include "proto_common.h"
 #include "transport.h"
 
 #define KEYMGMT_LIST_SCOPE "keymgmt:list"
+#define KEYMGMT_GEN_SCOPE  "keymgmt:gen"
+#define KEYMGMT_DEL_SCOPE  "keymgmt:del"
+
+/* A key id is exactly 32 hex chars (16 bytes); EHEM_KID_HEX_SIZE == 33 with NUL. */
+#define KID_HEX_LEN 32
 
 /* The device caps a page at 15 server-side; walk in sub-cap pages (python OQ-17
  * uses 10 — "stay safely below"). */
@@ -314,4 +320,175 @@ ehem_rc ehem_key_list_all(ehem_ctx *ctx, ehem_key_page **out)
 
     *out = acc;
     return EHEM_OK;
+}
+
+/* -------------------------------------------------------------------------- */
+/* create + delete                                                            */
+/* -------------------------------------------------------------------------- */
+
+/* True iff `s` is exactly KID_HEX_LEN hex digits (either case) then NUL. Reads
+ * no further than the first non-hex byte, so a short string is safe. */
+static bool is_kid_hex(const char *s)
+{
+    size_t i;
+    for (i = 0; i < KID_HEX_LEN; i++) {
+        char c = s[i];
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') ||
+              (c >= 'A' && c <= 'F'))) {
+            return false;
+        }
+    }
+    return s[KID_HEX_LEN] == '\0';
+}
+
+/* Label policy (REQ-KEY-005): 1..31 printable-ASCII bytes. */
+static bool label_ok(const char *label)
+{
+    size_t n = strlen(label);
+    size_t i;
+    if (n < 1 || n > 31) {
+        return false;
+    }
+    for (i = 0; i < n; i++) {
+        if (!isprint((unsigned char)label[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+ehem_rc ehem_key_create(ehem_ctx *ctx, const ehem_key_create_params *params,
+                        char *kid_out)
+{
+    ehem_json *body_obj;
+    ehem_json *root = NULL;
+    char *body;
+    const char *kid;
+    ehem_rc rc;
+
+    if (ctx == NULL || params == NULL || kid_out == NULL ||
+        params->type == NULL || params->label == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    ehem_ctx_clear_error(ctx);
+    if (!label_ok(params->label)) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                             "keymgmt/create: label must be 1..31 printable bytes");
+    }
+
+    /* Body {type,label[,mode][,descr(b64)]} in that exact order (the JSON layer
+     * preserves insertion order — REQ-BUILD-003). */
+    body_obj = ehem_json_new_object();
+    if (body_obj == NULL) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    if (!ehem_json_add_string(body_obj, "type", params->type) ||
+        !ehem_json_add_string(body_obj, "label", params->label)) {
+        goto oom_obj;
+    }
+    if (params->mode != NULL &&
+        !ehem_json_add_string(body_obj, "mode", params->mode)) {
+        goto oom_obj;
+    }
+    if (params->descr != NULL && params->descr_len > 0) {
+        size_t enc = ehem_b64_std_encoded_len(params->descr_len);
+        char *descr_b64 = malloc(enc + 1);
+        size_t w;
+        if (descr_b64 == NULL) {
+            goto oom_obj;
+        }
+        w = ehem_b64_std_encode(params->descr, params->descr_len,
+                                descr_b64, enc + 1);
+        if (w == (size_t)-1 ||
+            !ehem_json_add_string(body_obj, "descr", descr_b64)) {
+            free(descr_b64);
+            goto oom_obj;
+        }
+        free(descr_b64);
+    }
+
+    body = ehem_json_print(body_obj);
+    ehem_json_free(body_obj);
+    if (body == NULL) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+
+    rc = ehem_proto_request_json(ctx, EHEM_HTTP_POST, "/api/keymgmt/create",
+                                 body, KEYMGMT_GEN_SCOPE, EHEM_TLS_REQ_DEFAULT,
+                                 &root);
+    ehem_json_string_free(body);
+    if (rc != EHEM_OK) {
+        return rc;   /* 400 validation / 406 repo full → mapped with payload */
+    }
+
+    if (!ehem_json_get_string(root, "kid", &kid)) {
+        rc = ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 200, NULL,
+                           "keymgmt/create: response missing 'kid'");
+    } else if (!is_kid_hex(kid)) {
+        rc = ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 200, NULL,
+                           "keymgmt/create: 'kid' is not 32 hex chars");
+    } else {
+        memcpy(kid_out, kid, KID_HEX_LEN);
+        kid_out[KID_HEX_LEN] = '\0';
+        rc = EHEM_OK;
+    }
+    ehem_json_free(root);
+    return rc;
+
+oom_obj:
+    ehem_json_free(body_obj);
+    return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+}
+
+ehem_rc ehem_key_delete(ehem_ctx *ctx, const char *kid)
+{
+    char path[64];
+    char *body = NULL;
+    long status;
+    ehem_rc rc;
+
+    if (ctx == NULL || kid == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    ehem_ctx_clear_error(ctx);
+    if (!is_kid_hex(kid)) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                             "keymgmt/delete: kid must be exactly 32 hex chars");
+    }
+
+    snprintf(path, sizeof path, "/api/keymgmt/delete/%s", kid);
+    rc = ehem_proto_request_raw(ctx, EHEM_HTTP_DELETE, path, NULL,
+                                KEYMGMT_DEL_SCOPE, EHEM_TLS_REQ_DEFAULT, &body);
+    if (rc == EHEM_OK) {
+        free(body);                 /* doc: empty 200; tolerate a body anyway */
+        ehem_ctx_clear_error(ctx);
+        return EHEM_OK;
+    }
+
+    status = ehem_last_error(ctx)->http_status;
+
+    /* The device answers a successful delete with an EMPTY 200; the shared path
+     * reports an empty 2xx body as EHEM_ERR_PROTOCOL (http_status 200) — which
+     * for a delete IS success, exactly like the reboot binding. */
+    if (rc == EHEM_ERR_PROTOCOL && status == 200) {
+        ehem_ctx_clear_error(ctx);
+        return EHEM_OK;
+    }
+
+    /* 406 = kid not in the repository → NOT_FOUND (REQ-KEY-004). Stack-copy the
+     * device payload first: ehem_ctx_fail frees the current err_payload before
+     * copying, so re-passing the live pointer would be a use-after-free. */
+    if (rc == EHEM_ERR_DEVICE && status == 406) {
+        char payload[256];
+        const char *p = ehem_last_error(ctx)->device_payload;
+        payload[0] = '\0';
+        if (p != NULL) {
+            snprintf(payload, sizeof payload, "%s", p);
+        }
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOT_FOUND, 406,
+                             payload[0] != '\0' ? payload : NULL,
+                             "keymgmt/delete: key not found");
+    }
+
+    return rc;                      /* 401/403/transport/etc. already recorded */
 }

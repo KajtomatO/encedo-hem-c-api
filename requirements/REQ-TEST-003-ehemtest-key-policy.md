@@ -32,14 +32,20 @@ was announced in REQ-TEST-002's rationale as binding from M3 — this REQ
 makes it normative now that M3 tests actually create keys.
 
 **Acceptance criteria:**
-- [ ] A shared test-support helper produces `EHEMTEST`-prefixed labels
+- [x] A shared test-support helper produces `EHEMTEST`-prefixed labels
       (unique per run, e.g. suffixed with a timestamp) and a cleanup
       routine deleting the keys it registered; tests use it instead of
       ad-hoc labels (grep: no integration test creates a key with a
-      literal non-EHEMTEST label).
-- [ ] Cleanup runs even when the test body fails (teardown path), and a
+      literal non-EHEMTEST label). — tests/support/ehem_test_keys.h
+      (ehem_test_label = "EHEMTEST-<time>-<counter>", ehem_test_track /
+      ehem_test_cleanup); the only key-creating test uses it.
+- [x] Cleanup runs even when the test body fails (teardown path), and a
       leftover-sweep utility (or test-suite preamble) can remove stray
-      `EHEMTEST` keys by prefix.
-- [ ] No integration/disruptive test issues a delete/update for a kid it
+      `EHEMTEST` keys by prefix. — cmocka setup/teardown: cleanup in
+      teardown (runs after a failed body), ehem_test_sweep in setup
+      (verified: a leftover from an earlier failed run was swept).
+- [x] No integration/disruptive test issues a delete/update for a kid it
       did not create or sweep by `EHEMTEST` prefix (review criterion,
-      checked at M3 gate).
+      checked at M3 gate). — the sole mutating test deletes only its own
+      tracked kids and EHEMTEST-prefixed sweep hits; to be re-confirmed at
+      the M3 gate as more mutating tests land.

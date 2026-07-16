@@ -47,16 +47,22 @@ family created, used, deleted) plus hardware `random` remain M5 (its
 placeholder stands).
 
 **Acceptance criteria:**
-- [ ] Request body carries exactly the given `{type, label[, mode][,
+- [x] Request body carries exactly the given `{type, label[, mode][,
       descr(b64)]}`; kid parsed from the reply (fake-transport unit tests
-      asserting body bytes).
-- [ ] Label over 31 bytes or non-printable → `EHEM_ERR_ARG` without any
+      asserting body bytes). — test_create_minimal, test_create_full_body
+      (byte-exact `{"type":...,"label":...,"mode":...,"descr":"AQID"}`).
+- [x] Label over 31 bytes or non-printable → `EHEM_ERR_ARG` without any
       transport call; device 400 (unsupported type/invalid mode) →
       `EHEM_ERR_DEVICE` with payload; 406 (repo full) → `EHEM_ERR_DEVICE`
-      (unit tests).
-- [ ] Declares scope `keymgmt:gen` (unit test).
-- [ ] Live: create an `EHEMTEST`-labeled ED25519 key with a descr →
+      (unit tests). — test_create_label_too_long / _nonprintable (0 requests),
+      test_create_400_device, test_create_406_device.
+- [x] Declares scope `keymgmt:gen` (unit test). — test_create_minimal decodes
+      the token-acquisition eJWT and asserts `"scope":"keymgmt:gen"`.
+- [x] Live: create an `EHEMTEST`-labeled ED25519 key with a descr →
       returned kid appears in list with that label/descr (integration
-      test; cleanup per REQ-TEST-003).
+      test; cleanup per REQ-TEST-003). — tests/integration/test_keymgmt_mutate_live.c.
 - [ ] OPEN (live probe, may resolve in M5): actual label max (31 vs 32)
-      and descr max (64 vs 128) — record device behavior here.
+      and descr max (64 vs 128) — record device behavior here. — NOT probed
+      in M3 (the live test used a ~19-char label and a 6-byte descr, both well
+      within bounds). SDK still enforces the stricter ≤31 label; boundary probe
+      deferred to M5 per this criterion.
