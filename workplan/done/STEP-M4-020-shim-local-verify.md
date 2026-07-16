@@ -20,14 +20,19 @@ evidence:
     firmware alg table (SHA-256/384/512 for 256/384/521-bit; K1=SHA-256).
     ecc_key comes from wc_ecc_key_new/free (LIBRARY-side alloc — the DLL
     sizes its own struct, closing the M2 ABI-hazard class); ed25519_key is
-    stack like the existing DecodedCert use. FINDINGS: (1) the MSYS2
-    wolfSSL PKGBUILD (CMake) shows NO comp-key flag → HAVE_COMP_KEY may be
-    absent on the windows-mingw leg; the shim maps wolfCrypt NOT_COMPILED_IN
-    → EHEM_ERR_UNSUPPORTED and the unit test records-and-continues (prints a
-    NOTE, still proves the vector uncompressed), so CI stays green and
-    conclusive either way — definitive answer on the user's next push.
-    Dev-machine wolfSSL 5.6.6 HAS HAVE_COMP_KEY (options.h) and the
-    compressed positive PASSED here. (2) wc_ecc_import_x963_ex does NOT
+    stack like the existing DecodedCert use. FINDINGS: (1) **RESOLVED
+    post-push (CI green, 2026-07-16): the MSYS2 wolfSSL 5.9.2-2 package's
+    generated options.h contains NO HAVE_COMP_KEY** (verified by extracting
+    mingw-w64-x86_64-wolfssl-5.9.2-2-any.pkg.tar.zst from repo.msys2.org) —
+    on Windows, compressed-point import returns wolfCrypt NOT_COMPILED_IN,
+    which the shim maps to EHEM_ERR_UNSUPPORTED and the unit test
+    records-and-continues (prints a NOTE, still proves the vector
+    uncompressed), so the windows-mingw leg is green by design, not by
+    luck. Consequence: local verify of device-exported (compressed) EC
+    pubkeys is Linux-only until wolfSSL is built with comp-key support;
+    the gate criterion runs on the dev machine, unaffected. Dev-machine
+    wolfSSL 5.6.6 HAS HAVE_COMP_KEY and the compressed positive PASSED
+    here. (2) wc_ecc_import_x963_ex does NOT
     validate on-curve without WOLFSSL_VALIDATE_ECC_IMPORT (Debian build
     lacks it) — an off-curve point imports fine and cleanly fails verify;
     test asserts "never valid" rather than a specific rejection path.
