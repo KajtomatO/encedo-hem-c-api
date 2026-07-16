@@ -17,6 +17,7 @@
 
 #include "context.h"
 #include "json.h"
+#include "proto_auth.h"      /* ehem_auth_invalidate — reboot drops the cache */
 #include "proto_common.h"
 #include "transport.h"
 
@@ -364,4 +365,211 @@ void ehem_checkin_result_free(ehem_checkin_info *result)
     free(result->newfws);
     free(result->newuis);
     free(result);
+}
+
+/* -------------------------------------------------------------------------- */
+/* config (REQ-SYS-004)                                                       */
+/* -------------------------------------------------------------------------- */
+
+static ehem_rc parse_config(ehem_ctx *ctx, const ehem_json *root,
+                            ehem_config_info **out)
+{
+    ehem_config_info *c = calloc(1, sizeof *c);
+    const char *str;
+    const char *missing = NULL;
+
+    if (c == NULL) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+
+    /* Required strings. */
+    if (!ehem_json_get_string(root, "devid", &str)) {
+        missing = "devid";
+    } else if ((c->devid = dup_str(str)) == NULL) {
+        goto oom;
+    } else if (!ehem_json_get_string(root, "hostname", &str)) {
+        missing = "hostname";
+    } else if ((c->hostname = dup_str(str)) == NULL) {
+        goto oom;
+    } else if (!ehem_json_get_string(root, "user", &str)) {
+        missing = "user";
+    } else if ((c->user = dup_str(str)) == NULL) {
+        goto oom;
+    }
+    if (missing != NULL) {
+        ehem_system_config_free(c);
+        return ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 200, NULL,
+                             "system/config: missing required field '%s'", missing);
+    }
+
+    /* Optional strings (email may be present but empty — kept as ""). */
+    if (!opt_str(root, "email", &c->email) ||
+        !opt_str(root, "eid", &c->eid) ||
+        !opt_str(root, "instanceid", &c->instanceid) ||
+        !opt_str(root, "origin", &c->origin) ||
+        !opt_str(root, "ip", &c->ip) ||
+        !opt_str(root, "genuine_id", &c->genuine_id)) {
+        goto oom;
+    }
+
+    /* Optional numbers (has_* distinguishes 0 from absent). */
+    if (ehem_json_get_int64(root, "iat", &c->iat))               { c->has_iat = true; }
+    if (ehem_json_get_int64(root, "uts", &c->uts))               { c->has_uts = true; }
+    if (ehem_json_get_int64(root, "ctx", &c->ctx))               { c->has_ctx = true; }
+    if (ehem_json_get_int64(root, "storage_mode", &c->storage_mode)) {
+        c->has_storage_mode = true;
+    }
+    if (ehem_json_get_int64(root, "storage_disk0size", &c->storage_disk0size)) {
+        c->has_storage_disk0size = true;
+    }
+    if (ehem_json_get_int64(root, "storage_capacity", &c->storage_capacity)) {
+        c->has_storage_capacity = true;
+    }
+
+    /* Optional booleans (has_* distinguishes false from absent). */
+    if (ehem_json_get_bool(root, "dnsd", &c->dnsd))                       { c->has_dnsd = true; }
+    if (ehem_json_get_bool(root, "trusted_ts", &c->trusted_ts))           { c->has_trusted_ts = true; }
+    if (ehem_json_get_bool(root, "trusted_backend", &c->trusted_backend)) { c->has_trusted_backend = true; }
+    if (ehem_json_get_bool(root, "allow_keysearch", &c->allow_keysearch)) { c->has_allow_keysearch = true; }
+    if (ehem_json_get_bool(root, "http_option_hsts", &c->http_hsts))      { c->has_http_hsts = true; }
+
+    *out = c;
+    return EHEM_OK;
+
+oom:
+    ehem_system_config_free(c);
+    return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+}
+
+ehem_rc ehem_system_config(ehem_ctx *ctx, ehem_config_info **out)
+{
+    ehem_json *root = NULL;
+    ehem_rc rc;
+
+    if (ctx == NULL || out == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    *out = NULL;
+    ehem_ctx_clear_error(ctx);
+
+    rc = ehem_proto_request_json(ctx, EHEM_HTTP_GET, "/api/system/config",
+                                 NULL, "system:config", EHEM_TLS_REQ_DEFAULT, &root);
+    if (rc != EHEM_OK) {
+        return rc;
+    }
+    rc = parse_config(ctx, root, out);
+    ehem_json_free(root);
+    return rc;
+}
+
+void ehem_system_config_free(ehem_config_info *config)
+{
+    if (config == NULL) {
+        return;
+    }
+    free(config->devid);
+    free(config->hostname);
+    free(config->user);
+    free(config->email);
+    free(config->eid);
+    free(config->instanceid);
+    free(config->origin);
+    free(config->ip);
+    free(config->genuine_id);
+    free(config);
+}
+
+ehem_rc ehem_system_config_install_cert(ehem_ctx *ctx, const char *crt_b64,
+                                        ehem_cert_install_info **out)
+{
+    ehem_json *root = NULL;
+    ehem_json *body_obj;
+    ehem_json *tls;
+    char *body;
+    ehem_rc rc;
+
+    if (ctx == NULL || crt_b64 == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    if (out != NULL) {
+        *out = NULL;
+    }
+    ehem_ctx_clear_error(ctx);
+
+    /* Build the cert-only body {"tls":{"crt":"<crt_b64>"}} through the JSON
+     * layer (REQ-BUILD-003) — replaces the stored cert, keeps the private key. */
+    body_obj = ehem_json_new_object();
+    if (body_obj == NULL) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    tls = ehem_json_add_object(body_obj, "tls");
+    if (tls == NULL || !ehem_json_add_string(tls, "crt", crt_b64)) {
+        ehem_json_free(body_obj);
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    body = ehem_json_print(body_obj);
+    ehem_json_free(body_obj);
+    if (body == NULL) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+
+    rc = ehem_proto_request_json(ctx, EHEM_HTTP_POST, "/api/system/config",
+                                 body, "system:config", EHEM_TLS_REQ_DEFAULT, &root);
+    ehem_json_string_free(body);
+    if (rc != EHEM_OK) {
+        return rc;   /* 400 validator / 409 in-progress → mapped with detail */
+    }
+
+    if (out != NULL) {
+        ehem_cert_install_info *info = calloc(1, sizeof *info);
+        if (info == NULL) {
+            ehem_json_free(root);
+            return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+        }
+        /* Absent → false (tolerant): reboot_required is only sent when set. */
+        ehem_json_get_bool(root, "updated", &info->updated);
+        ehem_json_get_bool(root, "reboot_required", &info->reboot_required);
+        *out = info;
+    }
+    ehem_json_free(root);
+    return EHEM_OK;
+}
+
+void ehem_cert_install_free(ehem_cert_install_info *info)
+{
+    free(info);
+}
+
+/* -------------------------------------------------------------------------- */
+/* reboot (REQ-SYS-005)                                                       */
+/* -------------------------------------------------------------------------- */
+
+ehem_rc ehem_system_reboot(ehem_ctx *ctx)
+{
+    char *body = NULL;
+    ehem_rc rc;
+
+    if (ctx == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    ehem_ctx_clear_error(ctx);
+
+    rc = ehem_proto_request_raw(ctx, EHEM_HTTP_GET, "/api/system/reboot",
+                                NULL, "system:config", EHEM_TLS_REQ_DEFAULT, &body);
+    /* The device replies 200 with an EMPTY body and closes the socket, then
+     * reboots after a short delay. The shared path reports an empty 2xx body as
+     * EHEM_ERR_PROTOCOL (http_status 200) — for a reboot that IS success. */
+    if (rc == EHEM_OK) {
+        free(body);                 /* a body is not expected, but tolerate one */
+    } else if (rc == EHEM_ERR_PROTOCOL && ehem_last_error(ctx)->http_status == 200) {
+        rc = EHEM_OK;
+    } else {
+        return rc;                  /* real failure: 401/403/transport/etc. */
+    }
+
+    /* A reboot invalidates every token the device issued — drop the whole cache
+     * so the next authenticated call re-logs-in (REQ-SYS-005, REQ-AUTH-002). */
+    ehem_auth_invalidate(ctx, NULL);
+    ehem_ctx_clear_error(ctx);      /* leave a clean success state */
+    return EHEM_OK;
 }

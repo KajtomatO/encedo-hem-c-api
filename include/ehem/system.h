@@ -150,6 +150,96 @@ EHEM_API ehem_rc ehem_system_checkin(ehem_ctx *ctx, ehem_checkin_info **out);
 /* Release a check-in result from ehem_system_checkin(). NULL is a no-op. */
 EHEM_API void ehem_checkin_result_free(ehem_checkin_info *result);
 
+/* ==========================================================================
+ * Device configuration + reboot (authenticated; scope "system:config").
+ * implements: REQ-SYS-004, REQ-SYS-005
+ * ========================================================================== */
+
+/*
+ * GET /api/system/config result (filled by ehem_system_config()). Required core
+ * fields: devid, hostname, user. Everything else is optional with the same
+ * has_* / NULL discipline as ehem_status_info. The device also returns the
+ * session-crypto values `spk` and `nonce` and a few niche fields (eid_sign,
+ * http_option_dosprot_mode); these have no SDK use case yet and are deliberately
+ * NOT surfaced (unknown fields are ignored — tolerant parsing, ARCHITECTURE §6).
+ */
+typedef struct ehem_config_info {
+    /* Required. */
+    char *devid;       /* device id (hex) */
+    char *hostname;    /* configured hostname, e.g. "my.ence.do" */
+    char *user;        /* user identity label */
+
+    /* Optional strings (NULL when absent; may be present-but-empty, e.g. email). */
+    char *email;       /* user email */
+    char *eid;         /* device EID (base64) */
+    char *instanceid;  /* provisioning instance UUID */
+    char *origin;      /* configured CORS origin */
+    char *ip;          /* device IP / CIDR */
+    char *genuine_id;  /* attestation / genuine id */
+
+    /* Optional numbers (has_* distinguishes 0 from absent). */
+    bool has_iat;               int64_t iat;               /* config issued-at (unix) */
+    bool has_uts;               int64_t uts;               /* config update timestamp */
+    bool has_ctx;               int64_t ctx;               /* context number */
+    bool has_storage_mode;      int64_t storage_mode;      /* storage default modes */
+    bool has_storage_disk0size; int64_t storage_disk0size; /* plaintext disk size */
+    bool has_storage_capacity;  int64_t storage_capacity;  /* total storage sectors */
+
+    /* Optional booleans (has_* distinguishes false from absent). */
+    bool has_dnsd;            bool dnsd;             /* mDNS/DNS responder enabled */
+    bool has_trusted_ts;      bool trusted_ts;       /* trusted-time source */
+    bool has_trusted_backend; bool trusted_backend;  /* trusted remote backend */
+    bool has_allow_keysearch; bool allow_keysearch;  /* key-search security mode */
+    bool has_http_hsts;       bool http_hsts;        /* HSTS enabled (http_option_hsts) */
+} ehem_config_info;
+
+/*
+ * Read device configuration. Authenticated with scope "system:config". On
+ * success writes *out (caller frees with ehem_system_config_free) and returns
+ * EHEM_OK; otherwise returns an ehem_rc, leaves *out NULL, and records detail on
+ * the context.
+ */
+EHEM_API ehem_rc ehem_system_config(ehem_ctx *ctx, ehem_config_info **out);
+
+/* Release a config struct from ehem_system_config(). NULL is a no-op. */
+EHEM_API void ehem_system_config_free(ehem_config_info *config);
+
+/* Result of ehem_system_config_install_cert(). */
+typedef struct ehem_cert_install_info {
+    bool updated;          /* the device stored the new certificate */
+    bool reboot_required;  /* a reboot is needed for it to take effect */
+} ehem_cert_install_info;
+
+/*
+ * Install a TLS certificate: POST /api/system/config with body
+ * {"tls":{"crt":"<crt_b64>"}} — the cert-only variant that replaces the stored
+ * certificate and keeps the stored private key. `crt_b64` is the base64 DER
+ * certificate chain. Authenticated with scope "system:config". On success
+ * writes *out (caller frees with ehem_cert_install_free; may be NULL if the
+ * caller does not need the flags) and returns EHEM_OK; a validator failure is
+ * HTTP 400 (device payload in ehem_last_error), an install already in progress
+ * is HTTP 409 → EHEM_ERR_DEVICE. Firmware v1.2.2 loads the TLS certificate only
+ * at boot, so a successful install typically sets reboot_required — follow with
+ * ehem_system_reboot().
+ */
+EHEM_API ehem_rc ehem_system_config_install_cert(ehem_ctx *ctx,
+                                                 const char *crt_b64,
+                                                 ehem_cert_install_info **out);
+
+/* Release a cert-install result. NULL is a no-op. */
+EHEM_API void ehem_cert_install_free(ehem_cert_install_info *info);
+
+/*
+ * Reboot the device: authenticated GET /api/system/reboot (scope
+ * "system:config"). The device answers 200 and closes the connection, then
+ * reboots after a short delay. A reboot invalidates every token the device
+ * issued, so on success the SDK drops this context's token cache (the retained
+ * passphrase, if any, allows transparent re-login on the next call). Returns
+ * EHEM_OK once the device has accepted the reboot; the device is then briefly
+ * unreachable. DISRUPTIVE — interrupts the device for all users.
+ */
+EHEM_API ehem_rc ehem_system_reboot(ehem_ctx *ctx);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

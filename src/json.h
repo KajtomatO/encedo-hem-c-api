@@ -101,4 +101,12 @@ ehem_json *ehem_json_new_object(void);
 bool ehem_json_add_string(ehem_json *obj, const char *key, const char *val);
 bool ehem_json_add_int64 (ehem_json *obj, const char *key, int64_t val);
 
+/*
+ * Add a new empty child object under `key` and return it, for building nested
+ * bodies (e.g. {"tls":{"crt":…}}). The child is owned by `obj` — populate it
+ * with the add_* helpers and free only the root with ehem_json_free(). Returns
+ * NULL on a NULL argument or allocation failure.
+ */
+ehem_json *ehem_json_add_object(ehem_json *obj, const char *key);
+
 #endif /* EHEM_JSON_H */

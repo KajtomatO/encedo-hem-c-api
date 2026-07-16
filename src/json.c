@@ -167,3 +167,11 @@ bool ehem_json_add_int64(ehem_json *obj, const char *key, int64_t val)
     }
     return cJSON_AddNumberToObject(obj, key, (double)val) != NULL;
 }
+
+ehem_json *ehem_json_add_object(ehem_json *obj, const char *key)
+{
+    if (obj == NULL || key == NULL) {
+        return NULL;
+    }
+    return cJSON_AddObjectToObject(obj, key);
+}

@@ -42,5 +42,13 @@ the working remediation (executed live 2026-07-16).
 - [ ] Device errors map per REQ-API-003 (400 validator failure → device
       payload in `ehem_last_error`; 409 install-in-progress → `EHEM_ERR_DEVICE`
       with detail) (unit test).
-- [ ] OPEN (M2 gate): live `GET /api/system/config` against the dev device
-      returns the known hostname `my.ence.do`; record the response shape.
+- [x] RESOLVED (STEP-M2-050, 2026-07-16): live `GET /api/system/config` via
+      the C SDK (tests/integration/test_config_live.c) returns hostname
+      `my.ence.do` (devid `3dfd39eb56787905`, user `usb C`). Response shape
+      (fw v1.2.2): `devid, hostname, user, email (may be ""), eid, eid_sign,
+      instanceid, origin, ip, genuine_id` (strings); `iat, uts, ctx,
+      storage_mode, storage_disk0size, storage_capacity,
+      http_option_dosprot_mode` (numbers); `dnsd, trusted_ts, trusted_backend,
+      allow_keysearch, http_option_hsts` (booleans); plus session-crypto `spk`
+      and `nonce` (deliberately NOT surfaced). The SDK types the core and
+      ignores the rest tolerantly.
