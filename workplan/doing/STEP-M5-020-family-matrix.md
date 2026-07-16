@@ -7,9 +7,30 @@ traces:
   architecture: ["ARCHITECTURE.md#9-testing-policy", "ARCHITECTURE.md#11-milestones"]
 depends_on: []
 evidence:
-  commits: []
-  tests: []
-  notes: null
+  commits:
+    - "63fe2b5 — ed448 verify + per-family matrix test (live run pending device)"
+  tests:
+    - "test_crypto (verifies: REQ-TEST-004): test_ed448_verify — RFC 8032 §7.4 vectors (empty + 1-byte 0x03) verify via wc_ed448; tamper/wrong-msg → clean invalid; arg validation; UNSUPPORTED path records-not-fails. gcc+clang + asan green"
+    - "test_keygen_matrix_live (verifies: REQ-TEST-004): builds + links; LIVE RUN PENDING — device my.ence.do offline during this session (see notes)"
+  notes: >
+    Code complete + unit-green. ehem_ed448_verify added to the crypto shim
+    (public 57 / sig 114; NOT_COMPILED_IN → EHEM_ERR_UNSUPPORTED); RFC 8032
+    §7.4 unit vectors pass against wolfCrypt on gcc+clang+asan. The
+    integration matrix test_keygen_matrix_live covers all 21 fw v1.2.2 create
+    types, table-driven, with per-op transient-network retry (the device
+    closes TCP per response + has intermittent reachability; the SDK does no
+    retries by design, §7, so the test tolerates flakes). Support helpers
+    added: ehem_test_ctx_timeout (120 s for slow ML-DSA keygen),
+    ehem_test_untrack.
+    LIVE STATUS: partial runs earlier this session PROVED the logic — SECP256R1
+    ran the full cycle (create → list [flag-set "ATT,PKEY,ECDH,ExDSA,SECP256R1"]
+    → get + classifier cross-check pubkey_len=33 → sign → 71-byte DER verified
+    locally → delete) and SECP384R1 classified (pubkey_len=49) — before the dev
+    device went fully offline (connect refused to port 443, confirmed with a
+    direct curl; ~20+ min outage). The FULL green matrix run + the
+    AES/HMAC/MLKEM/MLDSA flag-set vocabulary capture are DEFERRED to when the
+    device is reachable (a background monitor is watching); this step stays in
+    doing/ until then.
 reopened: []
 cancelled: null
 ---

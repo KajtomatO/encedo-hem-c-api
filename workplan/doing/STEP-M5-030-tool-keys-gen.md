@@ -7,9 +7,22 @@ traces:
   architecture: ["ARCHITECTURE.md#8-hem-tool-cli"]
 depends_on: []
 evidence:
-  commits: []
-  tests: []
-  notes: null
+  commits:
+    - "a9dc42f — hem-tool keys gen + unit tests (live demo pending device)"
+  tests:
+    - "test_keys_gen (verifies: REQ-TOOL-009): 7 cases — explicit --mode verbatim (body bytes + 3 requests), NIST default ECDH,ExDSA + stderr note, non-NIST omits mode, --descr base64 (abc→YWJj), usage errors (no type/label/passphrase, bad mode literal) → exit 2 with 0 transport I/O, SDK label-bound EHEM_ERR_ARG → exit 2 no create, device 400/406 → exit 1. gcc+clang + asan green; export/header gates green"
+  notes: >
+    Code complete + unit-green. hem_keys_gen_run in hem-tool-core
+    (src/tools/hem-tool/keys.c); main.c dispatch for `keys gen TYPE` +
+    --label/--descr/--mode flags + usage text. Tool-level NIST-P/K default
+    mode ECDH,ExDSA (via ehem_key_type_parse, offline) so a generated NIST key
+    can sign; SDK stays verbatim (REQ-KEY-005). TYPE passthrough (no allowlist);
+    label/descr validation delegated to the SDK (EHEM_ERR_ARG → exit 2), so this
+    step is independent of M5-010's bound change. `keys gen` usage-error exit
+    codes verified live-locally (no device needed — validation precedes login).
+    LIVE STATUS: the gen → list → sign → pub → rm live demo is DEFERRED — the dev
+    device went offline mid-session (~20+ min, connect refused). This step stays
+    in doing/ until the demo runs (a background monitor is watching).
 reopened: []
 cancelled: null
 ---
