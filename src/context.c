@@ -4,6 +4,7 @@
  * implements: REQ-API-001, REQ-API-002, REQ-API-003, REQ-API-004
  */
 #include "context.h"
+#include "crypto_shim.h"
 #include "proto_auth.h"
 #include "transport.h"
 
@@ -319,17 +320,23 @@ void ehem_ctx_destroy(ehem_ctx *ctx)
 /* -------------------------------------------------------------------------- */
 
 /* The ONLY mutable file-scope state in the library, and the sanctioned
- * exception in REQ-API-002: it guards the process-global transport init so the
- * wrappers below are idempotent. The raw global step lives in the transport
- * backend (curl_global_init/cleanup) so this file stays libcurl-free. Not
- * thread-safe — call at startup and shutdown (documented in the public header). */
+ * exception in REQ-API-002: it guards the process-global backend init so the
+ * wrappers below are idempotent. The raw global steps live in the backends
+ * (curl_global_init/cleanup, wolfCrypt_Init/Cleanup) so this file stays free of
+ * libcurl and wolfSSL. Not thread-safe — call at startup and shutdown
+ * (documented in the public header). */
 static bool g_global_ready = false;
 
 ehem_rc ehem_global_init(void)
 {
     if (!g_global_ready) {
-        ehem_rc rc = ehem_transport_backend_global_init();
+        ehem_rc rc = ehem_crypto_backend_global_init();
         if (rc != EHEM_OK) {
+            return rc;
+        }
+        rc = ehem_transport_backend_global_init();
+        if (rc != EHEM_OK) {
+            ehem_crypto_backend_global_cleanup();
             return rc;
         }
         g_global_ready = true;
@@ -341,6 +348,7 @@ void ehem_global_cleanup(void)
 {
     if (g_global_ready) {
         ehem_transport_backend_global_cleanup();
+        ehem_crypto_backend_global_cleanup();
         g_global_ready = false;
     }
 }

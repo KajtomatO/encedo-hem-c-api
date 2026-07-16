@@ -189,5 +189,12 @@ int main(void)
         cmocka_unit_test(test_x25519_shared),
         cmocka_unit_test(test_zeroize),
     };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    /* wolfCrypt's process-global init: without it the X25519 tests crash on
+     * Windows (uninitialized RNG mutex behind curve25519 blinding). */
+    if (ehem_global_init() != EHEM_OK) {
+        return 1;
+    }
+    int failed = cmocka_run_group_tests(tests, NULL, NULL);
+    ehem_global_cleanup();
+    return failed;
 }

@@ -222,12 +222,15 @@ EHEM_API int ehem_cert_refreshed(const ehem_ctx *ctx);
  * implements: REQ-API-002
  *
  * The library keeps no mutable global state except this pair, which wraps the
- * transport's process-global initialization (libcurl's curl_global_init). Both
- * are idempotent: calling init or cleanup more than once is safe, and init may
- * be called again after cleanup. Calling ehem_global_init() once at program
- * start is recommended for deterministic setup but is not required — a context
- * initializes what it needs. Not thread-safe against concurrent context
- * creation (1.x single-thread-per-context model); call at startup.
+ * backends' process-global initialization (libcurl's curl_global_init and
+ * wolfCrypt_Init — the latter is mandatory on Windows, where wolfSSL's global
+ * RNG mutex has no static initializer). Both are idempotent: calling init or
+ * cleanup more than once is safe, and init may be called again after cleanup.
+ * Calling ehem_global_init() once at program start is recommended for
+ * deterministic setup but is not required — a context initializes what it
+ * needs, and the login flow self-initializes. Not thread-safe against
+ * concurrent context creation (1.x single-thread-per-context model); call at
+ * startup.
  * ========================================================================== */
 EHEM_API ehem_rc ehem_global_init(void);
 EHEM_API void ehem_global_cleanup(void);

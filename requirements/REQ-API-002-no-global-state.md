@@ -3,7 +3,7 @@ id: REQ-API-002
 title: No mutable global state outside the context
 status: approved
 priority: must
-revision: 1
+revision: 2
 source: ARCHITECTURE.md §1, §4 (context-based, no global state); HEM-GEN-5 (consumer extract)
 depends_on: ["REQ-API-001"]
 supersedes: null
@@ -16,12 +16,15 @@ traces:
 
 The library SHALL NOT keep mutable state outside `ehem_ctx` instances,
 except the documented, idempotent `ehem_global_init` / `ehem_global_cleanup`
-pair that exists only to wrap libcurl's process-global initialization.
+pair that exists only to wrap the backends' process-global initialization
+(libcurl's `curl_global_init`, wolfCrypt's `wolfCrypt_Init`).
 
 **Rationale:** Contexts must be independent (multiple HEMs per process) and
 the state layout must allow adding a per-context lock later without redesign
-(mirrors HEM-GEN-5). `curl_global_init` is the one unavoidable process-global
-step; it is isolated and documented rather than hidden.
+(mirrors HEM-GEN-5). `curl_global_init` and `wolfCrypt_Init` are the two
+unavoidable process-global steps (the latter initializes wolfSSL's global
+mutexes, mandatory on Windows); they are isolated and documented rather than
+hidden.
 
 **Acceptance criteria:**
 - [ ] No file-scope mutable variables in library sources outside the

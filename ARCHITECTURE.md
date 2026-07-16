@@ -216,7 +216,8 @@ graph TD
   options (timeouts, TLS trust, transport override), destroyed with a
   single free call that wipes credentials. One context = one HEM instance.
   No global library state; `ehem_global_init/cleanup` exist only to wrap
-  `curl_global_init` (documented, idempotent).
+  the process-global backend steps — `curl_global_init` and `wolfCrypt_Init`
+  (documented, idempotent).
 - **Threading (1.x):** a context may be used by one thread at a time;
   callers serialize. Internals keep all mutable state inside the context
   struct so a per-context lock can be added without redesign.
@@ -454,14 +455,14 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
    — affects transport trust options and `hem-tool` UX. *Resolved by:*
    M1 gate against the real device plus the Python client's TLS handling.
 5. **MinGW build friction for wolfSSL/libcurl** — less-trodden path than
-   MSVC or Linux. M1 built and tested clean on MinGW. **MATERIALIZED at M2
-   (2026-07-16):** the prebuilt MSYS2 wolfSSL 5.9.2 crashes inside its own
-   curve25519 code on Windows (EXCEPTION_ACCESS_VIOLATION), independent of
-   how the SDK calls it — so auth crypto cannot run there. **Windows is
-   shelved** (user decision): the `windows-mingw` CI job is disabled and the
-   two re-enable paths (vendor a portable X25519, or FetchContent-build
-   wolfSSL with SP asm off) are written up in **KNOWN-ISSUES.md**. Linux CI
-   is unaffected.
+   MSVC or Linux. M1 built and tested clean on MinGW. **MATERIALIZED at M2,
+   RESOLVED same day (2026-07-16):** the X25519 crash on Windows
+   (EXCEPTION_ACCESS_VIOLATION) turned out to be a missing `wolfCrypt_Init()`
+   — required for wolfSSL's global RNG mutex, which the default-on (5.8.2+)
+   curve25519 blinding locks on every call; pthread builds masked it via
+   static mutex initializers. Fixed by wiring `wolfCrypt_Init/Cleanup` into
+   `ehem_global_init/cleanup`; the `windows-mingw` CI job is re-enabled.
+   Post-mortem in **KNOWN-ISSUES.md**.
 6. **Mobile-auth flow under-documented** (`auth/ext-*.md` not yet
    analyzed) — *Resolved by:* doc analysis + device experiments at M8;
    the session design keeps the flow additive.

@@ -89,9 +89,30 @@ evidence:
     KNOWN-ISSUES.md (+ ARCHITECTURE §12 risk 5). The shim keeps the generic +
     clamp implementation (correct + clean on Linux, gcc/clang/asan green). DoD
     item 4's MinGW clause is waived by that decision.
+
+    FINAL RESOLUTION (2026-07-16, Windows un-shelved): gdb on the crash named
+    the true chain — wc_curve25519_generic → wc_InitRng → wc_LockMutex →
+    ntdll!RtlEnterCriticalSection faulting on an UNINITIALIZED global mutex.
+    The MSYS2 5.9.2 DLL bakes in WOLFSSL_CURVE25519_BLINDING (default since
+    5.8.2; absent from its installed options.h — that divergence is also what
+    made sizeof(curve25519_key) 128 vs 112), so every X25519 call runs the
+    wolfCrypt RNG, whose global mutex only exists after wolfCrypt_Init() — a
+    call the SDK never made. pthread builds mask the omission via static mutex
+    initializers, which is why Linux was always green and why PBKDF2/HMAC
+    (no globals) never crashed. A 20-line standalone repro crashes without
+    wolfCrypt_Init() and reproduces RFC 7748 §6.1 byte-for-byte with it: the
+    packaged wolfSSL is fine. Fix: ehem_crypto_backend_global_init/cleanup
+    (wolfCrypt_Init/Cleanup) wired into ehem_global_init/cleanup (REQ-API-002),
+    a lazy idempotent ehem_global_init() hook in acquire_token (covers
+    caller-supplied transports), and explicit init in test_crypto/test_ejwt
+    mains. 12/12 unit tests green on Windows (MSYS2 MINGW64); windows-mingw CI
+    job re-enabled. The generic+clamp struct-free shim is KEPT — the
+    options.h/DLL config divergence makes caller-allocated wolfSSL structs a
+    real ABI hazard regardless.
 reopened:
   - {date: 2026-07-16, reason: "MinGW CI failed test_crypto (X25519 export_public_ex unsupported on MSYS2 wolfSSL); reworked to a portable base-point scalarmult"}
   - {date: 2026-07-16, reason: "base-point fix insufficient — real cause was a curve25519_key ABI mismatch (MSYS2 wolfSSL 5.9.2, 128B vs Debian 5.6.6, 112B) crashing the DLL; switched to struct-free wc_curve25519_generic + explicit clamp"}
+  - {date: 2026-07-16, reason: "shelving overturned — actual root cause was the SDK never calling wolfCrypt_Init() (uninitialized RNG mutex hit by default-on curve25519 blinding); wired into ehem_global_init, Windows green again"}
 cancelled: null
 ---
 
@@ -124,6 +145,7 @@ base64; wolfCrypt's curve25519 functions may need
 - [x] ASan/LSan clean; zeroize helper proven non-elided (test reads the
       buffer via volatile pointer after the call).
 - [x] CI (Linux gcc/clang) builds green with the new dependency. (MinGW
-      clause WAIVED — Windows shelved 2026-07-16, prebuilt wolfSSL 5.9.2
-      curve25519 crashes on that platform; windows-mingw CI job disabled,
-      see KNOWN-ISSUES.md.)
+      clause restored 2026-07-16: the crash was a missing wolfCrypt_Init(),
+      not a broken package — fixed via ehem_global_init, 12/12 unit tests
+      green on Windows, windows-mingw CI job re-enabled; post-mortem in
+      KNOWN-ISSUES.md.)

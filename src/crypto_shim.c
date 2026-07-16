@@ -5,15 +5,15 @@
  *
  * The wolfSSL headers are included ONLY here; the shim's public surface
  * (crypto_shim.h) is byte buffers, so wolfSSL never leaks into a shipped header
- * or the export table. X25519 uses EC25519_LITTLE_ENDIAN so scalars/points
- * match RFC 7748 byte order (verified against RFC 7748 §5.2/§6.1 in
- * tests/unit/test_crypto.c).
+ * or the export table. All X25519 scalars/points are little-endian RFC 7748
+ * byte order (verified against RFC 7748 §6.1 in tests/unit/test_crypto.c).
  */
 #include "crypto_shim.h"
 
 #include <string.h>
 
 #include <wolfssl/options.h>            /* build config — must precede wolfcrypt */
+#include <wolfssl/wolfcrypt/wc_port.h>  /* wolfCrypt_Init/Cleanup */
 #include <wolfssl/wolfcrypt/hmac.h>
 #include <wolfssl/wolfcrypt/pwdbased.h>
 #include <wolfssl/wolfcrypt/curve25519.h>
@@ -60,13 +60,19 @@ ehem_rc ehem_hmac_sha256(const uint8_t *key, size_t key_len,
  *
  * Implemented with wc_curve25519_generic, which takes ONLY byte buffers — no
  * curve25519_key struct crosses the wolfSSL ABI boundary. That is deliberate
- * and load-bearing: the prebuilt MSYS2/MinGW wolfSSL (5.9.2) lays out
- * curve25519_key at 128 bytes while the Debian build (5.6.6) uses 112, so
- * handing a caller-allocated key to the DLL corrupted the stack and crashed
- * (EXCEPTION_ACCESS_VIOLATION on CI). Passing only 32-byte arrays sidesteps the
- * layout mismatch entirely. Bytes are little-endian (RFC 7748); verified
- * against RFC 7748 §6.1 keypair + Diffie-Hellman. Both the keypair
- * (u = base point) and the ECDH (u = peer public) go through this one path.
+ * and load-bearing: a prebuilt wolfSSL can be compiled with options that change
+ * struct layouts WITHOUT them appearing in its installed options.h (the MSYS2
+ * 5.9.2 DLL bakes in WOLFSSL_CURVE25519_BLINDING, invisible to consumers —
+ * hence its curve25519_key is 128 bytes vs 112 on Debian 5.6.6), so any
+ * caller-allocated wolfSSL struct is an ABI hazard. Bytes are little-endian
+ * (RFC 7748); verified against RFC 7748 §6.1 keypair + Diffie-Hellman. Both the
+ * keypair (u = base point) and the ECDH (u = peer public) go through this one
+ * path.
+ *
+ * With blinding compiled in (wolfSSL 5.8.2+ default for the C implementation)
+ * every call here runs the wolfCrypt RNG, whose global mutex exists only after
+ * wolfCrypt_Init() — see ehem_crypto_backend_global_init() below. Callers reach
+ * this via the auth flow, which guarantees ehem_global_init() has run.
  *
  * generic validates u as a real public key and rejects e.g. small-order /
  * non-canonical points (→ EHEM_ERR_PROTOCOL); the device's spk is always a
@@ -142,4 +148,20 @@ void ehem_zeroize(void *p, size_t n)
     while (n-- > 0) {
         *vp++ = 0;
     }
+}
+
+ehem_rc ehem_crypto_backend_global_init(void)
+{
+    /* Initializes wolfSSL's global mutexes (notably the RNG mutex the blinded
+     * X25519 locks on every call). Without it, the first X25519 op on Windows
+     * enters an uninitialized CRITICAL_SECTION and dies with
+     * EXCEPTION_ACCESS_VIOLATION inside ntdll; pthread platforms mask the
+     * missing call via static mutex initializers. Reference-counted upstream,
+     * so init/cleanup pairs may nest. */
+    return wolfCrypt_Init() == 0 ? EHEM_OK : EHEM_ERR_PROTOCOL;
+}
+
+void ehem_crypto_backend_global_cleanup(void)
+{
+    (void)wolfCrypt_Cleanup();
 }
