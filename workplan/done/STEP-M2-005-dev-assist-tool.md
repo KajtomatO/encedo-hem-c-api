@@ -7,7 +7,8 @@ traces:
   architecture: ["ARCHITECTURE.md#9-testing-policy", "ARCHITECTURE.md#10-directory-layout"]
 depends_on: []
 evidence:
-  commits: []          # pending user commit — add the [STEP-M2-005] SHA(s) here
+  commits:
+    - "8366d80 — ./dev developer-assist tool"
   tests: []            # no verifies: tag — bash tool, verified manually (see notes)
   notes: |
     Verified on the dev machine 2026-07-16 (device https://my.ence.do reachable,

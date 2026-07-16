@@ -7,7 +7,9 @@ traces:
   architecture: ["ARCHITECTURE.md#5-auth--session"]
 depends_on: []
 evidence:
-  commits: []          # pending user commit — add the [STEP-M2-010] SHA here
+  commits:
+    - "db06d91 — initial crypto shim"
+    - "<pending> — [STEP-M2-010] fix: X25519 portable scalarmult (MinGW CI)"
   tests:
     - "verifies: REQ-AUTH-001 — tests/unit/test_crypto.c (PBKDF2/HMAC/X25519 vectors, zeroize)"
     - "verifies: REQ-AUTH-001 — tests/unit/check_public_headers.cmake (no wolfSSL in include/ehem/)"
@@ -50,7 +52,19 @@ evidence:
     install-deps-linux.sh gained a wolfSSL verification line (crypto builds).
     MinGW leg is wired (MSYS2 wolfssl ships a pkg-config .pc, same discovery
     path) but not run this session — confirmed by the CI run on push.
-reopened: []
+
+    POST-CI FIX (2026-07-16): the MinGW CI leg failed test_crypto —
+    ehem_x25519_keypair_from_seed returned EHEM_ERR_PROTOCOL (0xa) because the
+    MSYS2 wolfSSL build fails wc_curve25519_export_public_ex after
+    import_private_ex (a wolfSSL build/version difference; works on Debian
+    5.6.6). Fixed by computing the public key the same way as the ECDH shared
+    secret — a scalarmult of the base point (u=9) via
+    import_private/import_public/shared_secret — so keypair and ECDH share one
+    path and never call export_public_ex. Re-verified on Debian against RFC
+    7748 §5.2/§6.1 (probe + test_crypto/test_ejwt green, gcc+clang+asan). The
+    MinGW leg itself is re-confirmed by CI on the next push.
+reopened:
+  - {date: 2026-07-16, reason: "MinGW CI failed test_crypto (X25519 export_public_ex unsupported on MSYS2 wolfSSL); reworked to a portable base-point scalarmult"}
 cancelled: null
 ---
 
