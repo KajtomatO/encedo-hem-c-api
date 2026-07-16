@@ -34,7 +34,8 @@ applications. Artifact naming is fixed: `libencedo-hem.so` /
 - [x] Sources compile as C99 with `-Wall -Wextra -Werror` (or agreed
       equivalent) clean.
 - [x] CTest is wired with labels `unit` and `integration` from the start
-      (`dangerous` is added when the first such test exists). *(unit runs;
+      (`disruptive` — renamed from `dangerous`, user decision 2026-07-16 —
+      is added when the first such test exists). *(unit runs;
       `integration` label + `ehem_add_integration_test` helper in place)*
 - [x] A MinGW toolchain file (or documented MSYS2 invocation) lives in
       `cmake/`. *(cmake/toolchain-mingw-w64.cmake)*

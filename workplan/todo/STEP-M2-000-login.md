@@ -11,7 +11,7 @@ evidence:
   tests: []
   notes: null
 reopened: []
-cancelled: null
+cancelled: "M2 decomposed 2026-07-16 (§5.3) — replaced by STEP-M2-010..070"
 ---
 
 **Goal:** Milestone M2 per ARCHITECTURE.md §11: crypto shim (wolfCrypt

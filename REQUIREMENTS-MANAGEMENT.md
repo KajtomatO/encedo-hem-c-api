@@ -63,7 +63,7 @@ workplan/
 | `AUTH` | auth & session engine: eJWT flow, KDF, token & scope caches, logout, mobile-app confirmation |
 | `KEY` | key-management bindings: list/search/get/create/delete/import/update, KID/LABEL/DESCR handling |
 | `OPS` | cryptographic operation bindings: sign/verify, ECDH, AES, HMAC, ML-KEM/ML-DSA, random |
-| `SYS` | system/logger/storage bindings, incl. dangerous operations (reboot, firmware) |
+| `SYS` | system/logger/storage bindings, incl. disruptive operations (reboot, firmware) |
 | `NET` | transport layer: vtable, libcurl implementation, TLS trust, timeouts |
 | `TOOL` | hem-tool CLI behavior, incl. protected-key removal policy |
 | `TEST` | testing policy & infrastructure: suite gating, device policy, fixtures |

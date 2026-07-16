@@ -43,7 +43,7 @@ the encedo-hem-api-doc spec.
 - **Test suites** — unit (fake transport, no device), integration (real
   device, enabled by env/config — runs on the development machine where a
   HEM is available now; CI gains a device later and only then enables the
-  integration label), and a *dangerous* suite (reboot, firmware) that is
+  integration label), and a *disruptive* suite (reboot, firmware) that is
   never run automatically.
 
 **Technology choices:**
@@ -52,7 +52,7 @@ the encedo-hem-api-doc spec.
   friction-free consumption by the PKCS#11 module (also plain C).
 - **Build:** CMake + CTest — the de-facto cross-platform standard for C;
   one build system for all three targets; CTest labels separate
-  unit / integration / dangerous suites.
+  unit / integration / disruptive suites.
 - **HTTP/TLS:** libcurl — ubiquitous, portable, mature TLS handling on all
   three platforms; wrapped behind the transport vtable so it never leaks
   into the API.
@@ -112,7 +112,7 @@ the context.
   `encedo-hem::encedo-hem`, pkg-config `encedo-hem`; the `ehem_` prefix
   avoids collision with the `hem_*` seam inside encedo-pkcs11.
 - **CMake (≥ 3.20) + CTest** — one cross-platform build; CTest labels
-  (`unit`, `integration`, `dangerous`) partition the suites.
+  (`unit`, `integration`, `disruptive`) partition the suites.
 - **libcurl for HTTPS** — mature, portable; isolated behind the transport
   vtable so it never appears in public headers.
 - **wolfSSL (wolfCrypt) for crypto primitives** (user decision 2026-07-15)
@@ -260,13 +260,18 @@ sequenceDiagram
     S->>D: GET/POST keymgmt (Authorization: Bearer)
 ```
 
-- **KDF:** Argon2 with the exact parameters used by Encedo Manager
-  (authoritative; the doc's `token.md` mentions time=10, mem=8192 KiB,
-  32-byte output — to be pinned against the Manager/Python sources and
-  verified on the real device, §12 risk 2). Salt is the device `eid` from
-  the challenge.
-- **eJWT:** hand-rolled compact JWT encode (base64url of header/payload +
-  HMAC-SHA256 tag with the ECDH shared secret; header `{"ecdh":"x25519"}`).
+- **KDF** (amended 2026-07-16, M2 decomposition): PBKDF2-HMAC-SHA256,
+  600 000 iterations, 32-byte output, salt = the challenge `eid` as its
+  raw UTF-8 base64 string — pinned to the python client, which
+  authenticates against the dev device (live-proven 2026-07-16). The
+  Manager instead derives with Argon2 (time=10, mem=8192 KiB, salt =
+  base64-DECODED `eid`); a device only accepts the derivation whose
+  public key registered its UserKey at init, so Argon2 is deferred to an
+  options-selectable KDF if a Manager-inited device must be supported
+  (§12 risk 2, REQ-AUTH-001).
+- **eJWT:** hand-rolled compact JWT encode (base64url-nopad segments +
+  HMAC-SHA256 tag with the ECDH shared secret; hardcoded header
+  `{"ecdh":"x25519","alg":"HS256","typ":"JWT"}` per the python client).
   No JWT library dependency — the format is custom anyway.
 - **Token cache:** tokens keyed by scope string with expiry; a safety
   margin triggers silent re-acquisition before expiry (HEM-AUTH-6
@@ -341,10 +346,13 @@ sequenceDiagram
   **except** the protected set (device TLS material, paired
   authenticators); test keys still use a reserved label prefix
   (`EHEMTEST`) so leftovers are recognizable and cleanable.
-- **Dangerous** (label `dangerous`): reboot, firmware upgrade, device
-  wipe/init. Excluded from the default CTest run and from CI
-  unconditionally; requires both the label opt-in and
-  `EHEM_ALLOW_DANGEROUS=1`. Never automatic (goal.txt).
+- **Disruptive** (label `disruptive`; renamed from *dangerous*, user
+  decision 2026-07-16): operations that mutate device availability or
+  state — reboot, firmware upgrade, device wipe/init. Run deliberately,
+  attended, against a device you own; never in unattended CI. Excluded
+  from the default CTest run and from CI unconditionally; requires both
+  the label opt-in and `EHEM_ALLOW_DISRUPTIVE=1`. Never automatic
+  (goal.txt).
 - Every protocol binding lands together with at least one unit test and,
   where the device supports it non-destructively, one integration test.
 
@@ -365,7 +373,7 @@ src/                   library sources
 tests/
   unit/
   integration/
-  dangerous/
+  disruptive/
   support/             fake transport, fixtures, test vectors
 cmake/                 toolchain files (mingw), FetchContent pins
 .github/workflows/     ci.yml (linux, windows-mingw)
@@ -385,11 +393,15 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   *Post-gate addition (user decision 2026-07-15):* `/api/system/checkin`
   binding with automatic expired-certificate recovery (the gate found the
   device cert expired; check-in is how it renews) — STEP-M1-110.
-- **M2 — login:** crypto shim (wolfCrypt X25519/HMAC + vendored Argon2);
-  eJWT encode; `POST /api/auth/token` flow; token cache with silent
-  refresh; error mapping for auth failures. **Gate:** authenticated
-  round-trip against the real device; Argon2 parameters confirmed to match
-  Encedo Manager (closes risk 2).
+- **M2 — login:** crypto shim (wolfCrypt X25519/HMAC-SHA256/PBKDF2;
+  vendored Argon2 dropped — the working KDF is PBKDF2, see §5 and §12
+  risk 2); eJWT encode; `POST /api/auth/token` flow; token cache with
+  silent refresh; error mapping for auth failures. *Decomposition
+  additions (user decision 2026-07-16):* system config + reboot bindings
+  and `hem-tool cert-install` — fw v1.2.2 cannot apply check-in
+  certificates itself (REQ-SYS-003 root cause), so the SDK provides the
+  working install path. **Gate:** authenticated round-trip against the
+  real device; login-KDF facts recorded in REQ-AUTH-001 (closes risk 2).
 - **M3 — key inventory & removal:** keymgmt `list`/`search`/`get`/
   `delete` bindings; `hem-tool keys list` and `keys rm` with the
   protected-key policy; integration tests create and delete `EHEMTEST`
@@ -408,7 +420,7 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   encrypt/decrypt (GCM IV/tag handling), HMAC ops, ML-KEM
   encapsulate/decapsulate, remaining ML-DSA parameter sets.
 - **M7 — system, logger, storage, key import/update:** remaining endpoint
-  groups including firmware upgrade and reboot (dangerous-gated tests);
+  groups including firmware upgrade and reboot (disruptive-gated tests);
   `keymgmt` import and update (LABEL/DESCR).
 - **M8 — mobile-app authentication:** push-confirm auth flow (`ext-*`
   endpoints), blocking wait with timeout + pollable variant; distinct
@@ -423,10 +435,16 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
    must comply with GPLv3 or use a commercial license; affects how
    encedo-pkcs11 (MIT) ships. *Resolved by:* Encedo confirming its
    licensing model before the first binary release.
-2. **Argon2 parameters not authoritatively pinned** — doc pages differ;
-   Manager is declared authoritative (user decision 2026-07-15).
-   *Resolved by:* extracting parameters from Encedo Manager / Python
-   client sources and the M2 gate against the real device.
+2. **Login-KDF discrepancy between official clients** (superseded the
+   original "Argon2 parameters not pinned", 2026-07-16): the Manager
+   derives with Argon2 (time=10, mem=8192 KiB, salt = base64-decoded
+   `eid`); the python client uses PBKDF2-HMAC-SHA256 (600 000 iterations,
+   salt = `eid` string) and the latter authenticates against the dev
+   device (live-proven 2026-07-16). The KDF is fixed per device at init
+   time by whichever client registered the UserKey. M2 ships PBKDF2 only;
+   Argon2 becomes an options-selectable KDF when a Manager-inited device
+   must be supported. *Resolved by:* the M2 gate recording the working
+   parameters in REQ-AUTH-001.
 3. **Per-KID scope-token encoding unknown** — HEM-SDK-3 expects per-KID
    scopes; the auth doc shows only a free-form `scope` claim. *Resolved
    by:* reading the crypto/keymgmt doc pages and device experiments

@@ -29,5 +29,5 @@ what keeps CI green without one.
 - [x] Linux job: build (GCC) + `ctest -L unit`, failing the workflow on
       any test failure. *(matrix gcc+clang; green)*
 - [x] Windows job: MSYS2/MinGW build + `ctest -L unit`. *(green)*
-- [x] Integration and dangerous labels are never executed in CI. *(only
+- [x] Integration and disruptive (né dangerous) labels are never executed in CI. *(only
       `-L unit` invoked; asserted by offline YAML check)*

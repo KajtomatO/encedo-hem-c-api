@@ -95,8 +95,9 @@ ctest --test-dir build -L unit --output-on-failure
       ctest --test-dir build -L integration --output-on-failure
   ```
 
-- **`dangerous`** — reboot / firmware / wipe. Never run automatically; requires
-  both the label and `EHEM_ALLOW_DANGEROUS=1`.
+- **`disruptive`** — mutates device availability or state (reboot / firmware /
+  wipe). Run deliberately and attended, never in unattended CI; requires
+  both the label and `EHEM_ALLOW_DISRUPTIVE=1`.
 
 ## Install
 
@@ -118,7 +119,7 @@ target_link_libraries(app PRIVATE encedo-hem::encedo-hem-static)  # static
 ```
 include/ehem/   public headers (ehem_ prefix)
 src/            library sources (+ vendored cjson/argon2, tools/hem-tool)
-tests/          unit/ · integration/ · dangerous/ · support/
+tests/          unit/ · integration/ · disruptive/ · support/
 cmake/          MinGW toolchain, package config
 scripts/        dependency installers
 requirements/   REQ-*.md + generated TRACE.md

@@ -67,3 +67,33 @@ omit them; `cert_updated` is derived from a non-empty `newcrt`.
       after recovery, with an explanatory error when the device still serves
       the old cert. Re-verify (and record which hypothesis held) after the
       device is next rebooted (reboot binding lands in M7, or manual).
+- [x] RESOLVED (root cause, 2026-07-16): reboot did NOT apply the cert —
+      neither hypothesis; it is a **firmware v1.2.2 bug**. Evidence:
+      - Cloud is fine: decoding the leg-2 `checked` JWT shows a fresh `newcrt`
+        (base64 DER chain, CN=my.ence.do, serial C173D2A9…, valid
+        2026-07-08 → 2026-10-06) while the device serves the old serial
+        116965F1… (expired 2026-04-18) after reboot.
+      - Firmware (encedo_firmware @ release/1.2.2 = the device's v1.2.2-DIAG),
+        `Firmware/src/api_system.c` `api_post_checkin_newcrt_callback()`:
+        the `if (!is_initialised())` guard is commented out
+        (`//deprecated … TBD`), so EVERY device takes the uninitialised
+        branch — save the cert string to `/tmp/tls.crt` and `return 0`
+        (reported as `"newcrt":"OK"`). The initialised-device logic below
+        (serial compare → `REPO_DeleteKey_byKID` → `REPO_SaveDER`) is
+        unreachable dead code, and nothing in the firmware ever reads
+        `/tmp/tls.crt`.
+      - The TLS server (`httpsd.c`) loads the cert for an initialised device
+        exclusively from the flash key repo (`REPO_GetDER_byDESCR`,
+        "TLS cert from Flash") at start — which check-in never updates.
+      Consequences: check-in cert rotation can never take effect on an
+      initialised fw-1.2.2 device; the SDK's honest error and
+      effective-refresh semantics (REQ-NET-005) are correct as shipped.
+      Working remediation — EXECUTED successfully 2026-07-16: harvested the
+      chain from the check-in leg-2 `newcrt` claim (safety-checked that its
+      public key matches the served cert's, so the stored private key stays
+      valid), then authenticated `POST /api/system/config` with
+      `{"tls":{"crt":"<base64 DER chain>"}}` (scope `system:config`) →
+      `{"updated":true,"reboot_required":true}` → `GET /api/system/reboot`.
+      Device now serves the new cert (serial C173D2A9…, valid to 2026-10-06);
+      system-trust verification passes: `hem-tool status` exit 0 and
+      `ctest -L integration` 2/2 green with NO `EHEM_TEST_INSECURE`.

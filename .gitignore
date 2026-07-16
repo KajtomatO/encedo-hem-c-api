@@ -56,3 +56,6 @@ dkms.conf
 
 # build folders (build/, build-clang/, build-mingw/, ...)
 build*/
+
+# Local secrets (device credentials)
+hem.env

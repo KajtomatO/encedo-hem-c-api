@@ -1,7 +1,7 @@
 # Test wiring. CTest labels partition the suites (ARCHITECTURE.md §9):
 #   ctest -L unit         offline, always run
 #   ctest -L integration  real device, gated on EHEM_TEST_URL (STEP-M1-080)
-#   ctest -L dangerous    added when the first dangerous test exists
+#   ctest -L disruptive   added when the first disruptive test exists
 #
 # implements: REQ-BUILD-001 (CTest labels wired from the start)
 

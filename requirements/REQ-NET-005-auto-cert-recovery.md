@@ -69,3 +69,15 @@ refresh the cert, set the RTC, and discover updates):
       cert_refreshed) is covered by unit tests; live re-verification of the
       happy path awaits a device whose cert applies immediately or a
       post-reboot run.
+- [x] FOLLOW-UP (2026-07-16): a device reboot did NOT apply the cert. Root
+      cause is a firmware v1.2.2 bug (see REQ-SYS-003 root-cause finding):
+      `api_post_checkin_newcrt_callback` never updates the flash key repo on
+      an initialised device (dead code behind a commented-out guard), so
+      auto-recovery can never take live effect against fw 1.2.2 — the cloud
+      does deliver a fresh cert, and the SDK's behavior (return the ORIGINAL
+      error + "still serves the old certificate" detail, cert_refreshed
+      false) is confirmed correct. Live happy-path verification is deferred
+      until a firmware with fixed newcrt handling, or until the cert is
+      installed manually via `POST /api/system/config` `{"tls":{"crt":…}}`
+      + reboot (after which the trigger no longer reproduces until the next
+      expiry).

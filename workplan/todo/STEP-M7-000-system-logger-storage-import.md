@@ -15,12 +15,13 @@ cancelled: null
 ---
 
 **Goal:** Milestone M7 per ARCHITECTURE.md §11: remaining endpoint groups
-including firmware upgrade and reboot (dangerous-gated tests); keymgmt
+including firmware upgrade and reboot (disruptive-gated tests); keymgmt
 import and update (LABEL/DESCR).
 
 **Notes:** Rolling-wave placeholder (§5.3 step 5) — cancelled and replaced
-by detailed steps when M7 is decomposed. The `dangerous` CTest label and
-`EHEM_ALLOW_DANGEROUS` gating REQ get drafted here.
+by detailed steps when M7 is decomposed. The `disruptive` CTest label and
+`EHEM_ALLOW_DISRUPTIVE` gating REQ land with REQ-SYS-005 (M2) or here,
+whichever needs them first.
 
 **Definition of done**
 - [ ] Never completed as-is — cancelled at M7 decomposition and replaced by detailed STEP-M7-0NN files

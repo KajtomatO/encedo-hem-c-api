@@ -6,7 +6,7 @@ CTest labels partition the suites (ARCHITECTURE.md §9):
 |-------|------|--------------|
 | `unit` | Offline, fake transport, no network | Every build, both platforms, CI |
 | `integration` | Real HEM device over HTTPS | Only when `EHEM_TEST_URL` is set (REQ-TEST-002) |
-| `dangerous` | Reboot / firmware / wipe | Never automatically; explicit opt-in (added later) |
+| `disruptive` | Mutates device availability/state (reboot / firmware / wipe) | Never automatically; deliberate, attended opt-in (added later) |
 
 ## Running unit tests
 
