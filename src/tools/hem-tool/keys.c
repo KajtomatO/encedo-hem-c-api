@@ -1,7 +1,7 @@
 /*
  * keys.c — hem-tool `keys` subcommands + the protected-key classifier.
  *
- * implements: REQ-TOOL-004, REQ-TOOL-005, REQ-TOOL-006
+ * implements: REQ-TOOL-004, REQ-TOOL-005, REQ-TOOL-006, REQ-TOOL-009
  *
  * Public-API-only (include/ehem/), so the same code drives the real device from
  * main() and the fake transport from the unit test.
@@ -280,6 +280,104 @@ int hem_keys_pub_run(ehem_ctx *ctx, const hem_keys_pub_opts *o)
     }
 
     ehem_key_details_free(d);
+    return HEM_KEYS_OK;
+}
+
+/* -------------------------------------------------------------------------- */
+/* keys gen (REQ-TOOL-009)                                                    */
+/* -------------------------------------------------------------------------- */
+
+/* The three exact mode literals the device matches by strcmp (api_keymgmt.c). */
+static bool mode_literal_ok(const char *m)
+{
+    return strcmp(m, "ECDH") == 0 ||
+           strcmp(m, "ExDSA") == 0 ||
+           strcmp(m, "ECDH,ExDSA") == 0;
+}
+
+/* A NIST-P/K family whose device default (ECDH-only) cannot sign — so the tool
+ * defaults these to ECDH,ExDSA when --mode is omitted (python OQ-19). */
+static bool family_is_nist_ecc(ehem_key_family f)
+{
+    return f == EHEM_KEY_FAMILY_SECP256R1 || f == EHEM_KEY_FAMILY_SECP384R1 ||
+           f == EHEM_KEY_FAMILY_SECP521R1 || f == EHEM_KEY_FAMILY_SECP256K1;
+}
+
+int hem_keys_gen_run(ehem_ctx *ctx, const hem_keys_gen_opts *o)
+{
+    FILE *out = (o->out != NULL) ? o->out : stdout;
+    FILE *err = (o->err != NULL) ? o->err : stderr;
+    ehem_key_create_params p;
+    ehem_key_type_info info;
+    const char *mode;
+    char kid[EHEM_KID_HEX_SIZE] = {0};
+    ehem_rc rc;
+
+    if (o->passphrase == NULL) {
+        fprintf(err, "error: no passphrase — pass --passphrase or set "
+                     "EHEM_PASSPHRASE\n");
+        return HEM_KEYS_USAGE;
+    }
+    if (o->type == NULL || o->type[0] == '\0') {
+        fprintf(err, "error: 'keys gen' needs a key type "
+                     "(e.g. ED25519, SECP256R1, AES256)\n");
+        return HEM_KEYS_USAGE;
+    }
+    if (o->label == NULL || o->label[0] == '\0') {
+        fprintf(err, "error: 'keys gen' needs --label\n");
+        return HEM_KEYS_USAGE;
+    }
+    if (o->mode != NULL && !mode_literal_ok(o->mode)) {
+        fprintf(err, "error: --mode must be one of ECDH, ExDSA, ECDH,ExDSA "
+                     "(got '%s')\n", o->mode);
+        return HEM_KEYS_USAGE;
+    }
+
+    /* Pick the effective mode. Explicit --mode wins. Otherwise a NIST-P/K key
+     * gets ECDH,ExDSA (so it can sign — the device default ECDH-only cannot),
+     * every other family gets no mode (the device ignores it). */
+    mode = o->mode;
+    if (mode == NULL) {
+        (void)ehem_key_type_parse(o->type, &info);
+        if (family_is_nist_ecc(info.family)) {
+            mode = "ECDH,ExDSA";
+            fprintf(err, "note: defaulting --mode to ECDH,ExDSA for %s "
+                         "(the device default is ECDH-only and cannot sign; "
+                         "pass --mode to override)\n", o->type);
+        }
+    }
+
+    rc = ehem_login(ctx, o->passphrase);
+    if (rc != EHEM_OK) {
+        report(err, ctx, rc, "login");
+        return HEM_KEYS_RUNTIME;
+    }
+
+    memset(&p, 0, sizeof p);
+    p.type = o->type;
+    p.label = o->label;
+    p.mode = mode;
+    if (o->descr != NULL && o->descr[0] != '\0') {
+        p.descr = (const uint8_t *)o->descr;
+        p.descr_len = strlen(o->descr);
+    }
+
+    rc = ehem_key_create(ctx, &p, kid);
+    if (rc == EHEM_ERR_ARG) {
+        /* Client-side validation (label/descr bound) — a usage error. */
+        const ehem_error *e = ehem_last_error(ctx);
+        fprintf(err, "error: %s\n",
+                (e != NULL && e->message != NULL && e->message[0] != '\0')
+                    ? e->message
+                    : "invalid key parameters");
+        return HEM_KEYS_USAGE;
+    }
+    if (rc != EHEM_OK) {
+        report(err, ctx, rc, "keys gen");
+        return HEM_KEYS_RUNTIME;
+    }
+
+    fprintf(out, "%s\n", kid);
     return HEM_KEYS_OK;
 }
 

@@ -4,7 +4,8 @@
  * implements: REQ-TOOL-004 (`keys list` — read-only inventory with marking),
  *             REQ-TOOL-005 (label-based protected-key policy),
  *             REQ-TOOL-006 (`keys rm` — removal with the protected-key guard),
- *             REQ-TOOL-007 (`keys pub` — public material + typed metadata)
+ *             REQ-TOOL-007 (`keys pub` — public material + typed metadata),
+ *             REQ-TOOL-009 (`keys gen` — generate a key on the device)
  *
  * Lives in hem-tool-core (like cert_install.c) so the CLI and the unit tests
  * drive one code path, using ONLY the public SDK API. `keys list` (marking) and
@@ -100,6 +101,32 @@ typedef struct {
  * HEM_KEYS_RUNTIME with a message naming the kid.
  */
 int hem_keys_pub_run(ehem_ctx *ctx, const hem_keys_pub_opts *o);
+
+/* Options for `keys gen` (REQ-TOOL-009). `type` and `label` are required. */
+typedef struct {
+    const char *passphrase;   /* login passphrase; NULL → HEM_KEYS_USAGE */
+    const char *type;         /* device type literal; NULL → USAGE */
+    const char *label;        /* key label (SDK validates); NULL → USAGE */
+    const char *descr;        /* optional descr — raw bytes are these string
+                                 bytes; NULL omits it */
+    const char *mode;         /* "ECDH"|"ExDSA"|"ECDH,ExDSA"; NULL → auto (the
+                                 tool sends ECDH,ExDSA for NIST-P/K, else none) */
+    FILE       *out;          /* the new kid (NULL → stdout) */
+    FILE       *err;          /* diagnostics + the default-mode note (NULL → stderr) */
+} hem_keys_gen_opts;
+
+/*
+ * `hem-tool keys gen <TYPE>` (REQ-TOOL-009): log in and create a key via
+ * ehem_key_create, printing the new 32-hex kid to o->out. `type` is passed
+ * verbatim (no tool allowlist). When o->mode is NULL and TYPE classifies to a
+ * NIST-P/K family (REQ-KEY-006), the tool sends mode "ECDH,ExDSA" and notes it
+ * on o->err — the device default is ECDH-only, which cannot sign (python
+ * OQ-19); for every other family an omitted mode sends no mode field. A mode
+ * that is not one of the three exact literals is HEM_KEYS_USAGE with no I/O.
+ * The SDK's label/descr validation surfaces as HEM_KEYS_USAGE (EHEM_ERR_ARG);
+ * a device 400/406 is HEM_KEYS_RUNTIME with the status in the message.
+ */
+int hem_keys_gen_run(ehem_ctx *ctx, const hem_keys_gen_opts *o);
 
 /*
  * `hem-tool keys rm` (REQ-TOOL-006), with wipe_keys.py semantics: partition the

@@ -7,7 +7,8 @@
  *             REQ-TOOL-004 (the `keys list` subcommand),
  *             REQ-TOOL-006 (the `keys rm` subcommand),
  *             REQ-TOOL-007 (the `keys pub` subcommand),
- *             REQ-TOOL-008 (the `sign` subcommand)
+ *             REQ-TOOL-008 (the `sign` subcommand),
+ *             REQ-TOOL-009 (the `keys gen` subcommand)
  *
  * Consumes ONLY the public headers in include/ehem/ — it doubles as living
  * documentation of the API and as the manual driver for the M1/M2 gates.
@@ -55,6 +56,11 @@ typedef struct {
     const char *alg;          /* --alg (verbatim selector; NULL → default) */
     const char *in_path;      /* --in (message file; NULL → stdin) */
     const char *sigctx;       /* --sigctx (RFC 8032 context string) */
+
+    /* keys gen inputs (REQ-TOOL-009). */
+    const char *label;        /* --label (required for keys gen) */
+    const char *descr;        /* --descr (optional raw-bytes blob) */
+    const char *mode;         /* --mode (ECDH|ExDSA|ECDH,ExDSA; NULL → auto) */
 } cli_opts;
 
 static void usage(FILE *f)
@@ -80,6 +86,10 @@ static void usage(FILE *f)
         "                   SHA256WithECDSA); omitted → derived from the key type\n"
         "  --in FILE        sign: read the message from FILE (default: stdin)\n"
         "  --sigctx STR     sign: RFC 8032 context for the Ed*ctx/Ed*ph selectors\n"
+        "  --label LABEL    keys gen: label for the new key (required)\n"
+        "  --descr STR      keys gen: optional opaque description blob\n"
+        "  --mode MODE      keys gen: ECDH | ExDSA | ECDH,ExDSA (NIST-P/K only;\n"
+        "                   default ECDH,ExDSA so the key can sign)\n"
         "  -h, --help       show this help\n"
         "\n"
         "commands:\n"
@@ -93,6 +103,8 @@ static void usage(FILE *f)
         "                   protected device keys [PROTECTED] (needs a passphrase)\n"
         "  keys pub KID     print a key's public material and typed metadata\n"
         "                   (read-only; --hex / --raw select the encoding)\n"
+        "  keys gen TYPE    generate a key of TYPE (e.g. ED25519, SECP256R1,\n"
+        "                   AES256); needs --label; prints the new key id\n"
         "  keys rm          delete keys: --all (non-protected) or --label-prefix P;\n"
         "                   protected keys need an exact label + per-key 'YES'\n"
         "  sign KID         sign a message (stdin or --in FILE, max 2048 bytes)\n"
@@ -404,15 +416,44 @@ static int cmd_sign(const cli_opts *o, const char *kid)
     return ret;
 }
 
-/* Dispatch the `keys` command group (list / pub / rm). */
+/* REQ-TOOL-009: generate a key on the device; the mode default and error
+ * mapping live in hem-tool-core. `type` is the third positional (TYPE). */
+static int cmd_keys_gen(const cli_opts *o, const char *type)
+{
+    ehem_ctx *ctx = NULL;
+    hem_keys_gen_opts ko;
+    int ret;
+
+    ret = make_ctx(o, &ctx);
+    if (ret != 0) {
+        return ret;
+    }
+
+    memset(&ko, 0, sizeof ko);
+    ko.passphrase = o->passphrase;
+    ko.type       = type;
+    ko.label      = o->label;
+    ko.descr      = o->descr;
+    ko.mode       = o->mode;
+    ko.out        = stdout;
+    ko.err        = stderr;
+
+    ret = hem_keys_gen_run(ctx, &ko);
+    print_cert_notice(ctx);
+    ehem_ctx_destroy(ctx);
+    return ret;
+}
+
+/* Dispatch the `keys` command group (list / pub / gen / rm). */
 static int cmd_keys(const cli_opts *o, const char *subcmd, const char *arg)
 {
     if (subcmd == NULL) {
-        fprintf(stderr, "error: 'keys' needs a subcommand (list, pub, rm)\n");
+        fprintf(stderr, "error: 'keys' needs a subcommand (list, pub, gen, rm)\n");
         usage(stderr);
         return 2;
     }
-    if (arg != NULL && strcmp(subcmd, "pub") != 0) {
+    /* Only `pub` (KID) and `gen` (TYPE) take a third positional. */
+    if (arg != NULL && strcmp(subcmd, "pub") != 0 && strcmp(subcmd, "gen") != 0) {
         fprintf(stderr, "error: unexpected argument '%s'\n", arg);
         usage(stderr);
         return 2;
@@ -422,6 +463,9 @@ static int cmd_keys(const cli_opts *o, const char *subcmd, const char *arg)
     }
     if (strcmp(subcmd, "pub") == 0) {
         return cmd_keys_pub(o, arg);
+    }
+    if (strcmp(subcmd, "gen") == 0) {
+        return cmd_keys_gen(o, arg);
     }
     if (strcmp(subcmd, "rm") == 0) {
         return cmd_keys_rm(o);
@@ -492,6 +536,18 @@ int main(int argc, char **argv)
             o.sigctx = argv[++i];
         } else if (strncmp(a, "--sigctx=", 9) == 0) {
             o.sigctx = a + 9;
+        } else if (strcmp(a, "--label") == 0 && i + 1 < argc) {
+            o.label = argv[++i];
+        } else if (strncmp(a, "--label=", 8) == 0) {
+            o.label = a + 8;
+        } else if (strcmp(a, "--descr") == 0 && i + 1 < argc) {
+            o.descr = argv[++i];
+        } else if (strncmp(a, "--descr=", 8) == 0) {
+            o.descr = a + 8;
+        } else if (strcmp(a, "--mode") == 0 && i + 1 < argc) {
+            o.mode = argv[++i];
+        } else if (strncmp(a, "--mode=", 7) == 0) {
+            o.mode = a + 7;
         } else if (strcmp(a, "--insecure") == 0) {
             o.insecure = 1;
         } else if (strcmp(a, "--hex") == 0) {

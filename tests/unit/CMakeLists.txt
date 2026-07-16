@@ -40,6 +40,10 @@ if(TARGET hem-tool-core)
   # REQ-TOOL-008: `sign` — inputs, default-alg lookup, formats, exit codes.
   ehem_add_unit_test(test_sign_tool SOURCES test_sign_tool.c)
   target_link_libraries(test_sign_tool PRIVATE hem-tool-core)
+
+  # REQ-TOOL-009: `keys gen` — body bytes, NIST mode default, exit codes.
+  ehem_add_unit_test(test_keys_gen SOURCES test_keys_gen.c)
+  target_link_libraries(test_keys_gen PRIVATE hem-tool-core)
 endif()
 
 # REQ-SYS-004, REQ-SYS-005: config GET / cert install / reboot bindings.
