@@ -7,7 +7,8 @@ traces:
   architecture: ["ARCHITECTURE.md#6-protocol-bindings", "ARCHITECTURE.md#8-hem-tool-cli"]
 depends_on: ["STEP-M2-050"]
 evidence:
-  commits: []
+  commits:
+    - "08e4915 — check-in cert harvest (newcrt_chain/csn) + hem-tool cert-install"
   tests:
     - "tests/unit/test_checkin.c — harvest: chain+serial, absent, unparseable payload"
     - "tests/unit/test_cert.c — ehem_cert_inspect: leaf fields, bad base64, non-cert, args"
