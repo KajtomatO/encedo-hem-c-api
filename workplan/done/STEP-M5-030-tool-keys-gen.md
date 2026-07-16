@@ -20,9 +20,14 @@ evidence:
     label/descr validation delegated to the SDK (EHEM_ERR_ARG → exit 2), so this
     step is independent of M5-010's bound change. `keys gen` usage-error exit
     codes verified live-locally (no device needed — validation precedes login).
-    LIVE STATUS: the gen → list → sign → pub → rm live demo is DEFERRED — the dev
-    device went offline mid-session (~20+ min, connect refused). This step stays
-    in doing/ until the demo runs (a background monitor is watching).
+    LIVE DEMO (2026-07-17, my.ence.do): `keys gen ED25519 --label 'EHEMTEST
+    m5gen ed'` and `keys gen SECP256R1 --label 'EHEMTEST m5gen ec'` created keys
+    (kids e6fc7d44… / 3a9a0f08…); the SECP256R1 run printed the ECDH,ExDSA
+    default-mode note, ED25519 printed none. Both appeared in `keys list`
+    (`ATT,PKEY,ExDSA,ED25519` / `ATT,PKEY,ECDH,ExDSA,SECP256R1`), both signed
+    via `sign` with the default-alg lookup (Ed25519 / SHA256WithECDSA notes;
+    exit 0), `keys pub` printed the ED25519 metadata + pubkey; cleaned up via
+    `keys rm --label-prefix 'EHEMTEST m5gen' --yes` (2 deleted, 0 protected).
 reopened: []
 cancelled: null
 ---
@@ -48,12 +53,12 @@ list → sign → pub → rm chain with an EHEMTEST label, noted in evidence
 (feeds the REQ's live criterion, checked at the gate).
 
 **Definition of done**
-- [ ] Unit tests green (gcc+clang + asan): body bytes for all option
+- [x] Unit tests green (gcc+clang + asan): body bytes for all option
       combinations, NIST default-mode injection + note, non-NIST omits
       mode, verbatim `--mode` passthrough, usage errors exit 2 with zero
-      transport I/O, device 400/406 → exit 1.
-- [ ] Live demo performed and recorded (EHEMTEST key created, used by
-      `sign`, removed via `keys rm`).
-- [ ] Usage/help text updated; README tool section updated if it lists
-      subcommands.
-- [ ] `./dev ci` green; export/header gates green.
+      transport I/O, device 400/406 → exit 1. — test_keys_gen (7 cases).
+- [x] Live demo performed and recorded (EHEMTEST keys created, used by
+      `sign`, `pub`'d, removed via `keys rm`) — see evidence notes.
+- [x] Usage/help text updated; README lists no subcommands (only a
+      `status` example), so nothing to update there.
+- [x] `./dev ci` green; export/header gates green.

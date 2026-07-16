@@ -62,7 +62,10 @@ key lifecycle. The NIST mode default exists because an operator using
       pre-validation failure (`EHEM_ERR_ARG`) → exit 2; device 400
       (unsupported type) and 406 (repo failure) → exit 1 with the device
       status in the message (unit tests).
-- [ ] Live (M5): `keys gen ED25519 --label 'EHEMTEST …'` creates a key
-      whose kid appears in `keys list`, is usable by `sign`, and is
-      removed via `keys rm` (manual/integration; cleanup per
-      REQ-TEST-003).
+- [x] Live (M5, STEP-M5-030, 2026-07-17): `keys gen ED25519 --label
+      'EHEMTEST m5gen ed'` and `keys gen SECP256R1 --label 'EHEMTEST m5gen
+      ec'` created keys (the SECP256R1 run printed the ECDH,ExDSA
+      default-mode note, ED25519 none); both appeared in `keys list`, both
+      signed via `sign` (default-alg Ed25519 / SHA256WithECDSA), `keys pub`
+      read the ED25519 material, and both were removed via `keys rm
+      --label-prefix 'EHEMTEST m5gen' --yes` (2 deleted, 0 protected).
