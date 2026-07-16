@@ -175,9 +175,12 @@ static ehem_rc parse_key_page(ehem_ctx *ctx, const ehem_json *root,
             page->listed = i + 1;     /* entry i is partially built; free it too */
             ehem_key_page_free(page);
             if (rc == EHEM_ERR_PROTOCOL) {
+                /* %u (not %zu): ehem_ctx_fail carries the plain printf format
+                 * attribute, which is the ms_printf archetype on MinGW and
+                 * rejects the C99 'z' modifier. The entry index is small. */
                 return ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 200, NULL,
-                                     "keymgmt/list: entry %zu missing required "
-                                     "field '%s'", i, missing);
+                                     "keymgmt/list: entry %u missing required "
+                                     "field '%s'", (unsigned)i, missing);
             }
             return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
         }

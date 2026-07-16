@@ -27,6 +27,10 @@ evidence:
     Unit 12/12 gcc+clang + ASan/LSan clean; export/header gates green; live
     walk green (total=6 listed=6). Live output recorded: TLS PrivateKey +
     TLS Certificate pair present as expected.
+    Windows CI follow-up: the entry-index in the PROTOCOL message used %zu, which
+    MinGW rejects (ehem_ctx_fail carries a plain printf format attribute →
+    ms_printf archetype, no C99 'z') — changed to %u/(unsigned). Verified with
+    the x86_64-w64-mingw32 cross-compiler under the CI flags.
 reopened: []
 cancelled: null
 ---
