@@ -41,3 +41,17 @@ target_include_directories(test_auth_live PRIVATE ${PROJECT_SOURCE_DIR}/tests/su
 target_compile_options(test_auth_live PRIVATE ${EHEM_WARNING_FLAGS})
 add_test(NAME test_auth_live COMMAND test_auth_live)
 set_tests_properties(test_auth_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
+
+# REQ-TOOL-006: live `keys rm --label-prefix` removes EHEMTEST keys. Drives the
+# shared hem-tool-core code (public API), so it links hem-tool-core; only exists
+# when the CLI is built. Integration (EHEMTEST-only mutation), not disruptive.
+if(TARGET hem-tool-core)
+  add_executable(test_keys_rm_live test_keys_rm_live.c)
+  target_link_libraries(test_keys_rm_live PRIVATE hem-tool-core cmocka::cmocka)
+  target_include_directories(test_keys_rm_live PRIVATE
+    ${PROJECT_SOURCE_DIR}/tests/support
+    ${PROJECT_SOURCE_DIR}/src/tools/hem-tool)
+  target_compile_options(test_keys_rm_live PRIVATE ${EHEM_WARNING_FLAGS})
+  add_test(NAME test_keys_rm_live COMMAND test_keys_rm_live)
+  set_tests_properties(test_keys_rm_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
+endif()

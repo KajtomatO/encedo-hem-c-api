@@ -26,12 +26,21 @@
 #include "cert_install.h"
 #include "keys.h"
 
+#define MAX_LABEL_PREFIXES 32
+
 typedef struct {
     const char *url;
     const char *cacert;
     int         insecure;
     const char *passphrase;   /* --passphrase / EHEM_PASSPHRASE (cert-install, keys) */
     int         force;        /* --force (cert-install) */
+
+    /* keys rm selection/behavior (REQ-TOOL-006). */
+    int         all;          /* --all */
+    int         dry_run;      /* --dry-run */
+    int         assume_yes;   /* --yes */
+    const char *prefixes[MAX_LABEL_PREFIXES];  /* --label-prefix (repeatable) */
+    size_t      prefix_count;
 } cli_opts;
 
 static void usage(FILE *f)
@@ -46,6 +55,11 @@ static void usage(FILE *f)
         "  --insecure       skip TLS verification (lab use only)\n"
         "  --passphrase PW  login passphrase (or set EHEM_PASSPHRASE)\n"
         "  --force          cert-install: reinstall even if already current\n"
+        "  --all            keys rm: target every non-protected key\n"
+        "  --label-prefix P keys rm: target keys whose label starts with P\n"
+        "                   (repeatable; exact match required for protected keys)\n"
+        "  --dry-run        keys rm: show what would be deleted, delete nothing\n"
+        "  --yes            keys rm: skip the bulk prompt (never for protected keys)\n"
         "  -h, --help       show this help\n"
         "\n"
         "commands:\n"
@@ -56,7 +70,9 @@ static void usage(FILE *f)
         "                   device whose firmware cannot apply it itself\n"
         "                   (authenticates, installs, REBOOTS, and verifies)\n"
         "  keys list        list every key on the device (read-only), marking\n"
-        "                   protected device keys [PROTECTED] (needs a passphrase)\n");
+        "                   protected device keys [PROTECTED] (needs a passphrase)\n"
+        "  keys rm          delete keys: --all (non-protected) or --label-prefix P;\n"
+        "                   protected keys need an exact label + per-key 'YES'\n");
 }
 
 /* REQ-TOOL-002: a security-relevant event (the device presented an invalid
@@ -261,16 +277,49 @@ static int cmd_keys_list(const cli_opts *o)
     return ret;
 }
 
-/* Dispatch the `keys` command group (keys list; keys rm lands in M3-060). */
+/* REQ-TOOL-006: delete keys with the protected-key guard; the selection,
+ * partition, prompts, and deletion live in hem-tool-core (shared with tests). */
+static int cmd_keys_rm(const cli_opts *o)
+{
+    ehem_ctx *ctx = NULL;
+    hem_keys_rm_opts ko;
+    int ret;
+
+    ret = make_ctx(o, &ctx);
+    if (ret != 0) {
+        return ret;
+    }
+
+    memset(&ko, 0, sizeof ko);
+    ko.passphrase   = o->passphrase;
+    ko.all          = o->all;
+    ko.prefixes     = o->prefixes;
+    ko.prefix_count = o->prefix_count;
+    ko.dry_run      = o->dry_run;
+    ko.assume_yes   = o->assume_yes;
+    ko.out          = stdout;
+    ko.err          = stderr;
+    ko.in           = stdin;
+
+    ret = hem_keys_rm_run(ctx, &ko);
+    print_cert_notice(ctx);
+    ehem_ctx_destroy(ctx);
+    return ret;
+}
+
+/* Dispatch the `keys` command group (list / rm). */
 static int cmd_keys(const cli_opts *o, const char *subcmd)
 {
     if (subcmd == NULL) {
-        fprintf(stderr, "error: 'keys' needs a subcommand (list)\n");
+        fprintf(stderr, "error: 'keys' needs a subcommand (list, rm)\n");
         usage(stderr);
         return 2;
     }
     if (strcmp(subcmd, "list") == 0) {
         return cmd_keys_list(o);
+    }
+    if (strcmp(subcmd, "rm") == 0) {
+        return cmd_keys_rm(o);
     }
     fprintf(stderr, "error: unknown keys subcommand '%s'\n", subcmd);
     usage(stderr);
@@ -305,6 +354,26 @@ int main(int argc, char **argv)
             o.passphrase = a + 13;
         } else if (strcmp(a, "--force") == 0) {
             o.force = 1;
+        } else if (strcmp(a, "--all") == 0) {
+            o.all = 1;
+        } else if (strcmp(a, "--dry-run") == 0) {
+            o.dry_run = 1;
+        } else if (strcmp(a, "--yes") == 0) {
+            o.assume_yes = 1;
+        } else if (strcmp(a, "--label-prefix") == 0 && i + 1 < argc) {
+            if (o.prefix_count >= MAX_LABEL_PREFIXES) {
+                fprintf(stderr, "error: too many --label-prefix (max %d)\n",
+                        MAX_LABEL_PREFIXES);
+                return 2;
+            }
+            o.prefixes[o.prefix_count++] = argv[++i];
+        } else if (strncmp(a, "--label-prefix=", 15) == 0) {
+            if (o.prefix_count >= MAX_LABEL_PREFIXES) {
+                fprintf(stderr, "error: too many --label-prefix (max %d)\n",
+                        MAX_LABEL_PREFIXES);
+                return 2;
+            }
+            o.prefixes[o.prefix_count++] = a + 15;
         } else if (strcmp(a, "--insecure") == 0) {
             o.insecure = 1;
         } else if (strcmp(a, "-h") == 0 || strcmp(a, "--help") == 0) {

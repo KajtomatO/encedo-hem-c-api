@@ -50,4 +50,31 @@ bool hem_key_is_protected(const char *label);
  */
 int hem_keys_list_run(ehem_ctx *ctx, const hem_keys_opts *o);
 
+/* Options for `keys rm` (REQ-TOOL-006). Selection is `all` XOR one-or-more
+ * `prefixes` (neither / both → HEM_KEYS_USAGE). */
+typedef struct {
+    const char        *passphrase;   /* login passphrase; NULL → HEM_KEYS_USAGE */
+    int                all;          /* --all: every non-protected key */
+    const char *const *prefixes;     /* --label-prefix values (label prefixes) */
+    size_t             prefix_count;
+    int                dry_run;      /* --dry-run: report, delete nothing */
+    int                assume_yes;   /* --yes: skip the bulk prompt (never protected) */
+    FILE              *out;          /* report + progress (NULL → stdout) */
+    FILE              *err;          /* diagnostics (NULL → stderr) */
+    FILE              *in;           /* confirmation input (NULL → stdin) */
+} hem_keys_rm_opts;
+
+/*
+ * `hem-tool keys rm` (REQ-TOOL-006), with wipe_keys.py semantics: partition the
+ * repository into regular targets, protected targets (a protected key is a
+ * target only when some prefix equals its label EXACTLY), and protected keys
+ * skipped as partial matches; print the partition; then (unless --dry-run)
+ * delete regular targets behind ONE bulk prompt (--yes skips it) and each
+ * protected target behind its own literal-"YES" prompt (--yes never applies).
+ * A failed delete is reported and processing continues. Returns HEM_KEYS_OK (0)
+ * on success / dry-run / nothing-to-do, HEM_KEYS_RUNTIME (1) on a user abort or
+ * any failed delete, HEM_KEYS_USAGE (2) on a selection/passphrase error.
+ */
+int hem_keys_rm_run(ehem_ctx *ctx, const hem_keys_rm_opts *o);
+
 #endif /* HEM_KEYS_H */

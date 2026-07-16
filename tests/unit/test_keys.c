@@ -275,6 +275,417 @@ static void test_keys_list_auth_failure(void **state)
     fake_transport_free(fake);
 }
 
+/* -------------------------------------------------------------------------- */
+/* keys rm (REQ-TOOL-006)                                                      */
+/* -------------------------------------------------------------------------- */
+
+#define KID_TLS_PRIV "10000000000000000000000000000001"
+#define KID_TLS_CERT "10000000000000000000000000000002"
+#define KID_REG_A    "20000000000000000000000000000001"
+#define KID_REG_B    "20000000000000000000000000000002"
+
+/* A repo with the two protected TLS keys and two ordinary keys. */
+static const kspec REPO4[] = {
+    { KID_TLS_PRIV, "TLS PrivateKey",  "PKEY,GENERIC_DER" },
+    { KID_TLS_CERT, "TLS Certificate", "CERT,GENERIC_DER" },
+    { KID_REG_A,    "it-a",            "ED25519" },
+    { KID_REG_B,    "it-b",            "ED25519" },
+};
+
+static void push_delete_ok(ehem_transport *fake)
+{
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200, NULL), 0);
+}
+
+static int count_deletes(ehem_transport *fake)
+{
+    size_t i, n = fake_transport_request_count(fake);
+    int c = 0;
+    for (i = 0; i < n; i++) {
+        if (fake_transport_request(fake, i)->method == EHEM_HTTP_DELETE) {
+            c++;
+        }
+    }
+    return c;
+}
+
+static bool was_deleted(ehem_transport *fake, const char *kid)
+{
+    char path[80];
+    size_t i, n = fake_transport_request_count(fake);
+    snprintf(path, sizeof path, "/api/keymgmt/delete/%s", kid);
+    for (i = 0; i < n; i++) {
+        const fake_captured_request *r = fake_transport_request(fake, i);
+        if (r->method == EHEM_HTTP_DELETE && strcmp(r->path, path) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* A tmpfile pre-filled with `content` and rewound (scripted stdin). */
+static FILE *scripted(const char *content)
+{
+    FILE *f = tmpfile();
+    assert_non_null(f);
+    if (content != NULL && content[0] != '\0') {
+        fwrite(content, 1, strlen(content), f);
+    }
+    rewind(f);
+    return f;
+}
+
+static void slurp(FILE *f, char *buf, size_t cap)
+{
+    size_t n;
+    rewind(f);
+    n = fread(buf, 1, cap - 1, f);
+    buf[n] = '\0';
+}
+
+/* Common rm setup: a fake, an out+err tmpfile, an in tmpfile from `stdin_s`. */
+typedef struct {
+    ehem_transport *fake;
+    ehem_ctx       *ctx;
+    FILE           *out, *errf, *in;
+} rm_fix;
+
+static rm_fix rm_begin(const char *stdin_s)
+{
+    rm_fix f;
+    f.fake = fake_transport_new();
+    assert_non_null(f.fake);
+    f.out = tmpfile();
+    f.errf = tmpfile();
+    f.in = scripted(stdin_s);
+    assert_non_null(f.out);
+    assert_non_null(f.errf);
+    return f;
+}
+
+static void rm_fill_opts(hem_keys_rm_opts *ko, rm_fix *f)
+{
+    memset(ko, 0, sizeof *ko);
+    ko->passphrase = EJWT_FX_PASSPHRASE;
+    ko->out = f->out;
+    ko->err = f->errf;
+    ko->in  = f->in;
+}
+
+static void rm_end(rm_fix *f)
+{
+    fclose(f->out);
+    fclose(f->errf);
+    fclose(f->in);
+    ehem_ctx_destroy(f->ctx);
+    fake_transport_free(f->fake);
+}
+
+/* --all --yes: deletes exactly the two non-protected keys; the TLS pair is
+ * neither deleted nor prompted for. */
+static void test_rm_all_deletes_nonprotected(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    rm_fix f = rm_begin("");
+    push_login(f.fake);                        /* list scope */
+    push_key_page(f.fake, 4, 0, REPO4, 4);
+    push_login(f.fake);                        /* del scope (first delete) */
+    push_delete_ok(f.fake);
+    push_delete_ok(f.fake);
+    f.ctx = ctx_with(f.fake);
+
+    hem_keys_rm_opts ko;
+    rm_fill_opts(&ko, &f);
+    ko.all = 1;
+    ko.assume_yes = 1;
+
+    assert_int_equal(hem_keys_rm_run(f.ctx, &ko), HEM_KEYS_OK);
+    assert_int_equal(count_deletes(f.fake), 2);
+    assert_true(was_deleted(f.fake, KID_REG_A));
+    assert_true(was_deleted(f.fake, KID_REG_B));
+    assert_false(was_deleted(f.fake, KID_TLS_PRIV));
+    assert_false(was_deleted(f.fake, KID_TLS_CERT));
+
+    rm_end(&f);
+}
+
+/* --all --dry-run: reports, deletes nothing, exit 0. */
+static void test_rm_dry_run(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    rm_fix f = rm_begin("");
+    push_login(f.fake);
+    push_key_page(f.fake, 4, 0, REPO4, 4);
+    f.ctx = ctx_with(f.fake);
+
+    hem_keys_rm_opts ko;
+    rm_fill_opts(&ko, &f);
+    ko.all = 1;
+    ko.dry_run = 1;
+
+    assert_int_equal(hem_keys_rm_run(f.ctx, &ko), HEM_KEYS_OK);
+    assert_int_equal(count_deletes(f.fake), 0);
+
+    char buf[2048];
+    slurp(f.out, buf, sizeof buf);
+    assert_non_null(strstr(buf, "dry-run: no keys deleted"));
+    assert_non_null(strstr(buf, "regular targets:   2"));
+
+    rm_end(&f);
+}
+
+/* No selection → exit 2 with no network I/O. */
+static void test_rm_no_selection(void **state)
+{
+    (void)state;
+    rm_fix f = rm_begin("");
+    f.ctx = ctx_with(f.fake);
+
+    hem_keys_rm_opts ko;
+    rm_fill_opts(&ko, &f);
+    /* neither all nor prefixes */
+
+    assert_int_equal(hem_keys_rm_run(f.ctx, &ko), HEM_KEYS_USAGE);
+    assert_int_equal((int)fake_transport_request_count(f.fake), 0);
+
+    rm_end(&f);
+}
+
+/* --all together with --label-prefix → exit 2, no I/O. */
+static void test_rm_mutually_exclusive(void **state)
+{
+    (void)state;
+    rm_fix f = rm_begin("");
+    f.ctx = ctx_with(f.fake);
+
+    const char *prefixes[] = { "it-" };
+    hem_keys_rm_opts ko;
+    rm_fill_opts(&ko, &f);
+    ko.all = 1;
+    ko.prefixes = prefixes;
+    ko.prefix_count = 1;
+
+    assert_int_equal(hem_keys_rm_run(f.ctx, &ko), HEM_KEYS_USAGE);
+    assert_int_equal((int)fake_transport_request_count(f.fake), 0);
+
+    rm_end(&f);
+}
+
+/* No passphrase → exit 2, no I/O. */
+static void test_rm_no_passphrase(void **state)
+{
+    (void)state;
+    rm_fix f = rm_begin("");
+    f.ctx = ctx_with(f.fake);
+
+    hem_keys_rm_opts ko;
+    rm_fill_opts(&ko, &f);
+    ko.all = 1;
+    ko.passphrase = NULL;
+
+    assert_int_equal(hem_keys_rm_run(f.ctx, &ko), HEM_KEYS_USAGE);
+    assert_int_equal((int)fake_transport_request_count(f.fake), 0);
+
+    rm_end(&f);
+}
+
+/* --label-prefix that PARTIALLY matches a protected label → warn + skip it;
+ * a non-protected key with the same prefix is still deleted. */
+static void test_rm_prefix_partial_protected_skipped(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    static const kspec repo[] = {
+        { KID_TLS_PRIV, "TLS PrivateKey", "PKEY,GENERIC_DER" },  /* protected */
+        { KID_REG_A,    "TLS-mykey",      "ED25519" },           /* regular, same prefix */
+    };
+    rm_fix f = rm_begin("");
+    push_login(f.fake);
+    push_key_page(f.fake, 2, 0, repo, 2);
+    push_login(f.fake);                        /* del scope */
+    push_delete_ok(f.fake);                    /* only the regular one */
+    f.ctx = ctx_with(f.fake);
+
+    const char *prefixes[] = { "TLS" };
+    hem_keys_rm_opts ko;
+    rm_fill_opts(&ko, &f);
+    ko.prefixes = prefixes;
+    ko.prefix_count = 1;
+    ko.assume_yes = 1;
+
+    assert_int_equal(hem_keys_rm_run(f.ctx, &ko), HEM_KEYS_OK);
+    assert_true(was_deleted(f.fake, KID_REG_A));
+    assert_false(was_deleted(f.fake, KID_TLS_PRIV));
+    assert_int_equal(count_deletes(f.fake), 1);
+
+    char buf[2048];
+    slurp(f.out, buf, sizeof buf);
+    assert_non_null(strstr(buf, "protected skipped: 1"));
+    assert_non_null(strstr(buf, "WARNING"));
+
+    rm_end(&f);
+}
+
+/* --label-prefix EXACT match on a protected key: prompts; only literal "YES"
+ * proceeds. Here the answer is "YES" → the protected key is deleted. */
+static void test_rm_protected_exact_yes_deletes(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    static const kspec repo[] = {
+        { KID_TLS_PRIV, "TLS PrivateKey", "PKEY,GENERIC_DER" },
+    };
+    rm_fix f = rm_begin("YES\n");
+    push_login(f.fake);
+    push_key_page(f.fake, 1, 0, repo, 1);
+    push_login(f.fake);                        /* del scope */
+    push_delete_ok(f.fake);
+    f.ctx = ctx_with(f.fake);
+
+    const char *prefixes[] = { "TLS PrivateKey" };   /* exact label */
+    hem_keys_rm_opts ko;
+    rm_fill_opts(&ko, &f);
+    ko.prefixes = prefixes;
+    ko.prefix_count = 1;
+    ko.assume_yes = 1;                         /* ignored for protected */
+
+    assert_int_equal(hem_keys_rm_run(f.ctx, &ko), HEM_KEYS_OK);
+    assert_true(was_deleted(f.fake, KID_TLS_PRIV));
+
+    char buf[2048];
+    slurp(f.out, buf, sizeof buf);
+    assert_non_null(strstr(buf, "ABOUT TO DELETE PROTECTED DEVICE KEY"));
+
+    rm_end(&f);
+}
+
+/* Protected exact match but a non-"YES" answer (here "yes") → skipped, no
+ * delete, exit 0. Proves --yes does NOT auto-confirm protected keys. */
+static void test_rm_protected_exact_declined(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    static const kspec repo[] = {
+        { KID_TLS_PRIV, "TLS PrivateKey", "PKEY,GENERIC_DER" },
+    };
+    rm_fix f = rm_begin("yes\n");              /* lowercase — must NOT proceed */
+    push_login(f.fake);
+    push_key_page(f.fake, 1, 0, repo, 1);
+    f.ctx = ctx_with(f.fake);
+
+    const char *prefixes[] = { "TLS PrivateKey" };
+    hem_keys_rm_opts ko;
+    rm_fill_opts(&ko, &f);
+    ko.prefixes = prefixes;
+    ko.prefix_count = 1;
+    ko.assume_yes = 1;
+
+    assert_int_equal(hem_keys_rm_run(f.ctx, &ko), HEM_KEYS_OK);
+    assert_int_equal(count_deletes(f.fake), 0);
+
+    char buf[2048];
+    slurp(f.out, buf, sizeof buf);
+    assert_non_null(strstr(buf, "skipped " KID_TLS_PRIV));
+
+    rm_end(&f);
+}
+
+/* --yes skips the BULK prompt (regular deleted with no stdin), but a protected
+ * key still prompts: stdin "n" declines it. */
+static void test_rm_yes_skips_bulk_not_protected(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    static const kspec repo[] = {
+        { KID_REG_A,    "it-reg",         "ED25519" },
+        { KID_TLS_PRIV, "TLS PrivateKey", "PKEY,GENERIC_DER" },
+    };
+    rm_fix f = rm_begin("n\n");                /* answers the protected prompt */
+    push_login(f.fake);
+    push_key_page(f.fake, 2, 0, repo, 2);
+    push_login(f.fake);                        /* del scope (regular delete) */
+    push_delete_ok(f.fake);                    /* it-reg */
+    f.ctx = ctx_with(f.fake);
+
+    const char *prefixes[] = { "it-reg", "TLS PrivateKey" };
+    hem_keys_rm_opts ko;
+    rm_fill_opts(&ko, &f);
+    ko.prefixes = prefixes;
+    ko.prefix_count = 2;
+    ko.assume_yes = 1;
+
+    assert_int_equal(hem_keys_rm_run(f.ctx, &ko), HEM_KEYS_OK);
+    assert_true(was_deleted(f.fake, KID_REG_A));       /* bulk auto-approved */
+    assert_false(was_deleted(f.fake, KID_TLS_PRIV));   /* protected declined */
+    assert_int_equal(count_deletes(f.fake), 1);
+
+    char buf[2048];
+    slurp(f.out, buf, sizeof buf);
+    assert_non_null(strstr(buf, "ABOUT TO DELETE PROTECTED"));
+
+    rm_end(&f);
+}
+
+/* One failing delete among several → the rest still processed, exit 1. */
+static void test_rm_delete_failure_continues(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    rm_fix f = rm_begin("");
+    push_login(f.fake);
+    push_key_page(f.fake, 4, 0, REPO4, 4);     /* regulars: it-a, it-b */
+    push_login(f.fake);                        /* del scope */
+    assert_int_equal(fake_transport_push_response(f.fake, EHEM_OK, 500,
+        "{\"error\":\"boom\"}"), 0);           /* it-a delete FAILS */
+    push_delete_ok(f.fake);                    /* it-b delete OK */
+    f.ctx = ctx_with(f.fake);
+
+    hem_keys_rm_opts ko;
+    rm_fill_opts(&ko, &f);
+    ko.all = 1;
+    ko.assume_yes = 1;
+
+    assert_int_equal(hem_keys_rm_run(f.ctx, &ko), HEM_KEYS_RUNTIME);
+    assert_int_equal(count_deletes(f.fake), 2);          /* both attempted */
+    assert_true(was_deleted(f.fake, KID_REG_B));
+
+    char buf[2048];
+    slurp(f.out, buf, sizeof buf);
+    assert_non_null(strstr(buf, "done: 1 deleted, 1 failed"));
+
+    rm_end(&f);
+}
+
+/* Bulk prompt declined, no protected targets → exit 1 (user abort), no delete. */
+static void test_rm_bulk_declined_aborts(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    rm_fix f = rm_begin("n\n");
+    push_login(f.fake);
+    push_key_page(f.fake, 4, 0, REPO4, 4);
+    f.ctx = ctx_with(f.fake);
+
+    hem_keys_rm_opts ko;
+    rm_fill_opts(&ko, &f);
+    ko.all = 1;                                /* not --yes → bulk prompt */
+
+    assert_int_equal(hem_keys_rm_run(f.ctx, &ko), HEM_KEYS_RUNTIME);
+    assert_int_equal(count_deletes(f.fake), 0);
+
+    rm_end(&f);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -282,6 +693,17 @@ int main(void)
         cmocka_unit_test(test_keys_list_marks_and_counts),
         cmocka_unit_test(test_keys_list_no_passphrase),
         cmocka_unit_test(test_keys_list_auth_failure),
+        cmocka_unit_test(test_rm_all_deletes_nonprotected),
+        cmocka_unit_test(test_rm_dry_run),
+        cmocka_unit_test(test_rm_no_selection),
+        cmocka_unit_test(test_rm_mutually_exclusive),
+        cmocka_unit_test(test_rm_no_passphrase),
+        cmocka_unit_test(test_rm_prefix_partial_protected_skipped),
+        cmocka_unit_test(test_rm_protected_exact_yes_deletes),
+        cmocka_unit_test(test_rm_protected_exact_declined),
+        cmocka_unit_test(test_rm_yes_skips_bulk_not_protected),
+        cmocka_unit_test(test_rm_delete_failure_continues),
+        cmocka_unit_test(test_rm_bulk_declined_aborts),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

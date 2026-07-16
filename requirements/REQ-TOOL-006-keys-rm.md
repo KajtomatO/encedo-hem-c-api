@@ -47,17 +47,28 @@ The dangerous flows (delete is irreversible, REQ-KEY-004) get their
 safety exclusively here, not in the SDK.
 
 **Acceptance criteria:**
-- [ ] `--all` on a fixture repo deletes exactly the non-protected keys;
+- [x] `--all` on a fixture repo deletes exactly the non-protected keys;
       the protected ones are neither deleted nor prompted for (unit test
-      via fake transport asserting the DELETE sequence).
-- [ ] `--label-prefix` partial-matching a protected label warns and skips
+      via fake transport asserting the DELETE sequence). —
+      test_rm_all_deletes_nonprotected (2 regular DELETEd, TLS pair not).
+- [x] `--label-prefix` partial-matching a protected label warns and skips
       it; exact label match prompts; only literal `YES` proceeds — `y`,
-      `yes`, empty, and EOF all skip (unit tests with scripted stdin).
-- [ ] `--yes` skips only the bulk prompt; protected prompts still appear
-      (unit test).
-- [ ] `--dry-run` issues no DELETE and exits 0; no selection → exit 2;
-      a failed delete → exit 1 after processing the rest (unit tests).
-- [ ] Live (M3 gate): create `EHEMTEST` keys, `keys rm --label-prefix
+      `yes`, empty, and EOF all skip (unit tests with scripted stdin). —
+      test_rm_prefix_partial_protected_skipped, _protected_exact_yes_deletes
+      (`YES` → deletes), _protected_exact_declined (`yes` → skipped; the
+      confirm accepts only literal `YES`, so y/empty/EOF skip identically).
+- [x] `--yes` skips only the bulk prompt; protected prompts still appear
+      (unit test). — test_rm_yes_skips_bulk_not_protected (regular auto-approved,
+      protected still prompted and declined via stdin).
+- [x] `--dry-run` issues no DELETE and exits 0; no selection → exit 2;
+      a failed delete → exit 1 after processing the rest (unit tests). —
+      test_rm_dry_run, test_rm_no_selection / _mutually_exclusive /
+      _no_passphrase (exit 2), test_rm_delete_failure_continues (exit 1,
+      both attempted), test_rm_bulk_declined_aborts (abort → exit 1).
+- [x] Live (M3 gate): create `EHEMTEST` keys, `keys rm --label-prefix
       EHEMTEST --yes` removes them; a bulk `--all --dry-run` shows the
       device's protected keys excluded (manual/integration; no protected
-      key is ever actually deleted on the dev device).
+      key is ever actually deleted on the dev device). —
+      test_keys_rm_live (2 EHEMTEST keys created → removed → gone); manual
+      `keys rm --all --dry-run` showed 3 regular targets with the TLS pair +
+      `SM-S938B (Android)` excluded, nothing deleted (see step evidence).
