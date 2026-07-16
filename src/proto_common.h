@@ -32,29 +32,44 @@ ehem_rc ehem_proto_map_http_status(long status);
  * optional NUL-terminated JSON body, and return the response body in
  * *body_out (malloc'd, NUL-terminated; caller frees).
  *
+ * `scope` selects the authentication posture (REQ-AUTH-003):
+ *   - NULL       → unauthenticated request (status, version, check-in, and the
+ *                  login exchange itself); no Authorization header is sent.
+ *   - non-NULL   → obtain a bearer token for that scope from the cache
+ *                  (REQ-AUTH-002) and send `Authorization: Bearer <token>`. A
+ *                  401 with that token triggers exactly one re-acquire + retry
+ *                  (the token was invalidated server-side); a second 401 maps
+ *                  to EHEM_ERR_AUTH_FAILED.
+ *
  * Handles uniformly, recording ehem_last_error detail and returning the
  * mapped rc on every failure path:
+ *   - token acquisition failure for a non-NULL scope (EHEM_ERR_AUTH_* etc.);
  *   - transport-level failure (incl. the automatic expired-cert check-in
  *     recovery + single retry, REQ-NET-005 — unless this request itself is
  *     part of a check-in, ctx->in_checkin);
  *   - non-2xx HTTP status (ehem_proto_map_http_status + device payload);
  *   - empty response body (EHEM_ERR_PROTOCOL).
+ * The auth retry and the check-in retry compose but do not multiply: at most
+ * one of each per request.
  *
  * `tls_override` is EHEM_TLS_REQ_DEFAULT for normal binding traffic; the
  * check-in flow passes RELAX (device legs) / VERIFY (cloud leg).
  */
 ehem_rc ehem_proto_request_raw(ehem_ctx *ctx, ehem_http_method method,
                                const char *path, const char *json_body,
+                               const char *scope,
                                ehem_tls_req_override tls_override,
                                char **body_out);
 
 /*
  * ehem_proto_request_raw + parse: hands back the response as a parsed JSON
  * object in *root_out (caller frees with ehem_json_free). A malformed or
- * non-object body is EHEM_ERR_PROTOCOL with detail.
+ * non-object body is EHEM_ERR_PROTOCOL with detail. `scope` has the same
+ * meaning as in ehem_proto_request_raw.
  */
 ehem_rc ehem_proto_request_json(ehem_ctx *ctx, ehem_http_method method,
                                 const char *path, const char *json_body,
+                                const char *scope,
                                 ehem_tls_req_override tls_override,
                                 ehem_json **root_out);
 

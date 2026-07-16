@@ -22,10 +22,18 @@
 #include "ehem/ehem.h"
 #include "ehem/auth.h"
 #include "proto_auth.h"       /* internal: ensure-token + the clock seam */
+#include "proto_common.h"     /* internal: scoped request path (REQ-AUTH-003) */
 #include "ejwt.h"             /* internal: base64url encoder for crafted tokens */
+#include "json.h"             /* internal: inspect a scoped response body */
 #include "transport.h"        /* internal: ehem_http_method, TLS overrides */
 #include "fake_transport.h"
 #include "fixtures/ejwt_login_vector.h"
+
+/* A scope + path for the authenticated-request-path tests (no real keymgmt
+ * binding exists until M3; the scoped call is driven straight through
+ * ehem_proto_request_json). */
+#define SCOPED_PATH  "/api/keymgmt/list"
+#define SCOPED_SCOPE "keymgmt:list"
 
 /* The challenge the fake device serves: the fixture inputs, so the eJWT the
  * login POSTs is byte-identical to EJWT_FX_EXPECT_EJWT when the clock is
@@ -76,19 +84,39 @@ static ehem_ctx *ctx_with(ehem_transport *fake, const ehem_options *extra)
     return ctx;
 }
 
-/* Queue a token response {"token":"hdr.<b64url({"exp":N,"k":tag})>.sig"}. The
- * `exp` claim is what the cache reads back; `tag` distinguishes otherwise-equal
- * tokens so a re-acquisition is observable. */
-static void push_token(ehem_transport *fake, int64_t token_exp, const char *tag)
+/* Build a crafted bearer "hdr.<b64url({"exp":N,"k":tag})>.sig": the `exp` claim
+ * is what the cache reads back; `tag` distinguishes otherwise-equal tokens so a
+ * re-acquisition is observable. */
+static void make_token(int64_t token_exp, const char *tag, char *out, size_t cap)
 {
-    char payload[96], seg[160], resp[768];
+    char payload[96], seg[160];
     int m = snprintf(payload, sizeof payload, "{\"exp\":%lld,\"k\":\"%s\"}",
                      (long long)token_exp, tag);
     size_t sn = ehem_b64url_encode((const uint8_t *)payload, (size_t)m,
                                    seg, sizeof seg);
     assert_int_not_equal(sn, (size_t)-1);
-    snprintf(resp, sizeof resp, "{\"token\":\"hdr.%s.sig\"}", seg);
+    snprintf(out, cap, "hdr.%s.sig", seg);
+}
+
+/* Queue a {"token":"<make_token>"} response. */
+static void push_token(ehem_transport *fake, int64_t token_exp, const char *tag)
+{
+    char tok[256], resp[768];
+    make_token(token_exp, tag, tok, sizeof tok);
+    snprintf(resp, sizeof resp, "{\"token\":\"%s\"}", tok);
     assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200, resp), 0);
+}
+
+/* Assert request `i` carries Authorization: Bearer <the token made from these
+ * args> — i.e. the binding sent exactly the token the cache acquired. */
+static void assert_bearer(ehem_transport *fake, size_t i,
+                          int64_t token_exp, const char *tag)
+{
+    char tok[256], expect[300];
+    make_token(token_exp, tag, tok, sizeof tok);
+    snprintf(expect, sizeof expect, "Bearer %s", tok);
+    assert_string_equal(fake_transport_request_header(fake, i, "Authorization"),
+                        expect);
 }
 
 /* Decode the payload segment of an eJWT into a NUL-terminated JSON string. */
@@ -560,6 +588,239 @@ static void test_arg_validation(void **state)
     fake_transport_free(fake);
 }
 
+/* -------------------------------------------------------------------------- */
+/* REQ-AUTH-003: authenticated request path                                   */
+/* -------------------------------------------------------------------------- */
+
+/* A scoped request carries Authorization: Bearer <token>; the unauthenticated
+ * login exchange that precedes it does not. */
+static void test_scoped_request_sends_bearer(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+                                                  CHALLENGE_JSON), 0);
+    push_token(fake, EJWT_FX_NOW + 100000, "sc");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+                                                  "{\"ok\":1}"), 0);
+
+    ehem_ctx *ctx = ctx_with(fake, NULL);
+    assert_int_equal(ehem_login(ctx, EJWT_FX_PASSPHRASE), EHEM_OK);
+
+    ehem_json *root = NULL;
+    assert_int_equal(ehem_proto_request_json(ctx, EHEM_HTTP_GET, SCOPED_PATH,
+                                             NULL, SCOPED_SCOPE,
+                                             EHEM_TLS_REQ_DEFAULT, &root),
+                     EHEM_OK);
+    assert_non_null(root);
+
+    /* login GET + login POST + the scoped GET. */
+    assert_int_equal((int)fake_transport_request_count(fake), 3);
+    assert_null(fake_transport_request_header(fake, 0, "Authorization"));  /* challenge */
+    assert_null(fake_transport_request_header(fake, 1, "Authorization"));  /* token POST */
+    assert_string_equal(fake_transport_request(fake, 2)->path, SCOPED_PATH);
+    assert_bearer(fake, 2, EJWT_FX_NOW + 100000, "sc");
+
+    ehem_json_free(root);
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* 401 with a cached token → one re-acquire + one retry → still 401 →
+ * EHEM_ERR_AUTH_FAILED. */
+static void test_scoped_401_reacquire_then_failed(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+                                                  CHALLENGE_JSON), 0);
+    push_token(fake, EJWT_FX_NOW + 100000, "t1");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 401,
+                     "{\"error\":\"revoked\"}"), 0);              /* first try  */
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+                                                  CHALLENGE_JSON), 0);   /* re-acq */
+    push_token(fake, EJWT_FX_NOW + 100000, "t2");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 401,
+                     "{\"error\":\"still bad\"}"), 0);            /* retry      */
+
+    ehem_ctx *ctx = ctx_with(fake, NULL);
+    assert_int_equal(ehem_login(ctx, EJWT_FX_PASSPHRASE), EHEM_OK);
+
+    ehem_json *root = NULL;
+    assert_int_equal(ehem_proto_request_json(ctx, EHEM_HTTP_GET, SCOPED_PATH,
+                                             NULL, SCOPED_SCOPE,
+                                             EHEM_TLS_REQ_DEFAULT, &root),
+                     EHEM_ERR_AUTH_FAILED);
+    assert_null(root);
+
+    /* login(2) + scoped(401) + re-login(2) + scoped-retry(401) = 6, one retry. */
+    assert_int_equal((int)fake_transport_request_count(fake), 6);
+    assert_string_equal(fake_transport_request(fake, 2)->path, SCOPED_PATH);
+    assert_bearer(fake, 2, EJWT_FX_NOW + 100000, "t1");
+    assert_string_equal(fake_transport_request(fake, 5)->path, SCOPED_PATH);
+    assert_true(fake_transport_request(fake, 5)->fresh_connection);
+    assert_bearer(fake, 5, EJWT_FX_NOW + 100000, "t2");
+    assert_int_equal(ehem_last_error(ctx)->http_status, 401);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* 401 then a fresh token succeeds on the single retry. */
+static void test_scoped_401_reacquire_then_success(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+                                                  CHALLENGE_JSON), 0);
+    push_token(fake, EJWT_FX_NOW + 100000, "t1");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 401,
+                     "{\"error\":\"revoked\"}"), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+                                                  CHALLENGE_JSON), 0);
+    push_token(fake, EJWT_FX_NOW + 100000, "t2");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+                                                  "{\"ok\":1}"), 0);
+
+    ehem_ctx *ctx = ctx_with(fake, NULL);
+    assert_int_equal(ehem_login(ctx, EJWT_FX_PASSPHRASE), EHEM_OK);
+
+    ehem_json *root = NULL;
+    assert_int_equal(ehem_proto_request_json(ctx, EHEM_HTTP_GET, SCOPED_PATH,
+                                             NULL, SCOPED_SCOPE,
+                                             EHEM_TLS_REQ_DEFAULT, &root),
+                     EHEM_OK);
+    assert_non_null(root);
+    assert_int_equal((int)fake_transport_request_count(fake), 6);
+    assert_bearer(fake, 5, EJWT_FX_NOW + 100000, "t2");   /* retry used new token */
+
+    ehem_json_free(root);
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* 403 → EHEM_ERR_SCOPE_DENIED with the device payload; no retry. */
+static void test_scoped_403_scope_denied(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+                                                  CHALLENGE_JSON), 0);
+    push_token(fake, EJWT_FX_NOW + 100000, "t1");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 403,
+                     "{\"error\":\"scope not granted\"}"), 0);
+
+    ehem_ctx *ctx = ctx_with(fake, NULL);
+    assert_int_equal(ehem_login(ctx, EJWT_FX_PASSPHRASE), EHEM_OK);
+
+    ehem_json *root = NULL;
+    assert_int_equal(ehem_proto_request_json(ctx, EHEM_HTTP_GET, SCOPED_PATH,
+                                             NULL, SCOPED_SCOPE,
+                                             EHEM_TLS_REQ_DEFAULT, &root),
+                     EHEM_ERR_SCOPE_DENIED);
+    assert_null(root);
+    /* No auth retry on 403 — just login(2) + the scoped GET. */
+    assert_int_equal((int)fake_transport_request_count(fake), 3);
+    assert_int_equal(ehem_last_error(ctx)->http_status, 403);
+    assert_non_null(strstr(ehem_last_error(ctx)->device_payload, "scope not granted"));
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* Composition guard (REQ-AUTH-003 × REQ-NET-005): a scoped request that first
+ * hits an expired cert (→ one check-in recovery) and then a 401 (→ one
+ * re-acquire retry) runs each recovery exactly once and then succeeds. */
+static void test_auth_and_checkin_compose_once_each(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    /* Initial token acquisition. */
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+                                                  CHALLENGE_JSON), 0);
+    push_token(fake, EJWT_FX_NOW + 100000, "t1");
+    /* Scoped send: expired cert → check-in (3 legs). */
+    assert_int_equal(fake_transport_push_tls_expired(fake, EHEM_ERR_NETWORK), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200, CI_CHALLENGE), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200, CI_VERIFIED), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200, CI_OK), 0);
+    /* Cert-recovery resend → 401 → auth re-acquire (2) → retry → 200. */
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 401,
+                     "{\"error\":\"revoked\"}"), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+                                                  CHALLENGE_JSON), 0);
+    push_token(fake, EJWT_FX_NOW + 100000, "t2");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+                                                  "{\"ok\":1}"), 0);
+
+    ehem_ctx *ctx = ctx_with(fake, NULL);
+    assert_int_equal(ehem_login(ctx, EJWT_FX_PASSPHRASE), EHEM_OK);
+
+    ehem_json *root = NULL;
+    assert_int_equal(ehem_proto_request_json(ctx, EHEM_HTTP_GET, SCOPED_PATH,
+                                             NULL, SCOPED_SCOPE,
+                                             EHEM_TLS_REQ_DEFAULT, &root),
+                     EHEM_OK);
+    assert_non_null(root);
+    assert_true(ehem_cert_refreshed(ctx));
+
+    /* login(0,1) scoped(2,expired) checkin(3,4,5) resend(6,401) re-login(7,8)
+     * retry(9,200) — 10 total: exactly one check-in and one auth retry. */
+    assert_int_equal((int)fake_transport_request_count(fake), 10);
+    assert_string_equal(fake_transport_request(fake, 2)->path, SCOPED_PATH);
+    assert_string_equal(fake_transport_request(fake, 3)->path, "/api/system/checkin");
+    assert_string_equal(fake_transport_request(fake, 5)->path, "/api/system/checkin");
+    assert_string_equal(fake_transport_request(fake, 6)->path, SCOPED_PATH);
+    assert_bearer(fake, 6, EJWT_FX_NOW + 100000, "t1");   /* recovery resend, old token */
+    assert_string_equal(fake_transport_request(fake, 9)->path, SCOPED_PATH);
+    assert_bearer(fake, 9, EJWT_FX_NOW + 100000, "t2");   /* auth retry, new token */
+
+    ehem_json_free(root);
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* A NULL-scope request through the shared path sends no Authorization and does
+ * not auth-retry on 401 (it maps straight through). */
+static void test_unscoped_no_bearer_no_retry(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 401,
+                     "{\"error\":\"nope\"}"), 0);
+
+    ehem_ctx *ctx = ctx_with(fake, NULL);
+    /* No login at all: a NULL-scope request never touches the auth layer. */
+    ehem_json *root = NULL;
+    assert_int_equal(ehem_proto_request_json(ctx, EHEM_HTTP_GET, "/api/system/status",
+                                             NULL, NULL, EHEM_TLS_REQ_DEFAULT, &root),
+                     EHEM_ERR_AUTH_FAILED);   /* 401 mapped, no retry */
+    assert_null(root);
+    assert_int_equal((int)fake_transport_request_count(fake), 1);
+    assert_null(fake_transport_request_header(fake, 0, "Authorization"));
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -576,6 +837,13 @@ int main(void)
         cmocka_unit_test(test_logout_drops_cache),
         cmocka_unit_test(test_relogin_resets_cache),
         cmocka_unit_test(test_arg_validation),
+        /* REQ-AUTH-003: authenticated request path. */
+        cmocka_unit_test(test_scoped_request_sends_bearer),
+        cmocka_unit_test(test_scoped_401_reacquire_then_failed),
+        cmocka_unit_test(test_scoped_401_reacquire_then_success),
+        cmocka_unit_test(test_scoped_403_scope_denied),
+        cmocka_unit_test(test_auth_and_checkin_compose_once_each),
+        cmocka_unit_test(test_unscoped_no_bearer_no_retry),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

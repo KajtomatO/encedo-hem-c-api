@@ -145,7 +145,7 @@ ehem_rc ehem_system_status(ehem_ctx *ctx, ehem_status_info **out)
     ehem_ctx_clear_error(ctx);
 
     rc = ehem_proto_request_json(ctx, EHEM_HTTP_GET, "/api/system/status",
-                                 NULL, EHEM_TLS_REQ_DEFAULT, &root);
+                                 NULL, NULL, EHEM_TLS_REQ_DEFAULT, &root);
     if (rc != EHEM_OK) {
         return rc;
     }
@@ -236,7 +236,7 @@ ehem_rc ehem_system_version(ehem_ctx *ctx, ehem_version_info **out)
     ehem_ctx_clear_error(ctx);
 
     rc = ehem_proto_request_json(ctx, EHEM_HTTP_GET, "/api/system/version",
-                                 NULL, EHEM_TLS_REQ_DEFAULT, &root);
+                                 NULL, NULL, EHEM_TLS_REQ_DEFAULT, &root);
     if (rc != EHEM_OK) {
         return rc;
     }
@@ -305,9 +305,11 @@ ehem_rc ehem_checkin_run(ehem_ctx *ctx, int relax_device_tls,
     /* Recursion guard: nothing inside the flow may trigger auto-recovery. */
     ctx->in_checkin = true;
 
-    /* Leg 1: fetch the device's check-in challenge. */
+    /* Leg 1: fetch the device's check-in challenge. Unauthenticated (the
+     * check-in flow is precisely how a device with no valid session/clock gets
+     * bootstrapped), so scope is NULL. */
     rc = ehem_proto_request_raw(ctx, EHEM_HTTP_GET, "/api/system/checkin",
-                                NULL, dev_ov, &challenge);
+                                NULL, NULL, dev_ov, &challenge);
     if (rc != EHEM_OK) {
         goto done;
     }
@@ -315,14 +317,14 @@ ehem_rc ehem_checkin_run(ehem_ctx *ctx, int relax_device_tls,
     /* Leg 2: relay the challenge VERBATIM to the Encedo cloud. Always fully
      * TLS-verified — this response is the trust anchor being delivered. */
     rc = ehem_proto_request_raw(ctx, EHEM_HTTP_POST, ctx->checkin_url,
-                                challenge, EHEM_TLS_REQ_VERIFY, &verified);
+                                challenge, NULL, EHEM_TLS_REQ_VERIFY, &verified);
     if (rc != EHEM_OK) {
         goto done;
     }
 
     /* Leg 3: hand the cloud-verified data VERBATIM back to the device. */
     rc = ehem_proto_request_json(ctx, EHEM_HTTP_POST, "/api/system/checkin",
-                                 verified, dev_ov, &root);
+                                 verified, NULL, dev_ov, &root);
     if (rc != EHEM_OK) {
         goto done;
     }

@@ -64,6 +64,13 @@ device is actually needed.
       `no_auto_checkin` is set — mirrors REQ-NET-005 semantics (unit test).
 - [ ] All secret intermediates (KDF output/private key, shared secret,
       retained passphrase copies) are zeroized after use; ASan/LSan clean.
-- [ ] OPEN (M2 gate): live authenticated round-trip against the dev-machine
-      HEM; record the token's `sub` claim (U or M) and the accepted KDF in
-      this REQ, closing ARCHITECTURE §12 risk 2 with the corrected facts.
+- [x] RESOLVED (STEP-M2-040, 2026-07-16): live authenticated round-trip
+      against my.ence.do via the C SDK (tests/integration/test_auth_live.c)
+      succeeds — the device accepts the **PBKDF2-HMAC-SHA256** derivation and
+      returns a bearer with **`sub` = `U`** (User-key, i.e. the PBKDF2/UserKey
+      identity, NOT the Manager/Argon2 `M`). The requested scope is echoed
+      verbatim in the token's `scope` claim (verified for keymgmt:list /
+      keymgmt:gen / system:config). This confirms the §5 KDF decision and
+      closes ARCHITECTURE §12 risk 2: the dev device is UserKey/PBKDF2-init,
+      Argon2 stays deferred (M2 ships PBKDF2 only). §12 risk 2 text update
+      folded in at the M2 gate (STEP-M2-070).

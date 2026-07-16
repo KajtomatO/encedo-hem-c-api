@@ -7,7 +7,8 @@ traces:
   architecture: ["ARCHITECTURE.md#5-auth--session"]
 depends_on: ["STEP-M2-020"]
 evidence:
-  commits: []   # implemented in the working tree; awaiting the user's commit
+  commits:
+    - "a0da701 — STEP-M2-030 login + token cache (proto_auth, public auth.h, options.no_credential_retention, test_auth)"
   tests:
     - "verifies: REQ-AUTH-001, REQ-AUTH-002 — tests/unit/test_auth.c (13 cases: full login GET→POST sequence with no Authorization on the challenge GET and the eJWT POST body byte-exact vs the python fixture; exp = min(now+lifetime, challenge.exp) incl. the challenge-capped case; POST 401 → EHEM_ERR_AUTH_FAILED with device payload; RTC-unset 403 → check-in → retry + no_auto_checkin opt-out; cache same-scope reuse, per-scope isolation, 60s-skew re-acquire, device-shortened exp honored; retention-off → AUTH_EXPIRED without network; logout drops cache; re-login resets cache; arg validation)"
   notes: |

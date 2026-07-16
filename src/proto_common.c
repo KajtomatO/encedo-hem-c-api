@@ -1,10 +1,10 @@
 /*
- * proto_common.c — shared request path for protocol bindings, including the
- * automatic expired-certificate recovery.
- *
- * implements: REQ-NET-005, REQ-API-003 (HTTP→rc mapping)
+ * proto_common.c — shared request path for protocol bindings: bearer injection
+ * (REQ-AUTH-003), the automatic expired-certificate recovery (REQ-NET-005), and
+ * the HTTP→rc mapping (REQ-API-003).
  */
 #include "proto_common.h"
+#include "proto_auth.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,14 +24,27 @@ ehem_rc ehem_proto_map_http_status(long status)
     }
 }
 
-/* One transport send with the request assembled from ctx + args. */
+/* Build an "Authorization: Bearer <token>" header value (heap, caller frees). */
+static char *make_bearer(const char *token)
+{
+    size_t n = strlen(token);
+    char *v = malloc(7 + n + 1);   /* "Bearer " is 7 chars */
+    if (v != NULL) {
+        memcpy(v, "Bearer ", 7);
+        memcpy(v + 7, token, n + 1);
+    }
+    return v;
+}
+
+/* One transport send with the request assembled from ctx + args. `bearer`, when
+ * non-NULL, is the full "Bearer <token>" Authorization value. */
 static ehem_rc do_send(ehem_ctx *ctx, const ehem_transport *t,
                        ehem_http_method method, const char *path,
-                       const char *json_body,
+                       const char *json_body, const char *bearer,
                        ehem_tls_req_override tls_override,
                        int fresh_connection, ehem_response *resp)
 {
-    ehem_header headers[2];
+    ehem_header headers[3];
     size_t header_count = 0;
     ehem_request req;
 
@@ -41,6 +54,11 @@ static ehem_rc do_send(ehem_ctx *ctx, const ehem_transport *t,
     if (json_body != NULL) {
         headers[header_count].name  = "Content-Type";
         headers[header_count].value = "application/json";
+        header_count++;
+    }
+    if (bearer != NULL) {
+        headers[header_count].name  = "Authorization";
+        headers[header_count].value = bearer;
         header_count++;
     }
 
@@ -62,31 +80,47 @@ static ehem_rc do_send(ehem_ctx *ctx, const ehem_transport *t,
 
 ehem_rc ehem_proto_request_raw(ehem_ctx *ctx, ehem_http_method method,
                                const char *path, const char *json_body,
+                               const char *scope,
                                ehem_tls_req_override tls_override,
                                char **body_out)
 {
     const ehem_transport *t = ehem_ctx_transport(ctx);
     ehem_response resp;
+    char *bearer = NULL;
     ehem_rc rc;
 
     if (t == NULL) {
         return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL, "no transport configured");
     }
 
-    rc = do_send(ctx, t, method, path, json_body, tls_override, 0, &resp);
+    /* Authenticated request (REQ-AUTH-003): acquire a bearer for the declared
+     * scope up front so it rides on every attempt (incl. a cert-recovery
+     * resend). A NULL scope is an unauthenticated binding / the login itself. */
+    if (scope != NULL) {
+        const char *token = NULL;
+        rc = ehem_auth_ensure_token(ctx, scope, &token);
+        if (rc != EHEM_OK) {
+            return rc;   /* auth layer already recorded last-error */
+        }
+        bearer = make_bearer(token);
+        if (bearer == NULL) {
+            return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+        }
+    }
+
+    rc = do_send(ctx, t, method, path, json_body, bearer, tls_override, 0, &resp);
 
     /*
      * Automatic certificate recovery (REQ-NET-005): only when the failure is
      * classified as "peer certificate EXPIRED", recovery is enabled, and this
      * request is not itself part of a check-in (recursion guard). The check-in
      * refreshes the device certificate; the original request is then retried
-     * once on a fresh connection under the normal TLS posture.
+     * once on a fresh connection under the normal TLS posture (carrying the
+     * same bearer).
      */
     if (rc != EHEM_OK && ehem_transport_last_tls_expired(t) &&
         !ctx->no_auto_checkin && !ctx->in_checkin &&
         tls_override == EHEM_TLS_REQ_DEFAULT) {
-        /* The check-in reuses the transport, overwriting its last-error state:
-         * keep the original failure detail for reporting. */
         char orig_detail[256];
         ehem_rc orig_rc = rc;
         ehem_rc crc;
@@ -96,22 +130,18 @@ ehem_rc ehem_proto_request_raw(ehem_ctx *ctx, ehem_http_method method,
 
         crc = ehem_checkin_run(ctx, /*relax_device_tls=*/1, NULL);
         if (crc != EHEM_OK) {
-            /* Recovery failed: report the ORIGINAL error, noting the attempt.
-             * ehem_checkin_run already recorded its own detail; fold it in. */
+            free(bearer);
             return ehem_ctx_fail(ctx, orig_rc, 0, NULL,
                                  "%s: %s (automatic check-in recovery failed: %s)",
                                  path, orig_detail, ehem_last_error(ctx)->message);
         }
-        rc = do_send(ctx, t, method, path, json_body, tls_override,
+        rc = do_send(ctx, t, method, path, json_body, bearer, tls_override,
                      /*fresh_connection=*/1, &resp);
         if (rc == EHEM_OK) {
             /* The retry verified against the device: the refresh took effect. */
             ctx->cert_refreshed = true;
         } else if (ehem_transport_last_tls_expired(t)) {
-            /* Live-device finding (2026-07-15): the device can accept a
-             * certificate update (checkin status OK, newcrt present) yet keep
-             * serving the old certificate until its TLS server restarts. Say
-             * so instead of repeating the raw TLS error. */
+            free(bearer);
             return ehem_ctx_fail(ctx, orig_rc, 0, NULL,
                                  "%s: %s (check-in completed and the device "
                                  "accepted a certificate update, but it still "
@@ -122,9 +152,44 @@ ehem_rc ehem_proto_request_raw(ehem_ctx *ctx, ehem_http_method method,
     }
 
     if (rc != EHEM_OK) {
+        free(bearer);
         return ehem_ctx_fail(ctx, rc, 0, NULL, "%s: %s",
                              path, ehem_transport_last_detail(t));
     }
+
+    /*
+     * Sanctioned auth retry (REQ-AUTH-003): a 401 on an authenticated request
+     * means the device rejected the token we sent (typically invalidated
+     * server-side, e.g. after a reboot). Drop the cache entry, re-acquire once,
+     * and retry once — fresh connection, and WITHOUT re-running cert recovery,
+     * so it composes with (does not multiply) the REQ-NET-005 retry. A second
+     * 401 falls through to the mapping below → EHEM_ERR_AUTH_FAILED.
+     */
+    if (resp.status == 401 && scope != NULL) {
+        const char *token = NULL;
+        ehem_response_free(&resp);
+        free(bearer);
+        bearer = NULL;
+
+        ehem_auth_invalidate(ctx, scope);
+        rc = ehem_auth_ensure_token(ctx, scope, &token);
+        if (rc != EHEM_OK) {
+            return rc;
+        }
+        bearer = make_bearer(token);
+        if (bearer == NULL) {
+            return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+        }
+        rc = do_send(ctx, t, method, path, json_body, bearer, tls_override,
+                     /*fresh_connection=*/1, &resp);
+        if (rc != EHEM_OK) {
+            free(bearer);
+            return ehem_ctx_fail(ctx, rc, 0, NULL, "%s: %s",
+                                 path, ehem_transport_last_detail(t));
+        }
+    }
+
+    free(bearer);
 
     if (resp.status < 200 || resp.status >= 300) {
         rc = ehem_ctx_fail(ctx, ehem_proto_map_http_status(resp.status),
@@ -151,6 +216,7 @@ ehem_rc ehem_proto_request_raw(ehem_ctx *ctx, ehem_http_method method,
 
 ehem_rc ehem_proto_request_json(ehem_ctx *ctx, ehem_http_method method,
                                 const char *path, const char *json_body,
+                                const char *scope,
                                 ehem_tls_req_override tls_override,
                                 ehem_json **root_out)
 {
@@ -158,7 +224,8 @@ ehem_rc ehem_proto_request_json(ehem_ctx *ctx, ehem_http_method method,
     ehem_json *root;
     ehem_rc rc;
 
-    rc = ehem_proto_request_raw(ctx, method, path, json_body, tls_override, &body);
+    rc = ehem_proto_request_raw(ctx, method, path, json_body, scope,
+                                tls_override, &body);
     if (rc != EHEM_OK) {
         return rc;
     }

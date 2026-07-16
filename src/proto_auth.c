@@ -231,8 +231,10 @@ static char *build_auth_body(const char *ejwt)
  */
 static ehem_rc fetch_challenge(ehem_ctx *ctx, ehem_json **out)
 {
+    /* The login exchange is itself unauthenticated (scope NULL) — it is how a
+     * bearer is obtained in the first place. */
     ehem_rc rc = ehem_proto_request_json(ctx, EHEM_HTTP_GET, AUTH_TOKEN_PATH,
-                                         NULL, EHEM_TLS_REQ_DEFAULT, out);
+                                         NULL, NULL, EHEM_TLS_REQ_DEFAULT, out);
     if (rc == EHEM_OK) {
         return EHEM_OK;
     }
@@ -254,7 +256,7 @@ static ehem_rc fetch_challenge(ehem_ctx *ctx, ehem_json **out)
                                  checkin_detail);
         }
         rc = ehem_proto_request_json(ctx, EHEM_HTTP_GET, AUTH_TOKEN_PATH,
-                                     NULL, EHEM_TLS_REQ_DEFAULT, out);
+                                     NULL, NULL, EHEM_TLS_REQ_DEFAULT, out);
     }
     return rc;
 }
@@ -348,7 +350,7 @@ static ehem_rc acquire_token(ehem_ctx *ctx, struct ehem_auth *a,
     }
 
     rc = ehem_proto_request_json(ctx, EHEM_HTTP_POST, AUTH_TOKEN_PATH,
-                                 body, EHEM_TLS_REQ_DEFAULT, &result);
+                                 body, NULL, EHEM_TLS_REQ_DEFAULT, &result);
     ehem_zeroize(body, strlen(body));
     ehem_json_string_free(body);
     if (rc != EHEM_OK) {
@@ -418,6 +420,36 @@ ehem_rc ehem_auth_ensure_token(ehem_ctx *ctx, const char *scope,
                              "ehem_login()", scope);
     }
     return acquire_token(ctx, a, scope, now, token_out);
+}
+
+void ehem_auth_invalidate(ehem_ctx *ctx, const char *scope)
+{
+    struct ehem_auth *a;
+    struct token_entry *e, *prev;
+
+    if (ctx == NULL || ctx->auth == NULL) {
+        return;
+    }
+    a = ctx->auth;
+    if (scope == NULL) {
+        cache_clear(a);
+        return;
+    }
+    prev = NULL;
+    for (e = a->cache; e != NULL; prev = e, e = e->next) {
+        if (strcmp(e->scope, scope) == 0) {
+            if (prev == NULL) {
+                a->cache = e->next;
+            } else {
+                prev->next = e->next;
+            }
+            free(e->scope);
+            ehem_zeroize(e->token, strlen(e->token));
+            free(e->token);
+            free(e);
+            return;
+        }
+    }
 }
 
 /* -------------------------------------------------------------------------- */

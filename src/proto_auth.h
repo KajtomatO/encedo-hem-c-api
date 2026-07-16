@@ -35,6 +35,14 @@ ehem_rc ehem_auth_ensure_token(ehem_ctx *ctx, const char *scope,
                                const char **token_out);
 
 /*
+ * Drop the cached token for `scope` (all scopes when `scope` is NULL), scrubbing
+ * it. Used by the authenticated request path (REQ-AUTH-003) when the device
+ * rejects a token with 401: the next ehem_auth_ensure_token then re-acquires.
+ * NULL-safe on ctx / an unlogged-in context (no-op).
+ */
+void ehem_auth_invalidate(ehem_ctx *ctx, const char *scope);
+
+/*
  * Scrub and free the session state behind `ctx->auth` (zeroizing the retained
  * passphrase and every cached token). NULL-safe. Used by ehem_logout() and
  * ehem_ctx_destroy(); after it returns the pointer must not be reused.
