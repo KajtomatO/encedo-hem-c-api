@@ -251,6 +251,106 @@ EHEM_API ehem_rc ehem_key_get(ehem_ctx *ctx, const char *kid,
 /* Release a key-details struct from ehem_key_get(). NULL is a no-op. */
 EHEM_API void ehem_key_details_free(ehem_key_details *details);
 
+/* ==========================================================================
+ * Key-type classification (pure, client-side — no I/O, no allocation).
+ * implements: REQ-KEY-006
+ *
+ * The device reports a key's `type` in two shapes: a bare algorithm name
+ * ("ED25519" — the get/doc form) or a comma-separated flag set where role and
+ * mode tokens accompany the algorithm ("ATT,PKEY,ECDH,ExDSA,SECP256R1" — the
+ * list/search form on real devices). ehem_key_type_parse() decomposes either
+ * shape into typed metadata so a consumer can build its local length tables
+ * (PKCS#11 length queries) and attribute mappings without re-deriving the
+ * device's string vocabulary. Parsing is tolerant: unrecognized tokens are
+ * skipped (firmware may add flags), and a string with no recognizable
+ * algorithm token classifies as EHEM_KEY_FAMILY_UNKNOWN — never an error.
+ * ========================================================================== */
+
+/* Algorithm family, named after the device's own type vocabulary. */
+typedef enum ehem_key_family {
+    EHEM_KEY_FAMILY_UNKNOWN = 0,
+    /* NIST ECC (signing requires the ExDSA mode flag on the key) */
+    EHEM_KEY_FAMILY_SECP256R1,
+    EHEM_KEY_FAMILY_SECP384R1,
+    EHEM_KEY_FAMILY_SECP521R1,
+    EHEM_KEY_FAMILY_SECP256K1,
+    /* Edwards / Montgomery */
+    EHEM_KEY_FAMILY_ED25519,
+    EHEM_KEY_FAMILY_ED448,
+    EHEM_KEY_FAMILY_CURVE25519,     /* X25519, ECDH only */
+    EHEM_KEY_FAMILY_CURVE448,       /* X448, ECDH only */
+    /* Symmetric (no public material on the wire) */
+    EHEM_KEY_FAMILY_AES128,
+    EHEM_KEY_FAMILY_AES192,
+    EHEM_KEY_FAMILY_AES256,
+    EHEM_KEY_FAMILY_HMAC_SHA2_256,  /* device token "SHA2-256" */
+    EHEM_KEY_FAMILY_HMAC_SHA2_384,
+    EHEM_KEY_FAMILY_HMAC_SHA2_512,
+    EHEM_KEY_FAMILY_HMAC_SHA3_256,
+    EHEM_KEY_FAMILY_HMAC_SHA3_384,
+    EHEM_KEY_FAMILY_HMAC_SHA3_512,
+    /* Post-quantum */
+    EHEM_KEY_FAMILY_MLKEM512,
+    EHEM_KEY_FAMILY_MLKEM768,
+    EHEM_KEY_FAMILY_MLKEM1024,
+    EHEM_KEY_FAMILY_MLDSA44,
+    EHEM_KEY_FAMILY_MLDSA65,
+    EHEM_KEY_FAMILY_MLDSA87,
+    /* Generic DER blobs (material arrives in ehem_key_details.der) */
+    EHEM_KEY_FAMILY_CERT,           /* stored certificate */
+    EHEM_KEY_FAMILY_DER_PKEY        /* DER-wrapped private key */
+} ehem_key_family;
+
+/* Mode tokens (device role bits, authoritative for NIST-P ECC — a NIST key
+ * signs only when created with a mode containing ExDSA). For families whose
+ * capability is intrinsic (ED*, MLDSA*), the device may omit these tokens;
+ * use sig_max_len to test signability instead. */
+#define EHEM_KEY_MODE_EXDSA (1u << 0)
+#define EHEM_KEY_MODE_ECDH  (1u << 1)
+
+/* Role tokens observed in the flag-set form. */
+#define EHEM_KEY_ROLE_ATT         (1u << 0)  /* attestation key */
+#define EHEM_KEY_ROLE_PKEY        (1u << 1)  /* private-key material present */
+#define EHEM_KEY_ROLE_CERT        (1u << 2)  /* certificate */
+#define EHEM_KEY_ROLE_GENERIC_DER (1u << 3)  /* generic DER container */
+
+/*
+ * Typed view of one device type string. Sizes are wire-format facts:
+ *   - pubkey_len  : exact length of ehem_key_details.pubkey for this family
+ *                   (0 when the family exports none — symmetric — or when the
+ *                   material is variable-length DER — CERT / DER_PKEY);
+ *   - sig_max_len : maximum byte length of a signature produced with this
+ *                   family's native sign operation (0: the family cannot sign);
+ *   - sig_der     : nonzero when the signature is DER-encoded and therefore
+ *                   variable-length up to sig_max_len (NIST ECDSA); zero means
+ *                   fixed-size raw bytes (Ed25519 64, Ed448 114, ML-DSA).
+ * Fixed-size r‖s conversions (PKCS#11 CKM_ECDSA output) are the consumer's.
+ */
+typedef struct ehem_key_type_info {
+    ehem_key_family family;
+    unsigned        modes;        /* EHEM_KEY_MODE_* bits, tokens as sent */
+    unsigned        roles;        /* EHEM_KEY_ROLE_* bits, tokens as sent */
+    size_t          pubkey_len;
+    size_t          sig_max_len;
+    int             sig_der;
+} ehem_key_type_info;
+
+/*
+ * Classify a device `type` string (either shape) into *out. Pure function:
+ * no network, no allocation, safe to call per list entry. Returns EHEM_ERR_ARG
+ * only on a NULL argument; every parseable input — including an empty string
+ * or one with no recognized token — is EHEM_OK with family
+ * EHEM_KEY_FAMILY_UNKNOWN and whatever flags were recognized.
+ */
+EHEM_API ehem_rc ehem_key_type_parse(const char *type, ehem_key_type_info *out);
+
+/*
+ * Stable, static display name for a family — the device's own vocabulary
+ * ("SECP256R1", "ED25519", "CERT", …), "unknown" for EHEM_KEY_FAMILY_UNKNOWN
+ * or an out-of-range value. Never NULL; do not free.
+ */
+EHEM_API const char *ehem_key_family_str(ehem_key_family family);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

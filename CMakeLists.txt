@@ -79,6 +79,7 @@ set(EHEM_SOURCES
   src/proto_system.c
   src/proto_auth.c
   src/proto_keymgmt.c
+  src/keytype.c
   src/crypto_shim.c
   src/ejwt.c)
 
