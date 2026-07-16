@@ -57,4 +57,15 @@ void ehem_auth_destroy(struct ehem_auth *auth);
  */
 void ehem_auth_test_set_clock(int64_t (*fn)(void));
 
+/*
+ * Test-only override for the PBKDF2 iteration count (never exported; hidden
+ * visibility). When `iters` is non-zero the login derivation uses it instead of
+ * the pinned 600 000 rounds, so the cache / retry / bearer tests — which do not
+ * depend on the exact derived bytes — run fast (a 600 000-round PBKDF2 is ~0.5 s
+ * each, and the suite performs ~20 acquisitions). Pass 0 to restore the
+ * production value. The byte-exact fixture test keeps 600 000. Not thread-safe —
+ * unit-test use only.
+ */
+void ehem_auth_test_set_kdf_iters(uint32_t iters);
+
 #endif /* EHEM_PROTO_AUTH_H */

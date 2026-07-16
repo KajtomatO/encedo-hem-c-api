@@ -69,6 +69,19 @@ void ehem_auth_test_set_clock(int64_t (*fn)(void))
     g_now_fn = fn;
 }
 
+/* PBKDF2 iteration count, test-overridable. 0 → the pinned production value. */
+static uint32_t g_kdf_iters = 0;
+
+static uint32_t auth_kdf_iters(void)
+{
+    return (g_kdf_iters != 0) ? g_kdf_iters : (uint32_t)AUTH_PBKDF2_ITERS;
+}
+
+void ehem_auth_test_set_kdf_iters(uint32_t iters)
+{
+    g_kdf_iters = iters;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Small helpers                                                              */
 /* -------------------------------------------------------------------------- */
@@ -319,7 +332,7 @@ static ehem_rc acquire_token(ehem_ctx *ctx, struct ehem_auth *a,
     /* Derive: PBKDF2(passphrase, salt=eid) → seed → X25519 keypair → ECDH. */
     rc = ehem_kdf_pbkdf2_sha256((const uint8_t *)a->passphrase, a->passphrase_len,
                                 (const uint8_t *)eid, strlen(eid),
-                                AUTH_PBKDF2_ITERS, seed, sizeof seed);
+                                auth_kdf_iters(), seed, sizeof seed);
     if (rc == EHEM_OK) {
         rc = ehem_x25519_keypair_from_seed(seed, priv, user_pub);
     }

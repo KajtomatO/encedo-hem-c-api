@@ -58,12 +58,19 @@ static const char CI_OK[]        = "{\"status\":\"ok\",\"newcrt\":\"\"}";
 static int64_t g_now;
 static int64_t test_now_fn(void) { return g_now; }
 
-/* Pin the auth clock for this test. Every test calls this, so no test depends
- * on another's cleanup of the global seam. */
+/* Cheap PBKDF2 count for tests that don't check derived bytes: a 600k-round
+ * login KDF is ~0.5s, and this suite performs ~20 acquisitions. */
+#define FAST_KDF_ITERS 1000
+
+/* Per-test env setup: pin the auth clock and default to the cheap KDF count.
+ * Every test calls this at its top, so no test depends on another's cleanup of
+ * the global seams. The one byte-exact test overrides the KDF count back to the
+ * production value. */
 static void set_now(int64_t now)
 {
     g_now = now;
     ehem_auth_test_set_clock(test_now_fn);
+    ehem_auth_test_set_kdf_iters(FAST_KDF_ITERS);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -144,6 +151,9 @@ static void test_login_full_sequence(void **state)
 {
     (void)state;
     set_now(EJWT_FX_NOW);
+    /* This is the byte-exact check against the python fixture, so it must use
+     * the real 600 000-round KDF (the fixture was captured with it). */
+    ehem_auth_test_set_kdf_iters(600000);
 
     ehem_transport *fake = fake_transport_new();
     assert_non_null(fake);
