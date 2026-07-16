@@ -334,8 +334,9 @@ sequenceDiagram
 - Thin consumer of the public API only — doubles as living documentation
   and the manual integration driver.
 - Subcommands (grow with milestones): `hem-tool status` (MVP connection
-  test), `hem-tool checkin`, `hem-tool cert-install` (M2), and later
-  `hem-tool keys list` / `hem-tool keys rm`.
+  test), `hem-tool checkin`, `hem-tool cert-install` (M2), `hem-tool
+  keys list` / `hem-tool keys rm` (M3), and `hem-tool keys pub` /
+  `hem-tool sign` (M4, user decision 2026-07-16).
 - **`cert-install`** (REQ-TOOL-003): harvests the cloud certificate
   (REQ-SYS-006), skips if the device already serves it (leg-1 `csn` vs the
   harvested leaf serial, or the broker suppressing the chain), else
@@ -430,7 +431,10 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
 - **M4 — signing & scope tokens:** per-KID scope-token acquisition and
   cache (closes risk 3); public-key read; `sign` for ECDSA and Ed25519;
   key-type metadata exposed so consumers can build local length tables
-  (HEM-OP-2 upstream). **Gate:** signature produced via the SDK verifies
+  (HEM-OP-2 upstream). *Decomposition additions (user decision
+  2026-07-16):* `hem-tool keys pub` and `hem-tool sign` subcommands —
+  the signing path drivable by hand and living documentation for the
+  first OPS binding. **Gate:** signature produced via the SDK verifies
   locally with wolfCrypt.
 - **M5 — key generation & random:** `create`/generate for all key
   families (EC, EdDSA, X25519/448, AES, HMAC, ML-KEM, ML-DSA); hardware

@@ -2,9 +2,9 @@
 
 # Traceability matrix
 
-Generated: 2026-07-16 (M3 gate — the keymgmt bindings (REQ-KEY-001..005), the `keys` tool (REQ-TOOL-004..006), and EHEMTEST test hygiene (REQ-TEST-003) all verified live; STEP-M3-010..070 in done/. The goal.txt tool milestone was demonstrated live: `keys list` with `[PROTECTED]` marks, EHEMTEST create + `keys rm` removal, and `keys rm --all --dry-run` excluding protected keys from bulk removal).
+Generated: 2026-07-16 (M4 decomposition — four new REQs approved: the first OPS-area REQ (REQ-OPS-001 exdsa sign), the key-type classifier (REQ-KEY-006), and the user-requested tool subcommands (REQ-TOOL-007 keys pub, REQ-TOOL-008 sign); steps STEP-M4-010..060 created in `workplan/todo/`, placeholder STEP-M4-000 cancelled).
 
-Scan inputs: 38 REQ files (`requirements/`), 35 step files (27 in `workplan/done/`, 8 in `workplan/todo/`, of which 2 are cancelled placeholders — STEP-M2-000, STEP-M3-000 — excluded from coverage). Code tags (`implements: REQ-`) scanned across `src/`, `CMakeLists.txt`, `dev`, `tests/CMakeLists.txt`, and `.github/workflows/` (build/tool REQs are realized there, per §4.2 SETUP). Test tags (`verifies:`/`supports: REQ-`) scanned across `tests/`. Multi-line tag blocks are read to the end of the tag comment paragraph; `,` and `/` both separate IDs.
+Scan inputs: 42 REQ files (`requirements/`), 41 step files (27 in `workplan/done/`, 14 in `workplan/todo/`, of which 3 are cancelled placeholders — STEP-M2-000, STEP-M3-000, STEP-M4-000 — excluded from coverage). Code tags (`implements: REQ-`) scanned across `src/`, `CMakeLists.txt`, `dev`, `tests/CMakeLists.txt`, and `.github/workflows/` (build/tool REQs are realized there, per §4.2 SETUP). Test tags (`verifies:`/`supports: REQ-`) scanned across `tests/`. Multi-line tag blocks are read to the end of the tag comment paragraph; `,` and `/` both separate IDs.
 
 | REQ | Title | Status | Priority | Architecture | Steps | Code | Tests |
 |---|---|---|---|---|---|---|---|
@@ -12,11 +12,11 @@ Scan inputs: 38 REQ files (`requirements/`), 35 step files (27 in `workplan/done
 | REQ-API-002 | No mutable global state outside the context | verified | must | §4, §1 | M1-040 (done) | src/context.c:4, src/context.h:4 | tests/unit/test_context.c:5 |
 | REQ-API-003 | Single error enum distinguishing consumer-required conditions | verified | must | §4 | M1-040 (done) | src/context.c:4, src/proto_common.h:4 | tests/unit/test_transport_curl.c:5, tests/unit/test_system.c:5, tests/unit/test_context.c:5 |
 | REQ-API-004 | Retrievable last-error detail on the context | verified | must | §4 | M1-040 (done) | src/context.c:4, src/context.h:4 | tests/unit/test_context.c:5 |
-| REQ-API-005 | Library-allocated outputs freed by matching free functions | verified | must | §4 | M1-070 (done) | src/proto_system.c:5 | tests/unit/test_system.c:5 |
+| REQ-API-005 | Library-allocated outputs freed by matching free functions | verified | must | §4 | M1-070 (done) | src/proto_system.c:5, src/proto_keymgmt.c:7 | tests/unit/test_system.c:5 |
 | REQ-API-006 | Shared library exports only ehem_-prefixed symbols | verified | must | §4, §1 | M1-010 (done) | src/ehem.c:4 | tests/unit/test_version.c:7, tests/unit/check_exports.cmake:3 |
-| REQ-AUTH-001 | Passphrase login — credential derivation and eJWT token acquisition | verified | must | §5 | M2-010 (done), M2-020 (done), M2-030 (done), M2-045 (done) | src/proto_auth.c:5, src/proto_auth.h:4, src/ejwt.h:4, src/crypto_shim.c:4, src/crypto_shim.h:4, src/ejwt.c:4 | tests/integration/test_auth_live.c:5, tests/unit/test_ejwt.c:4, tests/unit/test_crypto.c:4, tests/unit/test_auth.c:5, tests/unit/check_public_headers.cmake:6 |
+| REQ-AUTH-001 | Passphrase login — credential derivation and eJWT token acquisition | verified | must | §5 | M2-010 (done), M2-020 (done), M2-030 (done), M2-045 (done) | src/proto_auth.c:5, src/proto_auth.h:4, src/ejwt.h:4, src/crypto_shim.c:4, src/crypto_shim.h:4, src/ejwt.c:4 | tests/integration/test_auth_live.c:5, tests/unit/test_ejwt.c:4, tests/unit/test_crypto.c:4, tests/unit/test_auth.c:5, tests/unit/check_public_headers.cmake:4 |
 | REQ-AUTH-002 | Scope-keyed token cache with silent refresh; logout and credential retention | verified | must | §5 | M2-030 (done), M2-045 (done) | src/proto_auth.c:5, src/proto_auth.h:4 | tests/integration/test_auth_live.c:5, tests/unit/test_auth.c:5 |
-| REQ-AUTH-003 | Authenticated request path — bearer injection and auth error mapping | verified | must | §5, §6, §7 | M2-040 (done) | src/proto_common.h:4 | tests/integration/test_auth_live.c:5, tests/unit/test_auth.c:5 |
+| REQ-AUTH-003 | Authenticated request path — bearer injection and auth error mapping | verified | must | §5, §6, §7 | M2-040 (done) | src/proto_common.h:4 | tests/integration/test_auth_live.c:5, tests/unit/test_auth.c:5, tests/unit/test_keymgmt.c:5 |
 | REQ-BUILD-001 | CMake build producing static and shared libraries on Linux and Windows (MinGW) | verified | must | §1, §10 | M1-010 (done) | CMakeLists.txt:2, tests/CMakeLists.txt:7 | tests/unit/test_version.c:7 |
 | REQ-BUILD-002 | CI builds and runs unit tests on Linux and Windows | implemented | must | §1 | M1-020 (done) | .github/workflows/ci.yml:2 | — |
 | REQ-BUILD-003 | JSON handled by vendored cJSON | verified | must | §1, §10 | M1-030 (done) | src/json.c:4, src/json.h:4 | tests/unit/test_json.c:4 |
@@ -26,11 +26,13 @@ Scan inputs: 38 REQ files (`requirements/`), 35 step files (27 in `workplan/done
 | REQ-KEY-003 | Binding for /api/keymgmt/get — public material and metadata by KID | verified | must | §6 | M3-040 (done) | src/proto_keymgmt.c:7 | tests/unit/test_keymgmt.c:5, tests/integration/test_keymgmt_get_live.c:4 |
 | REQ-KEY-004 | Binding for /api/keymgmt/delete — remove a key by KID | verified | must | §6 | M3-020 (done) | src/proto_keymgmt.c:7 | tests/unit/test_keymgmt.c:5, tests/integration/test_keymgmt_mutate_live.c:5 |
 | REQ-KEY-005 | Binding for /api/keymgmt/create — generate a key on the device | verified | must | §6 | M3-020 (done) | src/proto_keymgmt.c:7 | tests/unit/test_keymgmt.c:5, tests/integration/test_keymgmt_mutate_live.c:5 |
+| REQ-KEY-006 | Client-side key-type classifier — typed metadata from device type strings | approved | must | §4, §6 | M4-010 (todo) | — | — |
 | REQ-NET-001 | All network I/O behind an injectable transport vtable | verified | must | §7, §1 | M1-050 (done) | src/transport.h:5, src/transport.c:4 | tests/unit/test_transport.c:5, tests/support/fake_transport.c:4, tests/support/fake_transport.h:4 |
 | REQ-NET-002 | Default transport implemented with libcurl | verified | must | §7, §1 | M1-060 (done) | src/transport.h:134, src/transport_curl.c:4 | tests/unit/test_transport_curl.c:5, tests/unit/check_public_headers.cmake:4 |
 | REQ-NET-003 | Three TLS trust modes selectable per context | verified | must | §7, §12 | M1-060 (done) | src/transport_curl.c:4 | tests/unit/test_transport_curl.c:5 |
 | REQ-NET-004 | Separate connect and total-request timeouts | verified | must | §7 | M1-060 (done) | src/transport_curl.c:4 | tests/unit/test_transport_curl.c:5 |
 | REQ-NET-005 | Automatic certificate recovery via check-in on expired-cert failure | verified | must | §7, §12 | M1-110 (done) | src/proto_common.h:4 | tests/unit/test_checkin.c:5 |
+| REQ-OPS-001 | Binding for /api/crypto/exdsa/sign — ECDSA and EdDSA signatures by KID | approved | must | §6, §5 | M4-020 (todo), M4-030 (todo) | — | — |
 | REQ-SYS-001 | Binding for GET /api/system/status | verified | must | §6, §11 | M1-070 (done) | src/proto_system.c:5 | tests/integration/test_system_live.c:5, tests/unit/test_system.c:5 |
 | REQ-SYS-002 | Binding for GET /api/system/version | verified | must | §6, §11 | M1-070 (done) | src/proto_system.c:5 | tests/integration/test_system_live.c:5, tests/unit/test_system.c:5 |
 | REQ-SYS-003 | Binding for the /api/system/checkin handshake (device + cloud relay) | verified | must | §6, §7 | M1-110 (done) | src/proto_system.c:5 | tests/integration/test_checkin_live.c:5, tests/unit/test_checkin.c:5 |
@@ -46,14 +48,16 @@ Scan inputs: 38 REQ files (`requirements/`), 35 step files (27 in `workplan/done
 | REQ-TOOL-004 | hem-tool keys list — inventory with protected-key marking | verified | must | §8 | M3-050 (done) | src/tools/hem-tool/keys.c:4, src/tools/hem-tool/keys.h:4, src/tools/hem-tool/main.c:4 | tests/unit/test_keys.c:5 |
 | REQ-TOOL-005 | Protected-key classification policy (label-based) | verified | must | §8 | M3-050 (done) | src/tools/hem-tool/keys.c:4, src/tools/hem-tool/keys.h:4 | tests/unit/test_keys.c:5 |
 | REQ-TOOL-006 | hem-tool keys rm — removal with protected-key guard | verified | must | §8 | M3-060 (done) | src/tools/hem-tool/keys.c:4, src/tools/hem-tool/keys.h:4, src/tools/hem-tool/main.c:4 | tests/unit/test_keys.c:5, tests/integration/test_keys_rm_live.c:4 |
+| REQ-TOOL-007 | hem-tool keys pub — print a key's public material and typed metadata | approved | should | §8 | M4-040 (todo) | — | — |
+| REQ-TOOL-008 | hem-tool sign — produce a signature with a device key | approved | should | §8 | M4-050 (todo) | — | — |
 
 ## Coverage report
 
-Totals: 38 REQs — 34 verified, 4 implemented, 0 approved. M3 closed: REQ-KEY-001..005, REQ-TOOL-004..006, REQ-TEST-003 transitioned approved → verified at this gate (code tags present, tagged tests green on GCC + Clang, live integration green).
+Totals: 42 REQs — 34 verified, 4 implemented, 4 approved. M4 decomposed 2026-07-16: REQ-OPS-001 + REQ-KEY-006 (must) and REQ-TOOL-007 + REQ-TOOL-008 (should, user-requested tool subcommands) approved; steps STEP-M4-010..060 in `todo/`; placeholder STEP-M4-000 cancelled.
 
-- **Approved REQs with no code tag (unimplemented):** none. (All must-have REQs through M3 are implemented; M4–M9 have no REQs yet — those milestones carry coarse placeholder steps pending decomposition.)
+- **Approved REQs with no code tag (unimplemented):** REQ-KEY-006, REQ-OPS-001, REQ-TOOL-007, REQ-TOOL-008 — expected: M4 was decomposed today, implementation not started (STEP-M4-010..060 all in `todo/`). M5–M9 have no REQs yet — those milestones carry coarse placeholder steps pending decomposition.
 - **Code without a tagged passing test (unverified):** REQ-BUILD-002, REQ-BUILD-004, REQ-TOOL-001, REQ-TOOL-002. These are the tool/build REQs exercised manually or by running CI rather than by a `verifies:` unit test — TOOL-001/002 (status/checkin subcommands, driven live), BUILD-002 (CI, self-verifying on each run), BUILD-004 (`./dev`, a developer convenience). Their behavior is covered by the M1/M2/M3 live gates.
 - **Orphan tags (naming a nonexistent REQ):** none.
-- **Broken architecture anchors:** none (M3 REQs declare §6 / §8 / §9 anchors — all resolve).
-- **`done/` steps with empty `evidence.commits` (hygiene):** the M1 steps (STEP-M1-030..110, squashed `M1 complete` history) and STEP-M2-040/045/050 (commits f3f125f / 374ab55 / f99bb72, not yet backfilled). The M3 steps STEP-M3-010..070 have their commit SHAs recorded. Non-blocking — code/test evidence is present and green.
+- **Broken architecture anchors:** none (the M4 REQs declare §4 / §5 / §6 / §8 anchors — all resolve).
+- **`done/` steps with empty `evidence.commits` (hygiene):** the M1 steps (STEP-M1-030..110, squashed `M1 complete` history) and STEP-M2-040/045/050 (commits f3f125f / 374ab55 / f99bb72, known from the M2 gate but not yet backfilled into the step files). Non-blocking — code/test evidence is present and green.
 - **REQs in needs-reverify:** none.

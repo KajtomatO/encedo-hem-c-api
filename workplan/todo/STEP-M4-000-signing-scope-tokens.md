@@ -11,7 +11,7 @@ evidence:
   tests: []
   notes: null
 reopened: []
-cancelled: null
+cancelled: "M4 decomposed 2026-07-16 (§5.3) — replaced by STEP-M4-010..060"
 ---
 
 **Goal:** Milestone M4 per ARCHITECTURE.md §11: per-KID scope-token
