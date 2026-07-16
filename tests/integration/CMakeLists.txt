@@ -19,6 +19,17 @@ ehem_add_integration_test(test_keymgmt_mutate_live SOURCES test_keymgmt_mutate_l
 # REQ-KEY-002: live descr prefix search (hit + no-match) (public API only).
 ehem_add_integration_test(test_keymgmt_search_live SOURCES test_keymgmt_search_live.c)
 
+# REQ-KEY-003: live single-key get + a per-KID scope probe. Exception to the
+# public-API-only rule (like test_auth_live): the scope probe drives the INTERNAL
+# ehem_proto_request_json to try scopes the public binding never uses, so it links
+# the static lib + internal headers via ehem_test_support. Still `integration`.
+add_executable(test_keymgmt_get_live test_keymgmt_get_live.c)
+target_link_libraries(test_keymgmt_get_live PRIVATE ehem_test_support cmocka::cmocka)
+target_include_directories(test_keymgmt_get_live PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
+target_compile_options(test_keymgmt_get_live PRIVATE ${EHEM_WARNING_FLAGS})
+add_test(NAME test_keymgmt_get_live COMMAND test_keymgmt_get_live)
+set_tests_properties(test_keymgmt_get_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
+
 # REQ-AUTH-001/002/003: live authenticated token acquisition. Exception to the
 # public-API-only rule for integration tests — no public authenticated binding
 # exists until M2-050, so this drives the INTERNAL ehem_auth_ensure_token and

@@ -63,6 +63,38 @@ static bool opt_str(const ehem_json *obj, const char *key, char **dst)
     return (*dst != NULL);
 }
 
+/*
+ * Read an optional std-base64 string field and store its decoded bytes in *out
+ * (length in *out_len). Absent, empty, or undecodable → left NULL/0 (tolerant —
+ * an opaque blob the SDK does not interpret must not sink a whole parse).
+ * Returns false only on allocation failure.
+ */
+static bool decode_opt_b64(const ehem_json *obj, const char *key,
+                           uint8_t **out, size_t *out_len)
+{
+    const char *s;
+    size_t b64_len;
+    size_t n;
+    uint8_t *raw;
+
+    if (!ehem_json_get_string(obj, key, &s) || s[0] == '\0') {
+        return true;                  /* absent / empty */
+    }
+    b64_len = strlen(s);
+    raw = malloc(b64_len);            /* decoded is never larger than input */
+    if (raw == NULL) {
+        return false;
+    }
+    n = ehem_b64_std_decode(s, b64_len, raw, b64_len);
+    if (n == (size_t)-1) {
+        free(raw);                    /* undecodable — tolerated as absent */
+        return true;
+    }
+    *out = raw;
+    *out_len = n;
+    return true;
+}
+
 /* Release the contents of an entry (not the entry pointer itself). */
 static void entry_dispose(ehem_key_entry *e)
 {
@@ -107,20 +139,8 @@ static ehem_rc parse_entry(const ehem_json *obj, ehem_key_entry *e,
         goto oom;
     }
 
-    if (ehem_json_get_string(obj, "descr", &str) && str[0] != '\0') {
-        size_t b64_len = strlen(str);
-        uint8_t *raw = malloc(b64_len);   /* decoded is never larger than input */
-        size_t n;
-        if (raw == NULL) {
-            goto oom;
-        }
-        n = ehem_b64_std_decode(str, b64_len, raw, b64_len);
-        if (n == (size_t)-1) {
-            free(raw);                    /* undecodable — tolerated as absent */
-        } else {
-            e->descr = raw;
-            e->descr_len = n;
-        }
+    if (!decode_opt_b64(obj, "descr", &e->descr, &e->descr_len)) {
+        goto oom;
     }
 
     /* Optional timestamps (default 0 — the device always sends them in practice). */
@@ -345,6 +365,30 @@ static bool is_kid_hex(const char *s)
     return s[KID_HEX_LEN] == '\0';
 }
 
+/*
+ * Remap a device 406 ("not in repo") to EHEM_ERR_NOT_FOUND with a fresh message;
+ * any other rc passes through unchanged. The device payload is stack-copied
+ * first because ehem_ctx_fail frees the current err_payload before copying, so
+ * re-passing the live pointer would be a use-after-free. `what` names the op.
+ */
+static ehem_rc map_406_not_found(ehem_ctx *ctx, ehem_rc rc, const char *what)
+{
+    char payload[256];
+    const char *p;
+
+    if (rc != EHEM_ERR_DEVICE || ehem_last_error(ctx)->http_status != 406) {
+        return rc;
+    }
+    p = ehem_last_error(ctx)->device_payload;
+    payload[0] = '\0';
+    if (p != NULL) {
+        snprintf(payload, sizeof payload, "%s", p);
+    }
+    return ehem_ctx_fail(ctx, EHEM_ERR_NOT_FOUND, 406,
+                         payload[0] != '\0' ? payload : NULL,
+                         "%s: key not found", what);
+}
+
 /* Label policy (REQ-KEY-005): 1..31 printable-ASCII bytes. */
 static bool label_ok(const char *label)
 {
@@ -479,22 +523,9 @@ ehem_rc ehem_key_delete(ehem_ctx *ctx, const char *kid)
         return EHEM_OK;
     }
 
-    /* 406 = kid not in the repository → NOT_FOUND (REQ-KEY-004). Stack-copy the
-     * device payload first: ehem_ctx_fail frees the current err_payload before
-     * copying, so re-passing the live pointer would be a use-after-free. */
-    if (rc == EHEM_ERR_DEVICE && status == 406) {
-        char payload[256];
-        const char *p = ehem_last_error(ctx)->device_payload;
-        payload[0] = '\0';
-        if (p != NULL) {
-            snprintf(payload, sizeof payload, "%s", p);
-        }
-        return ehem_ctx_fail(ctx, EHEM_ERR_NOT_FOUND, 406,
-                             payload[0] != '\0' ? payload : NULL,
-                             "keymgmt/delete: key not found");
-    }
-
-    return rc;                      /* 401/403/transport/etc. already recorded */
+    /* 406 = kid not in the repository → NOT_FOUND (REQ-KEY-004); any other rc
+     * (401/403/transport/…) passes through, already recorded. */
+    return map_406_not_found(ctx, rc, "keymgmt/delete");
 }
 
 /* -------------------------------------------------------------------------- */
@@ -677,4 +708,89 @@ ehem_rc ehem_key_search_all(ehem_ctx *ctx, const uint8_t *pattern,
     free(descr);
     *out = acc;
     return EHEM_OK;
+}
+
+/* -------------------------------------------------------------------------- */
+/* get (single key by kid)                                                    */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * Parse a get response into caller-owned details. `type` is required; `updated`
+ * defaults to 0; at most one of pubkey/der is present (the device sets only the
+ * one that applies); `descr` optional. `label` is never sent by this endpoint.
+ */
+static ehem_rc parse_key_details(ehem_ctx *ctx, const ehem_json *root,
+                                 ehem_key_details **out)
+{
+    ehem_key_details *d = calloc(1, sizeof *d);
+    const char *type;
+
+    if (d == NULL) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    if (!ehem_json_get_string(root, "type", &type)) {
+        ehem_key_details_free(d);
+        return ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 200, NULL,
+                             "keymgmt/get: missing required field 'type'");
+    }
+    d->type = dup_str(type);
+    if (d->type == NULL) {
+        goto oom;
+    }
+    ehem_json_get_int64(root, "updated", &d->updated);
+    if (!decode_opt_b64(root, "pubkey", &d->pubkey, &d->pubkey_len) ||
+        !decode_opt_b64(root, "der", &d->der, &d->der_len) ||
+        !decode_opt_b64(root, "descr", &d->descr, &d->descr_len)) {
+        goto oom;
+    }
+
+    *out = d;
+    return EHEM_OK;
+
+oom:
+    ehem_key_details_free(d);
+    return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+}
+
+ehem_rc ehem_key_get(ehem_ctx *ctx, const char *kid, ehem_key_details **out)
+{
+    char path[64];
+    char scope[64];
+    ehem_json *root = NULL;
+    ehem_rc rc;
+
+    if (ctx == NULL || kid == NULL || out == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    *out = NULL;
+    ehem_ctx_clear_error(ctx);
+    if (!is_kid_hex(kid)) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                             "keymgmt/get: kid must be exactly 32 hex chars");
+    }
+
+    /* Exact per-key scope keymgmt:use:<kid> (device > doc — REQ-KEY-003). */
+    snprintf(path, sizeof path, "/api/keymgmt/get/%s", kid);
+    snprintf(scope, sizeof scope, "keymgmt:use:%s", kid);
+
+    rc = ehem_proto_request_json(ctx, EHEM_HTTP_GET, path, NULL, scope,
+                                 EHEM_TLS_REQ_DEFAULT, &root);
+    if (rc != EHEM_OK) {
+        return map_406_not_found(ctx, rc, "keymgmt/get");
+    }
+    rc = parse_key_details(ctx, root, out);
+    ehem_json_free(root);
+    return rc;
+}
+
+void ehem_key_details_free(ehem_key_details *details)
+{
+    if (details == NULL) {
+        return;
+    }
+    free(details->type);
+    free(details->pubkey);
+    free(details->der);
+    free(details->descr);
+    free(details);
 }

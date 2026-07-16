@@ -1053,6 +1053,252 @@ static void test_search_arg_guards(void **state)
 }
 
 /* -------------------------------------------------------------------------- */
+/* get (single key by kid)                                                    */
+/* -------------------------------------------------------------------------- */
+
+#define KID_A TEST_KID
+#define KID_B "aabbccddeeff00112233445566778899"
+
+/* Asymmetric shape: pubkey set, der absent; descr decoded; unknown field
+ * ignored; requests exact scope keymgmt:use:<kid>. "AQID"={1,2,3}, "BAUG"={4,5,6}. */
+static void test_get_asymmetric(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "kg");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"type\":\"ED25519\",\"pubkey\":\"AQID\",\"updated\":100,"
+        "\"descr\":\"BAUG\",\"junk\":\"x\"}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    ehem_key_details *d = NULL;
+    assert_int_equal(ehem_key_get(ctx, KID_A, &d), EHEM_OK);
+    assert_non_null(d);
+    assert_string_equal(d->type, "ED25519");
+    assert_int_equal((int)d->updated, 100);
+    assert_int_equal((int)d->pubkey_len, 3);
+    const uint8_t want_pub[] = {1, 2, 3};
+    assert_memory_equal(d->pubkey, want_pub, 3);
+    assert_null(d->der);
+    assert_int_equal((int)d->der_len, 0);
+    assert_int_equal((int)d->descr_len, 3);
+    const uint8_t want_descr[] = {4, 5, 6};
+    assert_memory_equal(d->descr, want_descr, 3);
+
+    const fake_captured_request *get = fake_transport_request(fake, 2);
+    assert_int_equal(get->method, EHEM_HTTP_GET);
+    assert_string_equal(get->path, "/api/keymgmt/get/" KID_A);
+    assert_non_null(fake_transport_request_header(fake, 2, "Authorization"));
+    assert_token_scope(fake, 1, "keymgmt:use:" KID_A);
+
+    ehem_key_details_free(d);
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* CERT shape: der set, pubkey absent, no descr. */
+static void test_get_cert(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "kgc");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"type\":\"CERT\",\"der\":\"AQID\",\"updated\":200}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    ehem_key_details *d = NULL;
+    assert_int_equal(ehem_key_get(ctx, KID_A, &d), EHEM_OK);
+    assert_string_equal(d->type, "CERT");
+    assert_null(d->pubkey);
+    assert_int_equal((int)d->der_len, 3);
+    assert_null(d->descr);
+
+    ehem_key_details_free(d);
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* DER_PKEY shape: der set. */
+static void test_get_der_pkey(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "kgd");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"type\":\"DER_PKEY\",\"der\":\"BAUG\",\"updated\":300}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    ehem_key_details *d = NULL;
+    assert_int_equal(ehem_key_get(ctx, KID_A, &d), EHEM_OK);
+    assert_string_equal(d->type, "DER_PKEY");
+    assert_null(d->pubkey);
+    assert_int_equal((int)d->der_len, 3);
+
+    ehem_key_details_free(d);
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* Symmetric shape: neither pubkey nor der — no material at all. */
+static void test_get_symmetric(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "kgs");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"type\":\"AES256\",\"updated\":400}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    ehem_key_details *d = NULL;
+    assert_int_equal(ehem_key_get(ctx, KID_A, &d), EHEM_OK);
+    assert_string_equal(d->type, "AES256");
+    assert_null(d->pubkey);
+    assert_null(d->der);
+    assert_null(d->descr);
+    assert_int_equal((int)d->updated, 400);
+
+    ehem_key_details_free(d);
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* Missing required 'type' → EHEM_ERR_PROTOCOL. */
+static void test_get_missing_type(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "kgm");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"pubkey\":\"AQID\",\"updated\":1}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    ehem_key_details *d = NULL;
+    assert_int_equal(ehem_key_get(ctx, KID_A, &d), EHEM_ERR_PROTOCOL);
+    assert_null(d);
+    assert_non_null(strstr(ehem_last_error(ctx)->message, "type"));
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* 406 (kid not found) → EHEM_ERR_NOT_FOUND. */
+static void test_get_406_not_found(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "kg6");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 406,
+        "{\"error\":\"not found\"}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    ehem_key_details *d = NULL;
+    assert_int_equal(ehem_key_get(ctx, KID_A, &d), EHEM_ERR_NOT_FOUND);
+    assert_null(d);
+    assert_int_equal(ehem_last_error(ctx)->http_status, 406);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* 403 (wrong scope) → EHEM_ERR_SCOPE_DENIED. */
+static void test_get_403_scope(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "kg3");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 403,
+        "{\"error\":\"forbidden\"}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    ehem_key_details *d = NULL;
+    assert_int_equal(ehem_key_get(ctx, KID_A, &d), EHEM_ERR_SCOPE_DENIED);
+    assert_int_equal(ehem_last_error(ctx)->http_status, 403);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* Per-kid scope cache: two kids → two token acquisitions; a repeat get of the
+ * first kid reuses its cached token (no re-login). */
+static void test_get_per_kid_scope_cache(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "ka");                                    /* req 0,1 (use:A) */
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"type\":\"ED25519\",\"pubkey\":\"AQID\",\"updated\":1}"), 0);   /* req 2 */
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"type\":\"ED25519\",\"pubkey\":\"AQID\",\"updated\":1}"), 0);   /* req 3 (A cached) */
+    push_login(fake, "kb");                                    /* req 4,5 (use:B) */
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"type\":\"AES256\",\"updated\":2}"), 0);            /* req 6 */
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    ehem_key_details *d = NULL;
+
+    assert_int_equal(ehem_key_get(ctx, KID_A, &d), EHEM_OK);   /* login + get */
+    ehem_key_details_free(d); d = NULL;
+    assert_int_equal(ehem_key_get(ctx, KID_A, &d), EHEM_OK);   /* cache hit → get only */
+    ehem_key_details_free(d); d = NULL;
+    assert_int_equal(ehem_key_get(ctx, KID_B, &d), EHEM_OK);   /* new scope → login + get */
+    ehem_key_details_free(d);
+
+    /* login(2)+getA(1)+getA(1)+login(2)+getB(1) = 7 */
+    assert_int_equal((int)fake_transport_request_count(fake), 7);
+    assert_token_scope(fake, 1, "keymgmt:use:" KID_A);
+    assert_token_scope(fake, 5, "keymgmt:use:" KID_B);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* Malformed kid → EHEM_ERR_ARG with no transport call; NULL guards. */
+static void test_get_arg_guards(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    ehem_key_details *d = NULL;
+
+    assert_int_equal(ehem_key_get(ctx, "short", &d), EHEM_ERR_ARG);
+    assert_int_equal(ehem_key_get(ctx, KID_A "0", &d), EHEM_ERR_ARG);   /* 33 chars */
+    assert_int_equal(ehem_key_get(NULL, KID_A, &d), EHEM_ERR_ARG);
+    assert_int_equal(ehem_key_get(ctx, NULL, &d), EHEM_ERR_ARG);
+    assert_int_equal(ehem_key_get(ctx, KID_A, NULL), EHEM_ERR_ARG);
+    assert_int_equal((int)fake_transport_request_count(fake), 0);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* -------------------------------------------------------------------------- */
 /* misc                                                                       */
 /* -------------------------------------------------------------------------- */
 
@@ -1076,6 +1322,7 @@ static void test_free_null_safe(void **state)
 {
     (void)state;
     ehem_key_page_free(NULL);
+    ehem_key_details_free(NULL);
 }
 
 int main(void)
@@ -1113,6 +1360,15 @@ int main(void)
         cmocka_unit_test(test_search_all_walk),
         cmocka_unit_test(test_search_all_no_match),
         cmocka_unit_test(test_search_arg_guards),
+        cmocka_unit_test(test_get_asymmetric),
+        cmocka_unit_test(test_get_cert),
+        cmocka_unit_test(test_get_der_pkey),
+        cmocka_unit_test(test_get_symmetric),
+        cmocka_unit_test(test_get_missing_type),
+        cmocka_unit_test(test_get_406_not_found),
+        cmocka_unit_test(test_get_403_scope),
+        cmocka_unit_test(test_get_per_kid_scope_cache),
+        cmocka_unit_test(test_get_arg_guards),
         cmocka_unit_test(test_arg_guards),
         cmocka_unit_test(test_free_null_safe),
     };

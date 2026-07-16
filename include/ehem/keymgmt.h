@@ -203,6 +203,54 @@ EHEM_API ehem_rc ehem_key_search_all(ehem_ctx *ctx,
                                      ehem_key_search_mode mode,
                                      ehem_key_page **out);
 
+/* ==========================================================================
+ * Single-key read (authenticated, per-key scope "keymgmt:use:<kid>").
+ * implements: REQ-KEY-003
+ * ========================================================================== */
+
+/*
+ * Public material + metadata for one key, as read by ehem_key_get(). `type` and
+ * `updated` are always set. At most ONE material field is populated, decoded
+ * from its base64 wire form:
+ *   - pubkey : asymmetric keys — the raw public key in the algorithm-native
+ *              encoding (e.g. 32 bytes for ED25519 / CURVE25519);
+ *   - der    : types "CERT" / "DER_PKEY" — the DER bytes;
+ *   - neither: symmetric keys (AES/HMAC) export no material.
+ * `descr` is optional (NULL/0 when the key has none). `label` is intentionally
+ * absent — the get endpoint never returns it (use list/search). All memory is
+ * owned by the struct and released by ehem_key_details_free().
+ */
+typedef struct ehem_key_details {
+    char    *type;        /* algorithm string as sent by the device */
+    int64_t  updated;     /* last-update time, unix seconds */
+
+    uint8_t *pubkey;      /* asymmetric public key bytes, or NULL */
+    size_t   pubkey_len;
+    uint8_t *der;         /* CERT / DER_PKEY DER bytes, or NULL */
+    size_t   der_len;
+
+    uint8_t *descr;       /* opaque blob (base64-decoded), or NULL */
+    size_t   descr_len;
+} ehem_key_details;
+
+/*
+ * Fetch one key's public material + metadata: GET /api/keymgmt/get/{kid}. `kid`
+ * is validated client-side (exactly 32 hex chars, else EHEM_ERR_ARG with no
+ * network I/O). The call authenticates with the EXACT per-key scope
+ * "keymgmt:use:<kid>" — on firmware v1.2.2 the documented prefix scopes
+ * keymgmt:get / keymgmt:gen were not accepted for this endpoint (device > doc);
+ * the scope-keyed token cache turns this into one cached token per key.
+ *
+ * On success writes *out (caller frees with ehem_key_details_free) and returns
+ * EHEM_OK. A key the device does not hold is HTTP 406 → EHEM_ERR_NOT_FOUND;
+ * 401/403 map per REQ-AUTH-003; a malformed body is EHEM_ERR_PROTOCOL.
+ */
+EHEM_API ehem_rc ehem_key_get(ehem_ctx *ctx, const char *kid,
+                              ehem_key_details **out);
+
+/* Release a key-details struct from ehem_key_get(). NULL is a no-op. */
+EHEM_API void ehem_key_details_free(ehem_key_details *details);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

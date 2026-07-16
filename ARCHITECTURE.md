@@ -474,7 +474,18 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
 3. **Per-KID scope-token encoding unknown** — HEM-SDK-3 expects per-KID
    scopes; the auth doc shows only a free-form `scope` claim. *Resolved
    by:* reading the crypto/keymgmt doc pages and device experiments
-   before M4.
+   before M4. **PARTIALLY RESOLVED (M3, STEP-M3-040, 2026-07-16):** the
+   per-KID scope is the exact claim `keymgmt:use:<kid-hex>`, and it is
+   accepted by `GET /api/keymgmt/get/{kid}` live. A live probe on fw
+   v1.2.2-DIAG additionally found that this endpoint **also accepts the
+   prefix scopes `keymgmt:get` and `keymgmt:gen`** (both returned 200) —
+   contradicting the python client's earlier OQ-16 ("only `keymgmt:use:<kid>`
+   worked"), and confirmed in the firmware source (`api_keymgmt.c`
+   `api_get_keymgmt_getkey` scope check accepts get-list / exact-use /
+   create). The SDK ships the exact `keymgmt:use:<kid>` scope (max firmware
+   compatibility; the REQ-KEY-003 decision), one cached token per KID.
+   Whether M4 crypto ops can share a broader scope (fewer tokens) is the
+   remaining open part, decided when signing lands.
 4. **Device TLS certificate model unknown** (self-signed? per-device CA?)
    — affects transport trust options and `hem-tool` UX. *Resolved by:*
    M1 gate against the real device plus the Python client's TLS handling.

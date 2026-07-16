@@ -42,17 +42,32 @@ risk 3 — record the live result there at implementation.
 the keymgmt group per the milestone definition, M4 builds signing on it.
 
 **Acceptance criteria:**
-- [ ] Parses all four documented response shapes (asymmetric / CERT /
+- [x] Parses all four documented response shapes (asymmetric / CERT /
       DER_PKEY / symmetric) into the struct with correct absent-field
       semantics; unknown fields ignored; `_free` NULL-safe; ASan/LSan
-      clean (fake-transport unit tests).
-- [ ] Requests exact scope `keymgmt:use:<kid>`; two gets of different kids
+      clean (fake-transport unit tests). — test_get_asymmetric / _cert /
+      _der_pkey / _symmetric / _missing_type (shared decode_opt_b64).
+- [x] Requests exact scope `keymgmt:use:<kid>`; two gets of different kids
       acquire two cache entries, a repeat get reuses its entry (unit test
-      asserting token-request count).
-- [ ] Malformed kid → `EHEM_ERR_ARG` without any transport call; 406 →
-      `EHEM_ERR_NOT_FOUND`; 403 → `EHEM_ERR_SCOPE_DENIED` (unit tests).
-- [ ] Live: get of a created `EHEMTEST` ED25519 key returns a 32-byte
-      pubkey and its descr (integration test).
-- [ ] OPEN (live probe): does current firmware accept the documented
+      asserting token-request count). — test_get_per_kid_scope_cache
+      (7 requests: login+get, cache-hit get, login+get; scopes decoded).
+- [x] Malformed kid → `EHEM_ERR_ARG` without any transport call; 406 →
+      `EHEM_ERR_NOT_FOUND`; 403 → `EHEM_ERR_SCOPE_DENIED` (unit tests). —
+      test_get_arg_guards, test_get_406_not_found, test_get_403_scope.
+- [x] Live: get of a created `EHEMTEST` ED25519 key returns a 32-byte
+      pubkey ~~and its descr~~ (integration test). — test_keymgmt_get_live:
+      returns type + **32-byte pubkey** + updated. **DEVICE > DOC:** fw
+      v1.2.2 does NOT return `descr` on get (the wire body is
+      `{type,pubkey,updated}`), even for a key that has one — `descr` is
+      retrievable via list/search only. Confirmed against firmware source
+      (`REPO_GetKey_byKID(...,0,...)` → descr_len 0). The binding decodes
+      descr if present, so it is future-proof.
+- [x] OPEN (live probe): does current firmware accept the documented
       `keymgmt:get` / `keymgmt:gen` scopes for this endpoint, or still only
-      `keymgmt:use:<kid>`? Record the observation here and in §12 risk 3.
+      `keymgmt:use:<kid>`? Record the observation here and in §12 risk 3. —
+      **BOTH `keymgmt:get` and `keymgmt:gen` are accepted** on fw
+      v1.2.2-DIAG (each returned 200 in the live probe), alongside the exact
+      `keymgmt:use:<kid>`; the python OQ-16 "only per-kid" is stale. Firmware
+      source `api_get_keymgmt_getkey` confirms the three-way scope check. The
+      SDK still ships `keymgmt:use:<kid>` (max compatibility); recorded in
+      ARCHITECTURE §12 risk 3.
