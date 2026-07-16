@@ -23,6 +23,9 @@ ehem_add_unit_test(test_checkin SOURCES test_checkin.c)
 # REQ-AUTH-001: crypto shim (PBKDF2 / HMAC-SHA256 / X25519) against RFC vectors.
 ehem_add_unit_test(test_crypto SOURCES test_crypto.c)
 
+# REQ-AUTH-001: base64/base64url codecs + eJWT builder vs the python fixture.
+ehem_add_unit_test(test_ejwt SOURCES test_ejwt.c)
+
 # REQ-NET-002 + REQ-AUTH-001: public headers must not reference libcurl/wolfSSL.
 add_test(NAME public_headers_dep_free
   COMMAND ${CMAKE_COMMAND}

@@ -87,4 +87,18 @@ bool ehem_json_get_int64 (const ehem_json *obj, const char *key, int64_t *out);
 bool ehem_json_get_double(const ehem_json *obj, const char *key, double *out);
 bool ehem_json_get_bool  (const ehem_json *obj, const char *key, bool *out);
 
+/* --- object builders ------------------------------------------------------ */
+/*
+ * Build a JSON object to serialize with ehem_json_print (compact, unformatted).
+ * Keys are emitted in INSERTION ORDER, which callers needing byte-exact output
+ * (e.g. the eJWT payload) rely on. The add_* helpers return false on a NULL
+ * argument or allocation failure. Free the object with ehem_json_free().
+ *
+ * add_int64 stores the value as a double (cJSON's number representation); it is
+ * exact for |val| < 2^53, which covers the unix timestamps it is used for.
+ */
+ehem_json *ehem_json_new_object(void);
+bool ehem_json_add_string(ehem_json *obj, const char *key, const char *val);
+bool ehem_json_add_int64 (ehem_json *obj, const char *key, int64_t val);
+
 #endif /* EHEM_JSON_H */

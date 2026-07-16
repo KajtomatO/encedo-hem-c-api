@@ -77,7 +77,8 @@ set(EHEM_SOURCES
   src/transport_curl.c
   src/proto_common.c
   src/proto_system.c
-  src/crypto_shim.c)
+  src/crypto_shim.c
+  src/ejwt.c)
 
 add_library(encedo-hem        SHARED ${EHEM_SOURCES} $<TARGET_OBJECTS:ehem-cjson>)
 add_library(encedo-hem-static STATIC ${EHEM_SOURCES} $<TARGET_OBJECTS:ehem-cjson>)

@@ -146,3 +146,24 @@ bool ehem_json_get_bool(const ehem_json *obj, const char *key, bool *out)
     }
     return true;
 }
+
+ehem_json *ehem_json_new_object(void)
+{
+    return cJSON_CreateObject();
+}
+
+bool ehem_json_add_string(ehem_json *obj, const char *key, const char *val)
+{
+    if (obj == NULL || key == NULL || val == NULL) {
+        return false;
+    }
+    return cJSON_AddStringToObject(obj, key, val) != NULL;
+}
+
+bool ehem_json_add_int64(ehem_json *obj, const char *key, int64_t val)
+{
+    if (obj == NULL || key == NULL) {
+        return false;
+    }
+    return cJSON_AddNumberToObject(obj, key, (double)val) != NULL;
+}
