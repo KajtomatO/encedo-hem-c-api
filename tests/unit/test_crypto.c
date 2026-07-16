@@ -13,6 +13,92 @@
 
 #include "crypto_shim.h"
 
+/* TEMPORARY DIAGNOSTIC (remove once the MinGW X25519 failure is root-caused):
+ * the shim collapses every wolfCrypt error to EHEM_ERR_PROTOCOL, so this dumps
+ * the wolfSSL version and the raw wc_curve25519_* return codes to stderr. It is
+ * printed from the (failing) X25519 test so ctest --output-on-failure shows it
+ * on the platform that fails. */
+#include <stdio.h>
+#include <wolfssl/options.h>
+#include <wolfssl/version.h>
+#include <wolfssl/wolfcrypt/curve25519.h>
+#include <wolfssl/wolfcrypt/random.h>
+
+static void dump_curve25519_diag(void)
+{
+    fprintf(stderr, "\n=== WOLFSSL X25519 DIAG ===\n");
+    fprintf(stderr, "version=%s hex=0x%08x sizeof(curve25519_key)=%zu CURVE25519_KEYSIZE=%d\n",
+            LIBWOLFSSL_VERSION_STRING, (unsigned)LIBWOLFSSL_VERSION_HEX,
+            sizeof(curve25519_key), CURVE25519_KEYSIZE);
+    fprintf(stderr, "build:"
+#ifdef HAVE_CURVE25519
+            " HAVE_CURVE25519"
+#endif
+#ifdef CURVE25519_SMALL
+            " CURVE25519_SMALL"
+#endif
+#ifdef WOLFSSL_SP_MATH
+            " WOLFSSL_SP_MATH"
+#endif
+#ifdef WOLFSSL_SP_MATH_ALL
+            " WOLFSSL_SP_MATH_ALL"
+#endif
+#ifdef WOLFSSL_SP_NO_256
+            " WOLFSSL_SP_NO_256"
+#endif
+#ifdef USE_FAST_MATH
+            " USE_FAST_MATH"
+#endif
+#ifdef FREESCALE_LTC_ECC
+            " FREESCALE_LTC_ECC"
+#endif
+#ifdef WOLFSSL_SMALL_STACK
+            " WOLFSSL_SMALL_STACK"
+#endif
+            "\n");
+
+    uint8_t priv[32], base[32] = {9}, pub[32], out[32];
+    memset(priv, 0, sizeof priv);
+    /* Alice's clamped scalar. */
+    static const uint8_t a[32] = {
+        0x70,0x07,0x6d,0x0a,0x73,0x18,0xa5,0x7d,0x3c,0x16,0xc1,0x72,0x51,0xb2,0x66,0x45,
+        0xdf,0x4c,0x2f,0x87,0xeb,0xc0,0x99,0x2a,0xb1,0x77,0xfb,0xa5,0x1d,0xb9,0x2c,0x6a};
+    memcpy(priv, a, 32);
+
+    curve25519_key k, p;
+    int ri  = wc_curve25519_init(&k);
+    int rip = wc_curve25519_init(&p);
+    int r_impriv = wc_curve25519_import_private_ex(priv, 32, &k, EC25519_LITTLE_ENDIAN);
+    int r_impub  = wc_curve25519_import_public_ex(base, 32, &p, EC25519_LITTLE_ENDIAN);
+    word32 ol = 32;
+    int r_shared = wc_curve25519_shared_secret_ex(&k, &p, out, &ol, EC25519_LITTLE_ENDIAN);
+    word32 pl = 32;
+    int r_exppub = wc_curve25519_export_public_ex(&k, pub, &pl, EC25519_LITTLE_ENDIAN);
+    int r_makepub = wc_curve25519_make_pub(32, pub, 32, priv);
+    wc_curve25519_free(&k);
+    wc_curve25519_free(&p);
+
+    WC_RNG rng;
+    int r_rng = wc_InitRng(&rng);
+    int r_makekey = -9999;
+    if (r_rng == 0) {
+        curve25519_key g;
+        if (wc_curve25519_init(&g) == 0) {
+            r_makekey = wc_curve25519_make_key(&rng, 32, &g);
+            wc_curve25519_free(&g);
+        }
+        wc_FreeRng(&rng);
+    }
+
+    fprintf(stderr,
+            "rc: init=%d/%d import_private=%d import_public=%d shared=%d(outlen=%u) "
+            "export_public=%d make_pub=%d | rng_init=%d make_key=%d\n",
+            ri, rip, r_impriv, r_impub, r_shared, (unsigned)ol,
+            r_exppub, r_makepub, r_rng, r_makekey);
+    fprintf(stderr, "=== END DIAG ===\n");
+    fflush(stderr);
+}
+
 /* Decode a hex string into `out` (out must hold strlen(hex)/2 bytes). */
 static size_t unhex(const char *hex, uint8_t *out)
 {
@@ -103,6 +189,7 @@ static void test_hmac_sha256(void **state)
 static void test_x25519_keypair(void **state)
 {
     (void)state;
+    dump_curve25519_diag();   /* TEMPORARY — see note at top of file */
     uint8_t seed[32], priv[32], pub[32];
 
     /* Alice. */
