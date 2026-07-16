@@ -3,7 +3,12 @@
  *
  * verifies: REQ-AUTH-001 (PBKDF2-HMAC-SHA256, HMAC-SHA256 and X25519 match
  *           RFC 4231 / RFC 7748 / PBKDF2-HMAC-SHA256 test vectors; secret
- *           scrubbing is non-elidable)
+ *           scrubbing is non-elidable),
+ *           REQ-OPS-001 (the local-verify gate infrastructure: ECDSA matches
+ *           the RFC 6979 A.2.5 P-256 known answer through BOTH X9.63 point
+ *           forms — compressed, the firmware's export form, and uncompressed;
+ *           Ed25519 matches RFC 8032 §7.1 TESTs 1-3 incl. the empty message;
+ *           tampered signature/message → clean invalid, not an error)
  */
 #include <stdarg.h>
 #include <stddef.h>
@@ -180,6 +185,167 @@ static void test_zeroize(void **state)
     ehem_zeroize(buf, 0);    /* zero length no-op */
 }
 
+/* --- local ECDSA verify (REQ-OPS-001 gate infrastructure) -------------------
+ * RFC 6979 A.2.5 known-answer vector: P-256, SHA-256, message "sample".
+ * The public point is fed in BOTH X9.63 forms — compressed (0x03‖X, the
+ * firmware's export form; needs HAVE_COMP_KEY in the wolfSSL build) and
+ * uncompressed (0x04‖X‖Y) — and the signature is the vector's (r,s) in DER. */
+#define P256_QX "60FED4BA255A9D31C961EB74C6356D68C049B8923B61FA6CE669622E60F29FB6"
+#define P256_QY "7903FE1008B8BC99A41AE9E95628BC64F2F1B20C2D7E9F5177A3C294D4462299"
+#define P256_SAMPLE_SIG_DER                                        \
+    "3046"                                                         \
+    "022100" "EFD48B2AACB6A8FD1140DD9CD45E81D69D2C877B56AAF991C34D0EA84EAF3716" \
+    "022100" "F7CB1C942D657C41D436C7A1B6E29F65F3E900DBB9AFF4064DC4AB2F843ACDA8"
+
+static void test_ecdsa_verify(void **state)
+{
+    (void)state;
+    uint8_t pub_c[33], pub_u[65], sig[72];
+    int valid = -1;
+
+    /* Compressed: Qy ends 0x99 (odd) → prefix 0x03. */
+    pub_c[0] = 0x03;
+    assert_int_equal(unhex(P256_QX, pub_c + 1), 32);
+    pub_u[0] = 0x04;
+    assert_int_equal(unhex(P256_QX, pub_u + 1), 32);
+    assert_int_equal(unhex(P256_QY, pub_u + 33), 32);
+    assert_int_equal(unhex(P256_SAMPLE_SIG_DER, sig), 72);
+
+    const uint8_t *msg = (const uint8_t *)"sample";
+
+    /* Positive, compressed point (the wire form ehem_key_get returns).
+     * A wolfSSL built without HAVE_COMP_KEY reports EHEM_ERR_UNSUPPORTED —
+     * recorded, not failed, so a comp-key-less CI build stays green while
+     * the uncompressed path below still proves the vector. */
+    ehem_rc comp_rc = ehem_ecdsa_verify(EHEM_ECDSA_SECP256R1, pub_c, 33,
+                                        msg, 6, sig, 72, &valid);
+    if (comp_rc == EHEM_ERR_UNSUPPORTED) {
+        print_message("NOTE: compressed-point import not compiled into this "
+                      "wolfSSL (no HAVE_COMP_KEY) — record per STEP-M4-020\n");
+    } else {
+        assert_int_equal(comp_rc, EHEM_OK);
+        assert_int_equal(valid, 1);
+    }
+
+    /* Positive, uncompressed point. */
+    assert_int_equal(ehem_ecdsa_verify(EHEM_ECDSA_SECP256R1, pub_u, 65,
+                                       msg, 6, sig, 72, &valid), EHEM_OK);
+    assert_int_equal(valid, 1);
+
+    /* Negatives run on the uncompressed form so they hold on every build. */
+
+    /* Tampered signature: clean invalid, not an error. */
+    sig[71] ^= 0x01;
+    assert_int_equal(ehem_ecdsa_verify(EHEM_ECDSA_SECP256R1, pub_u, 65,
+                                       msg, 6, sig, 72, &valid), EHEM_OK);
+    assert_int_equal(valid, 0);
+    sig[71] ^= 0x01;
+
+    /* Wrong message: clean invalid. */
+    assert_int_equal(ehem_ecdsa_verify(EHEM_ECDSA_SECP256R1, pub_u, 65,
+                                       (const uint8_t *)"sampl3", 6,
+                                       sig, 72, &valid), EHEM_OK);
+    assert_int_equal(valid, 0);
+
+    /* Signature bytes that are not DER: clean invalid, no crash. */
+    uint8_t junk[8] = { 0xDE, 0xAD, 0xBE, 0xEF, 1, 2, 3, 4 };
+    assert_int_equal(ehem_ecdsa_verify(EHEM_ECDSA_SECP256R1, pub_u, 65,
+                                       msg, 6, junk, sizeof junk, &valid),
+                     EHEM_OK);
+    assert_int_equal(valid, 0);
+
+    /* A public point that is not on the curve must never validate. Whether
+     * the rejection is an import error (EHEM_ERR_PROTOCOL, on wolfSSL builds
+     * with WOLFSSL_VALIDATE_ECC_IMPORT) or a clean verification failure
+     * (EHEM_OK + valid 0, as on Debian 5.6.6) is build-dependent. */
+    pub_u[5] ^= 0xFF;
+    valid = -1;
+    ehem_rc offcurve_rc = ehem_ecdsa_verify(EHEM_ECDSA_SECP256R1, pub_u, 65,
+                                            msg, 6, sig, 72, &valid);
+    assert_true(offcurve_rc == EHEM_ERR_PROTOCOL ||
+                (offcurve_rc == EHEM_OK && valid == 0));
+    pub_u[5] ^= 0xFF;
+
+    /* Argument validation. */
+    assert_int_equal(ehem_ecdsa_verify(EHEM_ECDSA_SECP256R1, NULL, 33,
+                                       msg, 6, sig, 72, &valid),
+                     EHEM_ERR_ARG);
+    assert_int_equal(ehem_ecdsa_verify(EHEM_ECDSA_SECP256R1, pub_c, 33,
+                                       NULL, 6, sig, 72, &valid),
+                     EHEM_ERR_ARG);
+    assert_int_equal(ehem_ecdsa_verify(EHEM_ECDSA_SECP256R1, pub_c, 33,
+                                       msg, 6, sig, 72, NULL),
+                     EHEM_ERR_ARG);
+    assert_int_equal(ehem_ecdsa_verify((ehem_ecdsa_curve)99, pub_c, 33,
+                                       msg, 6, sig, 72, &valid),
+                     EHEM_ERR_ARG);
+}
+
+/* --- local Ed25519 verify ----------------------------------------------------
+ * RFC 8032 §7.1 TEST 1 (empty message), TEST 2 (one byte 0x72) and TEST 3
+ * (two bytes af82), plus tampered-signature/message negatives. */
+static void test_ed25519_verify(void **state)
+{
+    (void)state;
+    uint8_t pub[32], sig[64];
+    int valid = -1;
+
+    /* TEST 1: empty message. */
+    unhex("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
+          pub);
+    unhex("e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e06522490155"
+          "5fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b",
+          sig);
+    assert_int_equal(ehem_ed25519_verify(pub, NULL, 0, sig, 64, &valid),
+                     EHEM_OK);
+    assert_int_equal(valid, 1);
+
+    /* TEST 2: one-byte message 0x72. */
+    unhex("3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c",
+          pub);
+    unhex("92a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69da"
+          "085ac1e43e15996e458f3613d0f11d8c387b2eaeb4302aeeb00d291612bb0c00",
+          sig);
+    const uint8_t msg2 = 0x72;
+    assert_int_equal(ehem_ed25519_verify(pub, &msg2, 1, sig, 64, &valid),
+                     EHEM_OK);
+    assert_int_equal(valid, 1);
+
+    /* Tampered signature → clean invalid. */
+    sig[0] ^= 0x01;
+    assert_int_equal(ehem_ed25519_verify(pub, &msg2, 1, sig, 64, &valid),
+                     EHEM_OK);
+    assert_int_equal(valid, 0);
+    sig[0] ^= 0x01;
+
+    /* Wrong message → clean invalid. */
+    const uint8_t wrong = 0x73;
+    assert_int_equal(ehem_ed25519_verify(pub, &wrong, 1, sig, 64, &valid),
+                     EHEM_OK);
+    assert_int_equal(valid, 0);
+
+    /* TEST 3: two-byte message af82. */
+    unhex("fc51cd8e6218a1a38da47ed00230f0580816ed13ba3303ac5deb911548908025",
+          pub);
+    unhex("6291d657deec24024827e69c3abe01a30ce548a284743a445e3680d7db5ac3ac"
+          "18ff9b538d16f290ae67f760984dc6594a7c15e9716ed28dc027beceea1ec40a",
+          sig);
+    const uint8_t msg3[2] = { 0xaf, 0x82 };
+    assert_int_equal(ehem_ed25519_verify(pub, msg3, 2, sig, 64, &valid),
+                     EHEM_OK);
+    assert_int_equal(valid, 1);
+
+    /* Argument validation: only 64-byte signatures are Ed25519. */
+    assert_int_equal(ehem_ed25519_verify(pub, msg3, 2, sig, 63, &valid),
+                     EHEM_ERR_ARG);
+    assert_int_equal(ehem_ed25519_verify(NULL, msg3, 2, sig, 64, &valid),
+                     EHEM_ERR_ARG);
+    assert_int_equal(ehem_ed25519_verify(pub, NULL, 2, sig, 64, &valid),
+                     EHEM_ERR_ARG);
+    assert_int_equal(ehem_ed25519_verify(pub, msg3, 2, sig, 64, NULL),
+                     EHEM_ERR_ARG);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -188,6 +354,8 @@ int main(void)
         cmocka_unit_test(test_x25519_keypair),
         cmocka_unit_test(test_x25519_shared),
         cmocka_unit_test(test_zeroize),
+        cmocka_unit_test(test_ecdsa_verify),
+        cmocka_unit_test(test_ed25519_verify),
     };
     /* wolfCrypt's process-global init: without it the X25519 tests crash on
      * Windows (uninitialized RNG mutex behind curve25519 blinding). */

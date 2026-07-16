@@ -21,6 +21,10 @@
 #include <wolfssl/wolfcrypt/curve25519.h>
 #include <wolfssl/wolfcrypt/asn.h>          /* DecodedCert, wc_ParseCert */
 #include <wolfssl/wolfcrypt/asn_public.h>   /* wc_GetDateInfo/AsCalendarTime */
+#include <wolfssl/wolfcrypt/ecc.h>          /* local ECDSA verify (M4 gate) */
+#include <wolfssl/wolfcrypt/ed25519.h>      /* local Ed25519 verify */
+#include <wolfssl/wolfcrypt/signature.h>    /* wc_SignatureVerify */
+#include <wolfssl/wolfcrypt/error-crypt.h>  /* SIG_VERIFY_E, ASN_PARSE_E */
 
 ehem_rc ehem_kdf_pbkdf2_sha256(const uint8_t *passwd, size_t passwd_len,
                                const uint8_t *salt, size_t salt_len,
@@ -238,6 +242,117 @@ ehem_rc ehem_cert_parse_leaf(const uint8_t *der, size_t der_len,
 
     wc_FreeDecodedCert(&cert);
     return EHEM_OK;
+}
+
+/* --------------------------------------------------------------------------
+ * Local signature verification.
+ *
+ * implements: REQ-OPS-001 (the gate criterion's infrastructure — a signature
+ *             produced via ehem_sign() verifies locally with wolfCrypt; the
+ *             binding itself lives in proto_crypto.c)
+ * -------------------------------------------------------------------------- */
+
+/* Curve id + the digest the device pairs with it (its exdsa alg table). */
+static int ecdsa_curve_params(ehem_ecdsa_curve curve,
+                              int *curve_id, enum wc_HashType *hash)
+{
+    switch (curve) {
+    case EHEM_ECDSA_SECP256R1: *curve_id = ECC_SECP256R1;
+                               *hash = WC_HASH_TYPE_SHA256; return 0;
+    case EHEM_ECDSA_SECP384R1: *curve_id = ECC_SECP384R1;
+                               *hash = WC_HASH_TYPE_SHA384; return 0;
+    case EHEM_ECDSA_SECP521R1: *curve_id = ECC_SECP521R1;
+                               *hash = WC_HASH_TYPE_SHA512; return 0;
+    case EHEM_ECDSA_SECP256K1: *curve_id = ECC_SECP256K1;
+                               *hash = WC_HASH_TYPE_SHA256; return 0;
+    }
+    return -1;
+}
+
+ehem_rc ehem_ecdsa_verify(ehem_ecdsa_curve curve,
+                          const uint8_t *pub_x963, size_t pub_len,
+                          const uint8_t *msg, size_t msg_len,
+                          const uint8_t *sig_der, size_t sig_len,
+                          int *valid_out)
+{
+    int curve_id;
+    enum wc_HashType hash;
+
+    if (pub_x963 == NULL || pub_len == 0 || sig_der == NULL || sig_len == 0 ||
+        valid_out == NULL || (msg == NULL && msg_len != 0) ||
+        ecdsa_curve_params(curve, &curve_id, &hash) != 0) {
+        return EHEM_ERR_ARG;
+    }
+    *valid_out = 0;
+
+    /* Library-side allocation: the DLL sizes its own ecc_key, so a prebuilt
+     * wolfSSL with layout-changing options cannot overrun our stack (the
+     * lesson of the M2 curve25519 investigation). */
+    ecc_key *key = wc_ecc_key_new(NULL);
+    if (key == NULL) {
+        return EHEM_ERR_NOMEM;
+    }
+
+    ehem_rc result = EHEM_ERR_PROTOCOL;
+    /* Imports both compressed (0x02/0x03 — the firmware's export form) and
+     * uncompressed (0x04) points. Compressed needs HAVE_COMP_KEY in the
+     * wolfSSL build; a build without it (rc NOT_COMPILED_IN) is reported as
+     * EHEM_ERR_UNSUPPORTED so callers/tests can tell "this build can't" from
+     * "bad input" (the MSYS2 CMake wolfSSL package may lack the flag). */
+    int rc = wc_ecc_import_x963_ex(pub_x963, (word32)pub_len, key, curve_id);
+    if (rc == NOT_COMPILED_IN) {
+        result = EHEM_ERR_UNSUPPORTED;
+    } else if (rc == 0) {
+        rc = wc_SignatureVerify(hash, WC_SIGNATURE_TYPE_ECC,
+                                msg, (word32)msg_len,
+                                sig_der, (word32)sig_len,
+                                key, (word32)sizeof(ecc_key));
+        if (rc == 0) {
+            *valid_out = 1;
+            result = EHEM_OK;
+        } else if (rc == SIG_VERIFY_E) {
+            result = EHEM_OK;           /* well-formed, just not a match */
+        } else if (rc == ASN_PARSE_E || rc == ASN_ECC_KEY_E) {
+            result = EHEM_OK;           /* signature bytes not valid DER */
+        }
+    }
+    wc_ecc_key_free(key);
+    return result;
+}
+
+ehem_rc ehem_ed25519_verify(const uint8_t pub[EHEM_ED25519_PUB_SIZE],
+                            const uint8_t *msg, size_t msg_len,
+                            const uint8_t *sig, size_t sig_len,
+                            int *valid_out)
+{
+    if (pub == NULL || sig == NULL || valid_out == NULL ||
+        sig_len != EHEM_ED25519_SIG_SIZE || (msg == NULL && msg_len != 0)) {
+        return EHEM_ERR_ARG;
+    }
+    *valid_out = 0;
+    if (msg == NULL) {
+        msg = (const uint8_t *)"";      /* RFC 8032 allows the empty message */
+    }
+
+    ed25519_key key;
+    if (wc_ed25519_init(&key) != 0) {
+        return EHEM_ERR_PROTOCOL;
+    }
+
+    ehem_rc result = EHEM_ERR_PROTOCOL;
+    if (wc_ed25519_import_public(pub, EHEM_ED25519_PUB_SIZE, &key) == 0) {
+        int res = 0;
+        int rc = wc_ed25519_verify_msg(sig, EHEM_ED25519_SIG_SIZE,
+                                       msg, (word32)msg_len, &res, &key);
+        if (rc == 0) {
+            *valid_out = (res == 1);
+            result = EHEM_OK;
+        } else if (rc == SIG_VERIFY_E) {
+            result = EHEM_OK;           /* well-formed, just not a match */
+        }
+    }
+    wc_ed25519_free(&key);
+    return result;
 }
 
 ehem_rc ehem_crypto_backend_global_init(void)

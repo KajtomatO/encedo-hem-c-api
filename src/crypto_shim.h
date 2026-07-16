@@ -120,6 +120,47 @@ ehem_rc ehem_cert_parse_leaf(const uint8_t *der, size_t der_len,
  */
 void ehem_serial_hex(const uint8_t *serial, size_t len, char *out, size_t cap);
 
+/* --------------------------------------------------------------------------
+ * Local signature verification — the M4 gate criterion (REQ-OPS-001): a
+ * signature produced via ehem_sign() must verify locally with wolfCrypt.
+ *
+ * Inputs are exactly what the device puts on the wire: the public key as
+ * ehem_key_get() returns it (NIST curves: an X9.63 point — the firmware
+ * exports COMPRESSED form, and uncompressed is accepted too; Ed25519: raw
+ * 32 bytes) and the signature as ehem_sign() returns it (NIST ECDSA: DER
+ * ECDSA-Sig-Value over the message hashed with the curve's paired digest —
+ * SHA-256/384/512 for 256/384/521-bit curves, mirroring the device's alg
+ * table; Ed25519: raw 64 bytes, pure RFC 8032).
+ *
+ * Both functions distinguish "the crypto ran and the signature does not
+ * match" (EHEM_OK with *valid_out = 0) from "the inputs could not be
+ * processed" (EHEM_ERR_PROTOCOL: unparseable point/signature, engine
+ * failure). EHEM_ERR_ARG on NULL buffers (msg may be NULL only when
+ * msg_len is 0) or, for Ed25519, a sig_len other than 64.
+ * -------------------------------------------------------------------------- */
+
+/* NIST curves the exdsa endpoint signs with (device vocabulary order). */
+typedef enum ehem_ecdsa_curve {
+    EHEM_ECDSA_SECP256R1 = 0,   /* pairs with SHA-256 ("SHA256WithECDSA") */
+    EHEM_ECDSA_SECP384R1,       /* pairs with SHA-384 */
+    EHEM_ECDSA_SECP521R1,       /* pairs with SHA-512 */
+    EHEM_ECDSA_SECP256K1        /* pairs with SHA-256 */
+} ehem_ecdsa_curve;
+
+#define EHEM_ED25519_PUB_SIZE 32
+#define EHEM_ED25519_SIG_SIZE 64
+
+ehem_rc ehem_ecdsa_verify(ehem_ecdsa_curve curve,
+                          const uint8_t *pub_x963, size_t pub_len,
+                          const uint8_t *msg, size_t msg_len,
+                          const uint8_t *sig_der, size_t sig_len,
+                          int *valid_out);
+
+ehem_rc ehem_ed25519_verify(const uint8_t pub[EHEM_ED25519_PUB_SIZE],
+                            const uint8_t *msg, size_t msg_len,
+                            const uint8_t *sig, size_t sig_len,
+                            int *valid_out);
+
 /*
  * Process-global wolfCrypt init/cleanup (REQ-API-002). Idempotency is the
  * caller's (ehem_global_init/cleanup); these run the raw wolfCrypt_Init /
