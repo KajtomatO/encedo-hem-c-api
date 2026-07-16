@@ -67,6 +67,22 @@ exactly as above:
 cmake -B build -G Ninja && cmake --build build
 ```
 
+Or, to build **from an ordinary PowerShell prompt** (no MSYS2 shell needed),
+use the helper scripts — they run cmake/ctest inside the MinGW64 environment
+for you, so libcurl/wolfSSL are found:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\build-windows.ps1   # configure + build
+powershell -ExecutionPolicy Bypass -File scripts\test-windows.ps1    # ctest -L unit
+```
+
+A plain `cmake -B build` from PowerShell often picks up an unrelated
+cmake/gcc on `PATH` (e.g. Strawberry Perl's), which has no libcurl and fails
+with `Could NOT find CURL`. `build-windows.ps1` avoids that, and wipes a build
+directory that was accidentally configured with the wrong compiler. Both take
+`-BuildDir`, `-MsysRoot`, and `-Env` (mingw64|ucrt64); `test-windows.ps1` takes
+`-Label unit|integration|disruptive`. Pass `-?` for full help.
+
 ### Cross-compiling for Windows from Linux
 
 ```bash

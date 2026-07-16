@@ -200,5 +200,12 @@ int main(void)
         cmocka_unit_test(test_ejwt_matches_python_fixture),
         cmocka_unit_test(test_ejwt_exp_and_args),
     };
-    return cmocka_run_group_tests(tests, NULL, NULL);
+    /* wolfCrypt's process-global init: without it the X25519-based fixture
+     * test crashes on Windows (uninitialized RNG mutex behind blinding). */
+    if (ehem_global_init() != EHEM_OK) {
+        return 1;
+    }
+    int failed = cmocka_run_group_tests(tests, NULL, NULL);
+    ehem_global_cleanup();
+    return failed;
 }

@@ -296,6 +296,16 @@ static ehem_rc acquire_token(ehem_ctx *ctx, struct ehem_auth *a,
     struct token_entry *entry;
     ehem_rc rc;
 
+    /* The derivation below needs wolfCrypt's process-global init (the RNG
+     * behind X25519 blinding). The default transport factory already runs
+     * ehem_global_init(), but a caller-supplied transport reaches this point
+     * without it; idempotent, so effectively free after the first call. */
+    rc = ehem_global_init();
+    if (rc != EHEM_OK) {
+        return ehem_ctx_fail(ctx, rc, 0, NULL,
+                             AUTH_TOKEN_PATH ": process-global init failed");
+    }
+
     rc = fetch_challenge(ctx, &challenge);
     if (rc != EHEM_OK) {
         return rc;   /* last-error already recorded by the request path */

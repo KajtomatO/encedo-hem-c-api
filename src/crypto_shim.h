@@ -76,4 +76,18 @@ ehem_rc ehem_x25519_shared(const uint8_t priv[EHEM_X25519_KEYSIZE],
  */
 void ehem_zeroize(void *p, size_t n);
 
+/*
+ * Process-global wolfCrypt init/cleanup (REQ-API-002). Idempotency is the
+ * caller's (ehem_global_init/cleanup); these run the raw wolfCrypt_Init /
+ * wolfCrypt_Cleanup step, same contract as the transport backend pair.
+ *
+ * wolfCrypt_Init() is REQUIRED before any wolfCrypt call on platforms whose
+ * mutexes lack a static initializer (Windows CRITICAL_SECTION): the X25519
+ * path runs the wolfCrypt RNG (curve25519 blinding, default-on since wolfSSL
+ * 5.8.2), and locking its uninitialized global mutex crashes. pthread builds
+ * initialize those mutexes statically, which masks a missing init on Linux.
+ */
+ehem_rc ehem_crypto_backend_global_init(void);
+void ehem_crypto_backend_global_cleanup(void);
+
 #endif /* EHEM_CRYPTO_SHIM_H */
