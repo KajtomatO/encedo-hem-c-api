@@ -1,7 +1,7 @@
 ---
 id: REQ-OPS-001
 title: Binding for /api/crypto/exdsa/sign — ECDSA and EdDSA signatures by KID
-status: approved
+status: verified
 priority: must
 revision: 1
 source: ARCHITECTURE.md §6, §11 (M4), §12 risk 3; encedo-hem-api-doc crypto/exdsa-sign.md; encedo_firmware api_crypto.c api_post_crypto_exdsa_sign + crypto.c CRYPTO_Sign (fw v1.2.2); HEM-SDK-7 (sign), HEM-OP-1 (single-part); approved 2026-07-16

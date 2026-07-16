@@ -1,7 +1,7 @@
 ---
 id: REQ-TOOL-007
 title: hem-tool keys pub — print a key's public material and typed metadata
-status: approved
+status: verified
 priority: should
 revision: 1
 source: user decision 2026-07-16 (M4 decomposition: add hem-tool sign and keys pub); ARCHITECTURE.md §8 (thin consumer, subcommands grow with milestones); HEM-SDK-5 (public-key read, living documentation); approved 2026-07-16
@@ -40,16 +40,26 @@ way to grab a pubkey for local verification, and living documentation for
 gate demo can pipe device material straight into local tooling.
 
 **Acceptance criteria:**
-- [ ] Against the fake transport: an asymmetric fixture key prints type,
+- [x] Against the fake transport: an asymmetric fixture key prints type,
       classified family/modes, updated timestamp, and base64 material;
       `--hex` switches the encoding; `--raw` emits exactly the material
       bytes and nothing else (unit tests on the hem-tool-core function).
-- [ ] A CERT/DER_PKEY fixture prints its `der` material; a symmetric
+      — test_keys_pub: test_pub_asymmetric_b64 / _hex_and_flag_set /
+      _raw_bytes_only (raw = exactly 4 bytes, no newline).
+- [x] A CERT/DER_PKEY fixture prints its `der` material; a symmetric
       fixture prints metadata + "no public material", exit 0 (unit tests).
-- [ ] Malformed/missing kid or missing URL/passphrase → exit 2 with usage,
+      — test_pub_cert_der, test_pub_symmetric_no_material (incl. raw →
+      empty stdout, exit 0).
+- [x] Malformed/missing kid or missing URL/passphrase → exit 2 with usage,
       no I/O; key not found (device 406) → exit 1 with a message naming
       the kid; read-only — no request besides auth + get (unit tests
-      asserting the request sequence).
-- [ ] Live (M4 gate): `keys pub` of an `EHEMTEST` ED25519 key prints its
-      32-byte pubkey; `--raw` output feeds the local wolfCrypt verify in
-      the gate demo (manual/integration).
+      asserting the request sequence). — test_pub_usage_errors_no_io
+      (0 requests), test_pub_not_found, 3-request assert in
+      test_pub_asymmetric_b64.
+- [x] Live (M4 gate): `keys pub` of an `EHEMTEST` ED25519 key prints its
+      32-byte pubkey; `--raw` output feeds the local verify in the gate
+      demo (manual/integration). — M4 demo 2026-07-16: EHEMTEST ED25519 +
+      SECP256R1 keys; `keys pub --raw` → 32/33(compressed) bytes piped
+      into SPKI assembly and verified with OpenSSL against `hem-tool
+      sign` output (independent of the SDK's own shim); also exercised on
+      the device's CURVE25519 authenticator key and CERT chain (--hex).

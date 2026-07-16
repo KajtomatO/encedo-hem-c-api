@@ -488,8 +488,15 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
    `api_get_keymgmt_getkey` scope check accepts get-list / exact-use /
    create). The SDK ships the exact `keymgmt:use:<kid>` scope (max firmware
    compatibility; the REQ-KEY-003 decision), one cached token per KID.
-   Whether M4 crypto ops can share a broader scope (fewer tokens) is the
-   remaining open part, decided when signing lands.
+   **RESOLVED (M4, STEP-M4-030, 2026-07-16):** crypto operations can
+   **not** share a broader scope — `POST /api/crypto/exdsa/sign` matches
+   the scope with a plain `strcmp` against `keymgmt:use:<kid>` (firmware
+   `api_post_crypto_exdsa_sign`, api_crypto.c:456) and rejects `sub "M"`.
+   Live probe: a `keymgmt:get`-scoped token — accepted by the *get*
+   endpoint — is **403** for sign; get→sign on ONE cached
+   `keymgmt:use:<kid>` token is 200 (test_sign_live). The shipped design
+   stands: exact per-KID scope, one cached token per KID serving both
+   read (get) and use (sign); details in REQ-OPS-001.
 4. **Device TLS certificate model unknown** (self-signed? per-device CA?)
    — affects transport trust options and `hem-tool` UX. *Resolved by:*
    M1 gate against the real device plus the Python client's TLS handling.

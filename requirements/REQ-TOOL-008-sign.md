@@ -1,7 +1,7 @@
 ---
 id: REQ-TOOL-008
 title: hem-tool sign — produce a signature with a device key
-status: approved
+status: verified
 priority: should
 revision: 1
 source: user decision 2026-07-16 (M4 decomposition: add hem-tool sign and keys pub); ARCHITECTURE.md §8 (thin consumer, subcommands grow with milestones), §11 (M4 gate); HEM-SDK-7 (sign); approved 2026-07-16
@@ -47,18 +47,30 @@ verify). The default-alg lookup exists because a PKCS#11-less operator
 should not need to know the selector vocabulary for the common case.
 
 **Acceptance criteria:**
-- [ ] Against the fake transport: message from `--in` and from stdin
+- [x] Against the fake transport: message from `--in` and from stdin
       signs and prints base64; `--hex`/`--raw` switch the encoding;
       `--alg` given verbatim skips the metadata fetch (request-sequence
       assert); omitted `--alg` fetches type once and picks the documented
-      default per family (unit tests on the hem-tool-core function).
-- [ ] Default-alg on a non-signing family (fixture CURVE25519) → exit 1
-      naming the type, no sign request (unit test).
-- [ ] Empty or > 2048-byte message, unreadable `--in`, `--sigctx` > 255
+      default per family (unit tests on the hem-tool-core function). —
+      test_sign_tool: test_sign_explicit_alg_formats (3 requests, no get),
+      test_sign_default_alg_lookup (4 requests, Ed25519 +
+      SHA256WithECDSA defaults), test_sign_message_sources (binary-safe
+      --in incl. a NUL byte).
+- [x] Default-alg on a non-signing family (fixture CURVE25519) → exit 1
+      naming the type, no sign request (unit test). —
+      test_sign_non_signing_family.
+- [x] Empty or > 2048-byte message, unreadable `--in`, `--sigctx` > 255
       bytes, or missing kid/URL/passphrase → exit 2 with usage, no sign
       request; device 403 → exit 1 with the scope message; 406 → exit 1
-      (unit tests).
-- [ ] Live (M4 gate): `hem-tool sign` of a small file with an `EHEMTEST`
+      (unit tests). — test_sign_usage_errors (0 requests),
+      test_sign_device_errors.
+- [x] Live (M4 gate): `hem-tool sign` of a small file with an `EHEMTEST`
       ED25519 key and with an `EHEMTEST` SECP256R1 (ExDSA) key produces
-      signatures that verify locally with wolfCrypt against `keys pub`
-      material (manual/integration).
+      signatures that verify locally against `keys pub` material
+      (manual/integration). — M4 demo 2026-07-16: default-alg notes
+      printed ("using Ed25519/SHA256WithECDSA from key type"); 64-byte
+      raw + 72-byte DER signatures; BOTH verified with OpenSSL (pkeyutl
+      Ed25519 "Signature Verified Successfully"; dgst -sha256 "Verified
+      OK") against `keys pub --raw` material; cleanup via `keys rm
+      --label-prefix 'EHEMTEST tool demo' --yes` (2 deleted, protected
+      untouched).

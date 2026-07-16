@@ -1,7 +1,7 @@
 ---
 id: REQ-KEY-006
 title: Client-side key-type classifier — typed metadata from device type strings
-status: approved
+status: verified
 priority: must
 revision: 1
 source: ARCHITECTURE.md §11 (M4: "key-type metadata exposed so consumers can build local length tables"); HEM-OP-2, HEM-OBJ-5 (consumer mapping table); encedo-hem-api-doc keymgmt/list.md + get.md (type vocabulary); live my.ence.do fw v1.2.2-DIAG 2026-07-16 (flag-set form, STEP-M3-010); encedo_firmware api_keymgmt.c (per-family type emission); approved 2026-07-16
@@ -50,20 +50,31 @@ view on top. Signature sizes are wire-format sizes (DER for ECDSA per
 REQ-OPS-001) — fixed r‖s sizes after conversion are the consumer's table.
 
 **Acceptance criteria:**
-- [ ] Every documented bare algorithm name and all four live-observed
+- [x] Every documented bare algorithm name and all four live-observed
       flag-set strings classify to the correct family, modes, and roles
-      (unit tests, no fake transport needed).
-- [ ] Unknown tokens (e.g. a fabricated `NEWFLAG,ED25519`) are skipped:
+      (unit tests, no fake transport needed). — test_keytype
+      test_bare_names (25 names) + test_live_flag_sets. NEW live
+      observations (M4 tool demo, 2026-07-16): freshly created keys list
+      as `ATT,PKEY,ExDSA,ED25519` and `ATT,PKEY,ExDSA,SECP256R1` — the
+      ExDSA token appears on ED25519 too, and created keys carry ATT+PKEY;
+      both classified correctly with no parser change.
+- [x] Unknown tokens (e.g. a fabricated `NEWFLAG,ED25519`) are skipped:
       classification succeeds with the known tokens honored; a string with
       no algorithm token yields family unknown without error (unit tests).
-- [ ] Size/format metadata matches the wire reality for the asymmetric
+      — test_tolerant_parsing (incl. stray commas, GENERIC_DER order
+      independence, prefix-of-token rejection).
+- [x] Size/format metadata matches the wire reality for the asymmetric
       families: SECP256R1/384R1/521R1/256K1 → compressed-x963 pubkey
       (1+⌈bits/8⌉ bytes), DER signature with documented per-curve maximum;
       ED25519 → 32-byte pubkey, raw 64-byte signature; ED448 → 57-byte
       pubkey, raw 114-byte signature; CURVE25519/448 → 32/56-byte pubkey,
       no signature (unit tests against the constants; live cross-check at
-      the M4 gate for the families the dev device creates).
+      the M4 gate for the families the dev device creates). — test_keytype
+      constants; LIVE cross-check green (test_sign_live + M4 gate,
+      2026-07-16): ED25519 pubkey 32 == classifier 32, SECP256R1 pubkey
+      33 (compressed) == classifier 33, DER sig 71 ≤ max 72.
 - [ ] OPEN (live, expected at M5's per-family matrix): record the live
       flag-set strings for families not yet observed (AES, HMAC, ML-KEM,
       ML-DSA) here; the tolerant-parsing rule means recording them must
-      require no parser change beyond token additions.
+      require no parser change beyond token additions. — still open by
+      design at the M4 gate (those families are first created at M5).
