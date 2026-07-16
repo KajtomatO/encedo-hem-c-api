@@ -377,6 +377,7 @@ tests/
   support/             fake transport, fixtures, test vectors
 cmake/                 toolchain files (mingw), FetchContent pins
 .github/workflows/     ci.yml (linux, windows-mingw)
+dev                    developer assist script — build/test/env (not shipped)
 ```
 
 Code root `src/` and test root `tests/` match the defaults in

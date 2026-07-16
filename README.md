@@ -99,6 +99,30 @@ ctest --test-dir build -L unit --output-on-failure
   wipe). Run deliberately and attended, never in unattended CI; requires
   both the label and `EHEM_ALLOW_DISRUPTIVE=1`.
 
+## Developer workflow (`./dev`)
+
+`./dev` is an optional convenience wrapper over the same `cmake`/`ctest`
+invocations shown above (and in CI) — it is developer tooling only, never
+required: the plain commands keep working without it.
+
+```bash
+./dev build [--gcc|--clang|--both]   # configure + build (per-compiler build dirs)
+./dev test                           # unit suite (ctest -L unit)
+./dev test it [-d|--disruptive]      # integration (device); -d adds the disruptive label
+./dev test all [-d]                  # unit + integration (+ disruptive with -d)
+./dev test asan                      # ASan/LSan unit run (gcc)
+./dev check                          # export-symbol + public-header gates only
+./dev ci                             # mirror the CI matrix locally (gcc + clang)
+./dev tool status                    # run the built hem-tool with the device env loaded
+./dev install-dependencies [--yes]   # apt (Linux) / pacman (MSYS2)
+source <(./dev completions)          # bash tab-completion for the above
+```
+
+The default compiler is `gcc`; set `EHEM_DEV_CC=clang` to switch it. Commands
+that need the device (`test it`, `test all`, `tool`) use the `EHEM_*` variables
+when set, otherwise auto-source a git-ignored `./hem.env` (and say so on
+stderr). See `./dev help` for the full surface.
+
 ## Install
 
 ```bash

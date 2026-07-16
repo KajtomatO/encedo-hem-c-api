@@ -1,0 +1,372 @@
+#!/usr/bin/env bash
+#
+# dev — developer assist tool for encedo-hem-c-api.
+#
+# implements: REQ-BUILD-004
+#
+# A thin wrapper over the same cmake/ctest invocations CI uses (see
+# .github/workflows/ci.yml). It is developer tooling only: not installed, not
+# part of the SDK's public surface, and never required by CI or CMake — plain
+# `cmake -B build && cmake --build build && ctest --test-dir build -L unit`
+# keeps working without it (REQ-BUILD-004, last acceptance criterion).
+#
+# Usage:  ./dev help
+#
+# Per-compiler build directories (so gcc/clang caches never collide):
+#   gcc   -> build/         clang -> build-clang/        asan (gcc) -> build-asan/
+#
+# Device credentials (test it / test all / tool): the EHEM_* variables are used
+# when already set; otherwise ./hem.env (git-ignored) is auto-sourced with a
+# notice on stderr.
+
+set -euo pipefail
+
+PROG="dev"
+REPO="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+cd -- "$REPO"
+
+# Ninja when available (mirrors CI's `-G Ninja`); otherwise the default
+# generator (Make) so the tool still works on a bare toolchain.
+if command -v ninja >/dev/null 2>&1; then
+  GEN=(-G Ninja)
+else
+  GEN=()
+fi
+
+# --- output helpers -------------------------------------------------------
+log()  { printf '\033[1;34m==>\033[0m %s\n' "$*" >&2; }
+warn() { printf '\033[1;33m%s: warning:\033[0m %s\n' "$PROG" "$*" >&2; }
+die()  { printf '\033[1;31m%s: error:\033[0m %s\n' "$PROG" "$*" >&2; exit 1; }
+# Echo a command (to stderr) before running it, so runs are reproducible.
+run()  { printf '\033[1;30m+\033[0m %s\n' "$*" >&2; "$@"; }
+
+# --- compiler / build-dir plumbing ----------------------------------------
+active_cc() { printf '%s' "${EHEM_DEV_CC:-gcc}"; }
+
+build_dir_for() {
+  case "$1" in
+    gcc)   printf 'build' ;;
+    clang) printf 'build-clang' ;;
+    asan)  printf 'build-asan' ;;
+    *)     die "unknown compiler '$1' (use gcc|clang)" ;;
+  esac
+}
+
+# Realpath of the compiler a build dir was configured with (empty if unknown).
+cached_cc_realpath() {
+  local dir="$1" line path
+  [[ -f "$dir/CMakeCache.txt" ]] || return 0
+  line="$(grep -m1 '^CMAKE_C_COMPILER:' "$dir/CMakeCache.txt" 2>/dev/null || true)"
+  path="${line#*=}"
+  [[ -n "$path" ]] || return 0
+  readlink -f "$path" 2>/dev/null || printf '%s' "$path"
+}
+
+# ensure_configured <dir> <compiler> [extra -D args...]
+# Configures the build dir if needed. If it was configured for a *different*
+# compiler (comparing resolved realpaths, so cc==gcc), it is wiped and
+# reconfigured — CMake refuses an in-place compiler swap.
+ensure_configured() {
+  local dir="$1" cc="$2"; shift 2
+  local want have
+  want="$(command -v "$cc")" || die "compiler not found on PATH: $cc"
+  want="$(readlink -f "$want" 2>/dev/null || printf '%s' "$want")"
+  if [[ -f "$dir/CMakeCache.txt" ]]; then
+    have="$(cached_cc_realpath "$dir")"
+    if [[ -n "$have" && "$have" != "$want" ]]; then
+      warn "$dir was configured for $have; reconfiguring for $want"
+      rm -rf -- "$dir"
+    fi
+  fi
+  if [[ ! -f "$dir/CMakeCache.txt" ]]; then
+    run cmake -B "$dir" "${GEN[@]}" -DCMAKE_C_COMPILER="$cc" "$@" || return 1
+  fi
+}
+
+# configure_and_build <dir> <compiler> [extra -D args...]
+configure_and_build() {
+  local dir="$1" cc="$2"; shift 2
+  ensure_configured "$dir" "$cc" "$@" || return 1
+  run cmake --build "$dir" --parallel || return 1
+}
+
+# ctest_run <dir> <label> [extra ctest args...]
+# --no-tests=ignore so a label with no matching tests (e.g. `disruptive` before
+# its first test exists) never fails the set (STEP-M2-005 notes).
+ctest_run() {
+  local dir="$1" label="$2"; shift 2
+  run ctest --test-dir "$dir" -L "$label" --output-on-failure --no-tests=ignore "$@"
+}
+
+# --- device credentials ---------------------------------------------------
+# maybe_source_hem_env <primary-var>: if the var is already set, use the
+# environment as-is; else source ./hem.env (with a stderr notice); else warn.
+maybe_source_hem_env() {
+  local primary="$1"
+  if [[ -n "${!primary:-}" ]]; then
+    return 0
+  fi
+  if [[ -f "$REPO/hem.env" ]]; then
+    warn "$primary not in environment — sourcing ./hem.env for device credentials"
+    # shellcheck disable=SC1091
+    . "$REPO/hem.env"
+    return 0
+  fi
+  warn "no device credentials: set EHEM_TEST_URL/EHEM_TEST_PASSPHRASE (and EHEM_URL/EHEM_PASSPHRASE for 'tool'), or create ./hem.env"
+}
+
+# --- subcommands ----------------------------------------------------------
+cmd_build() {
+  local compilers=() default_cc
+  default_cc="$(active_cc)"
+  local a
+  for a in "$@"; do
+    case "$a" in
+      --gcc)      compilers=(gcc) ;;
+      --clang)    compilers=(clang) ;;
+      --both)     compilers=(gcc clang) ;;
+      -h|--help)  usage; return 0 ;;
+      *)          die "build: unknown option '$a' (--gcc|--clang|--both)" ;;
+    esac
+  done
+  [[ ${#compilers[@]} -eq 0 ]] && compilers=("$default_cc")
+  local cc
+  for cc in "${compilers[@]}"; do
+    log "build ($cc) -> $(build_dir_for "$cc")"
+    configure_and_build "$(build_dir_for "$cc")" "$cc"
+  done
+}
+
+cmd_clean() {
+  local all=0 a
+  for a in "$@"; do
+    case "$a" in
+      --all)      all=1 ;;
+      -h|--help)  usage; return 0 ;;
+      *)          die "clean: unknown option '$a' (--all)" ;;
+    esac
+  done
+  if [[ $all -eq 1 ]]; then
+    local d found=0
+    for d in build*/; do
+      [[ -d "$d" ]] || continue
+      found=1
+      run rm -rf -- "$d"
+    done
+    [[ $found -eq 0 ]] && log "clean --all: nothing to remove"
+  else
+    local dir; dir="$(build_dir_for "$(active_cc)")"
+    if [[ -d "$dir" ]]; then
+      run rm -rf -- "$dir"
+    else
+      log "clean: $dir does not exist"
+    fi
+  fi
+}
+
+cmd_test() {
+  local suite=ut disruptive=0
+  case "${1:-}" in
+    ut|it|all|asan) suite="$1"; shift ;;
+    ""|-d|--disruptive) suite=ut ;;
+    -h|--help)          usage; return 0 ;;
+    *) die "test: unknown suite '$1' (ut|it|all|asan)" ;;
+  esac
+  local a
+  for a in "$@"; do
+    case "$a" in
+      -d|--disruptive) disruptive=1 ;;
+      *) die "test $suite: unknown option '$a' (-d|--disruptive)" ;;
+    esac
+  done
+  if [[ $disruptive -eq 1 && "$suite" != it && "$suite" != all ]]; then
+    die "test: -d/--disruptive applies only to 'it' or 'all'"
+  fi
+
+  case "$suite" in
+    ut)
+      local cc dir; cc="$(active_cc)"; dir="$(build_dir_for "$cc")"
+      configure_and_build "$dir" "$cc"
+      ctest_run "$dir" unit
+      ;;
+    asan)
+      # GCC only — Clang's ASan runtime is absent on the dev machine (M1 finding).
+      log "asan unit run (gcc) -> build-asan"
+      configure_and_build build-asan gcc -DEHEM_SANITIZE=ON
+      ctest_run build-asan unit
+      ;;
+    it)
+      local cc dir; cc="$(active_cc)"; dir="$(build_dir_for "$cc")"
+      configure_and_build "$dir" "$cc"
+      maybe_source_hem_env EHEM_TEST_URL
+      ctest_run "$dir" integration
+      if [[ $disruptive -eq 1 ]]; then
+        EHEM_ALLOW_DISRUPTIVE=1 ctest_run "$dir" disruptive
+      fi
+      ;;
+    all)
+      local cc dir; cc="$(active_cc)"; dir="$(build_dir_for "$cc")"
+      configure_and_build "$dir" "$cc"
+      ctest_run "$dir" unit
+      maybe_source_hem_env EHEM_TEST_URL
+      ctest_run "$dir" integration
+      if [[ $disruptive -eq 1 ]]; then
+        EHEM_ALLOW_DISRUPTIVE=1 ctest_run "$dir" disruptive
+      fi
+      ;;
+  esac
+}
+
+cmd_check() {
+  [[ "${1:-}" =~ ^(-h|--help)$ ]] && { usage; return 0; }
+  local cc dir; cc="$(active_cc)"; dir="$(build_dir_for "$cc")"
+  configure_and_build "$dir" "$cc"
+  log "static gates: export-symbols + public-header checks"
+  run ctest --test-dir "$dir" -R '^(export_symbols|public_headers_curl_free)$' \
+      --output-on-failure
+}
+
+cmd_ci() {
+  local overall=0 cc
+  for cc in gcc clang; do
+    log "CI mirror: $cc (unit build + checks)"
+    if configure_and_build "$(build_dir_for "$cc")" "$cc" \
+       && ctest_run "$(build_dir_for "$cc")" unit; then
+      :
+    else
+      overall=1
+      warn "CI mirror: $cc leg FAILED"
+    fi
+  done
+  if [[ $overall -eq 0 ]]; then
+    log "CI mirror: all legs green"
+  fi
+  return $overall
+}
+
+cmd_tool() {
+  local cc dir; cc="$(active_cc)"; dir="$(build_dir_for "$cc")"
+  configure_and_build "$dir" "$cc"
+  maybe_source_hem_env EHEM_URL
+  local bin="$dir/hem-tool"
+  [[ -x "$bin" ]] || bin="$dir/hem-tool.exe"
+  [[ -x "$bin" ]] || die "hem-tool not found in $dir (built with EHEM_BUILD_TOOL=ON?)"
+  run "$bin" "$@"
+}
+
+cmd_install_dependencies() {
+  local yes=0 a
+  for a in "$@"; do
+    case "$a" in
+      --yes|-y)   yes=1 ;;
+      -h|--help)  usage; return 0 ;;
+      *)          die "install-dependencies: unknown option '$a' (--yes)" ;;
+    esac
+  done
+
+  # MSYS2 / MinGW (pacman): install the mingw-w64 toolset CI pins.
+  if [[ -n "${MSYSTEM:-}" ]] || [[ "$(uname -s 2>/dev/null || true)" == MINGW* || "$(uname -s 2>/dev/null || true)" == MSYS* ]]; then
+    command -v pacman >/dev/null 2>&1 || die "MSYS2 detected but pacman not found"
+    local pkgs=(
+      mingw-w64-x86_64-toolchain mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja
+      mingw-w64-x86_64-pkgconf mingw-w64-x86_64-curl mingw-w64-x86_64-cmocka
+    )
+    log "MSYS2/pacman packages: ${pkgs[*]}"
+    if [[ $yes -eq 1 ]]; then
+      run pacman -S --needed --noconfirm "${pkgs[@]}"
+    else
+      run pacman -S --needed "${pkgs[@]}"
+    fi
+    return
+  fi
+
+  # Linux: delegate to the project's own installer (apt/dnf/pacman/zypper).
+  local script="$REPO/scripts/install-deps-linux.sh"
+  [[ -x "$script" ]] || die "installer not found: $script"
+  if [[ $yes -eq 1 ]]; then
+    run "$script" --yes
+  else
+    run "$script"
+  fi
+}
+
+cmd_completions() {
+  cat <<'EOF'
+# bash completion for ./dev — source it:  source <(./dev completions)
+_dev_complete() {
+    local cur prev sub
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+    local subcommands="build clean test check ci tool install-dependencies completions help"
+
+    if [[ $COMP_CWORD -eq 1 ]]; then
+        COMPREPLY=( $(compgen -W "$subcommands" -- "$cur") )
+        return
+    fi
+
+    sub="${COMP_WORDS[1]}"
+    case "$sub" in
+        build)  COMPREPLY=( $(compgen -W "--gcc --clang --both" -- "$cur") ) ;;
+        clean)  COMPREPLY=( $(compgen -W "--all" -- "$cur") ) ;;
+        test)
+            if [[ $COMP_CWORD -eq 2 ]]; then
+                COMPREPLY=( $(compgen -W "ut it all asan" -- "$cur") )
+            else
+                COMPREPLY=( $(compgen -W "-d --disruptive" -- "$cur") )
+            fi
+            ;;
+        install-dependencies) COMPREPLY=( $(compgen -W "--yes" -- "$cur") ) ;;
+        *) COMPREPLY=() ;;
+    esac
+}
+complete -F _dev_complete dev ./dev
+EOF
+}
+
+usage() {
+  cat <<EOF
+$PROG — developer assist tool for encedo-hem-c-api
+
+Usage: ./dev <command> [options]
+
+Commands:
+  build [--gcc|--clang|--both]   configure (if needed) + build; default compiler
+                                 from \$EHEM_DEV_CC (gcc when unset)
+  clean [--all]                  remove the active build dir; --all removes all build*/
+  test [ut]                      unit suite only (ctest -L unit)
+  test it [-d|--disruptive]      integration suite; -d adds the disruptive label
+                                 and EHEM_ALLOW_DISRUPTIVE=1
+  test all [-d|--disruptive]     unit + integration (+ disruptive with -d)
+  test asan                      ASan/LSan unit run (gcc)
+  check                          static gates: export-symbols + public-header checks
+  ci                             mirror the CI matrix locally (gcc + clang unit builds)
+  tool <args...>                 run the built hem-tool with device env loaded
+  install-dependencies [--yes]   install build deps (apt on Linux / pacman on MSYS2)
+  completions                    print the bash completion script
+  help                           this message
+
+Environment:
+  EHEM_DEV_CC                    default compiler (gcc|clang); gcc when unset
+  EHEM_* / ./hem.env             device credentials for 'test it/all' and 'tool'
+EOF
+}
+
+# --- dispatch -------------------------------------------------------------
+main() {
+  local cmd="${1:-help}"
+  if [[ $# -gt 0 ]]; then shift; fi
+  case "$cmd" in
+    build)                cmd_build "$@" ;;
+    clean)                cmd_clean "$@" ;;
+    test)                 cmd_test "$@" ;;
+    check)                cmd_check "$@" ;;
+    ci)                   cmd_ci "$@" ;;
+    tool)                 cmd_tool "$@" ;;
+    install-dependencies) cmd_install_dependencies "$@" ;;
+    completions)          cmd_completions ;;
+    help|-h|--help)       usage ;;
+    *) die "unknown command '$cmd' (try: ./dev help)" ;;
+  esac
+}
+
+main "$@"
