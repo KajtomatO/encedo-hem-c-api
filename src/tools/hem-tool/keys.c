@@ -131,6 +131,159 @@ int hem_keys_list_run(ehem_ctx *ctx, const hem_keys_opts *o)
 }
 
 /* -------------------------------------------------------------------------- */
+/* keys pub (REQ-TOOL-007)                                                    */
+/* -------------------------------------------------------------------------- */
+
+/* keys.h tags the whole file; the pub-specific point is here.
+ * implements: REQ-TOOL-007 */
+
+/* True iff `s` is exactly 32 hex chars (a wire-format kid). Tool-side copy —
+ * hem-tool-core is public-API-only, so it cannot borrow the SDK's internal
+ * validator; the SDK re-validates anyway (defense in depth). */
+static bool kid_ok(const char *s)
+{
+    size_t i;
+    if (s == NULL) {
+        return false;
+    }
+    for (i = 0; i < 32; i++) {
+        char c = s[i];
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') ||
+              (c >= 'A' && c <= 'F'))) {
+            return false;
+        }
+    }
+    return s[32] == '\0';
+}
+
+/* Emit `raw` to `f` as padded std base64 (RFC 4648). Local, dependency-free —
+ * the public SDK API hands back decoded bytes and offers no encoder. */
+static void fprint_b64(FILE *f, const uint8_t *raw, size_t len)
+{
+    static const char T[] =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    size_t i;
+    for (i = 0; i + 2 < len; i += 3) {
+        uint32_t v = ((uint32_t)raw[i] << 16) | ((uint32_t)raw[i + 1] << 8) |
+                     raw[i + 2];
+        fprintf(f, "%c%c%c%c", T[(v >> 18) & 63], T[(v >> 12) & 63],
+                T[(v >> 6) & 63], T[v & 63]);
+    }
+    if (len - i == 1) {
+        uint32_t v = (uint32_t)raw[i] << 16;
+        fprintf(f, "%c%c==", T[(v >> 18) & 63], T[(v >> 12) & 63]);
+    } else if (len - i == 2) {
+        uint32_t v = ((uint32_t)raw[i] << 16) | ((uint32_t)raw[i + 1] << 8);
+        fprintf(f, "%c%c%c=", T[(v >> 18) & 63], T[(v >> 12) & 63],
+                T[(v >> 6) & 63]);
+    }
+}
+
+static void fprint_hex(FILE *f, const uint8_t *raw, size_t len)
+{
+    size_t i;
+    for (i = 0; i < len; i++) {
+        fprintf(f, "%02x", raw[i]);
+    }
+}
+
+int hem_keys_pub_run(ehem_ctx *ctx, const hem_keys_pub_opts *o)
+{
+    FILE *out = (o->out != NULL) ? o->out : stdout;
+    FILE *err = (o->err != NULL) ? o->err : stderr;
+    ehem_key_details *d = NULL;
+    ehem_key_type_info info;
+    const uint8_t *material;
+    size_t material_len;
+    const char *material_name;
+    ehem_rc rc;
+
+    if (o->passphrase == NULL) {
+        fprintf(err, "error: no passphrase — pass --passphrase or set "
+                     "EHEM_PASSPHRASE\n");
+        return HEM_KEYS_USAGE;
+    }
+    if (!kid_ok(o->kid)) {
+        fprintf(err, "error: 'keys pub' needs a key id "
+                     "(exactly 32 hex chars)\n");
+        return HEM_KEYS_USAGE;
+    }
+
+    rc = ehem_login(ctx, o->passphrase);
+    if (rc != EHEM_OK) {
+        report(err, ctx, rc, "login");
+        return HEM_KEYS_RUNTIME;
+    }
+
+    rc = ehem_key_get(ctx, o->kid, &d);
+    if (rc == EHEM_ERR_NOT_FOUND) {
+        fprintf(err, "error: key not found: %s\n", o->kid);
+        return HEM_KEYS_RUNTIME;
+    }
+    if (rc != EHEM_OK) {
+        report(err, ctx, rc, "keys pub");
+        return HEM_KEYS_RUNTIME;
+    }
+
+    if (d->pubkey != NULL) {
+        material = d->pubkey;
+        material_len = d->pubkey_len;
+        material_name = "pubkey";
+    } else if (d->der != NULL) {
+        material = d->der;
+        material_len = d->der_len;
+        material_name = "der";
+    } else {
+        material = NULL;
+        material_len = 0;
+        material_name = NULL;
+    }
+
+    if (o->format == HEM_KEYS_PUB_RAW) {
+        /* Pipeline mode: o->out carries the material bytes and NOTHING else. */
+        if (material != NULL) {
+            fwrite(material, 1, material_len, out);
+        } else {
+            fprintf(err, "note: %s has no public material (symmetric key)\n",
+                    o->kid);
+        }
+        ehem_key_details_free(d);
+        return HEM_KEYS_OK;
+    }
+
+    (void)ehem_key_type_parse(d->type, &info);    /* NULLs already excluded */
+    fprintf(out, "kid:      %s\n", o->kid);
+    fprintf(out, "type:     %s\n", d->type);
+    fprintf(out, "family:   %s\n", ehem_key_family_str(info.family));
+    if (info.modes != 0) {
+        fprintf(out, "modes:    %s%s%s\n",
+                (info.modes & EHEM_KEY_MODE_EXDSA) ? "ExDSA" : "",
+                (info.modes == (EHEM_KEY_MODE_EXDSA | EHEM_KEY_MODE_ECDH))
+                    ? "," : "",
+                (info.modes & EHEM_KEY_MODE_ECDH) ? "ECDH" : "");
+    }
+    if (d->updated != 0) {
+        fprintf(out, "updated:  %lld\n", (long long)d->updated);
+    }
+    if (material != NULL) {
+        fprintf(out, "%s:%s", material_name,
+                strcmp(material_name, "der") == 0 ? "      " : "   ");
+        if (o->format == HEM_KEYS_PUB_HEX) {
+            fprint_hex(out, material, material_len);
+        } else {
+            fprint_b64(out, material, material_len);
+        }
+        fprintf(out, "\n");
+    } else {
+        fprintf(out, "material: (none — symmetric key exports no public "
+                     "material)\n");
+    }
+
+    ehem_key_details_free(d);
+    return HEM_KEYS_OK;
+}
+
+/* -------------------------------------------------------------------------- */
 /* keys rm (REQ-TOOL-006)                                                     */
 /* -------------------------------------------------------------------------- */
 

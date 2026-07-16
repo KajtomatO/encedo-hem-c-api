@@ -3,7 +3,8 @@
  *
  * implements: REQ-TOOL-004 (`keys list` — read-only inventory with marking),
  *             REQ-TOOL-005 (label-based protected-key policy),
- *             REQ-TOOL-006 (`keys rm` — removal with the protected-key guard)
+ *             REQ-TOOL-006 (`keys rm` — removal with the protected-key guard),
+ *             REQ-TOOL-007 (`keys pub` — public material + typed metadata)
  *
  * Lives in hem-tool-core (like cert_install.c) so the CLI and the unit tests
  * drive one code path, using ONLY the public SDK API. `keys list` (marking) and
@@ -64,6 +65,34 @@ typedef struct {
     FILE              *err;          /* diagnostics (NULL → stderr) */
     FILE              *in;           /* confirmation input (NULL → stdin) */
 } hem_keys_rm_opts;
+
+/* Output format for `keys pub` (REQ-TOOL-007). */
+typedef enum {
+    HEM_KEYS_PUB_B64 = 0,   /* human summary, material as padded base64 */
+    HEM_KEYS_PUB_HEX,       /* human summary, material as lowercase hex */
+    HEM_KEYS_PUB_RAW        /* material bytes ONLY on out (pipeline use) */
+} hem_keys_pub_format;
+
+typedef struct {
+    const char         *passphrase;  /* login passphrase; NULL → HEM_KEYS_USAGE */
+    const char         *kid;         /* 32 hex chars; NULL/malformed → USAGE, no I/O */
+    hem_keys_pub_format format;
+    FILE               *out;         /* summary / raw material (NULL → stdout) */
+    FILE               *err;         /* diagnostics (NULL → stderr) */
+} hem_keys_pub_opts;
+
+/*
+ * `hem-tool keys pub <kid>` (REQ-TOOL-007): log in, fetch the key via
+ * ehem_key_get (read-only), and print a human summary — the device type
+ * string, the REQ-KEY-006 classification (family, modes), the update
+ * timestamp, and the public material (`pubkey` or `der`) as padded base64
+ * (HEX: lowercase hex instead). RAW writes the raw material bytes ALONE to
+ * o->out (prose only on o->err) so pipes stay clean. A symmetric key (no
+ * material on the wire) prints its metadata plus an explicit note and still
+ * returns HEM_KEYS_OK — the get succeeded. Key not found (device 406) is
+ * HEM_KEYS_RUNTIME with a message naming the kid.
+ */
+int hem_keys_pub_run(ehem_ctx *ctx, const hem_keys_pub_opts *o);
 
 /*
  * `hem-tool keys rm` (REQ-TOOL-006), with wipe_keys.py semantics: partition the

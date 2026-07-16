@@ -5,7 +5,8 @@
  *             REQ-TOOL-002 (certificate-refresh notice, `checkin` subcommand),
  *             REQ-TOOL-003 (the `cert-install` subcommand),
  *             REQ-TOOL-004 (the `keys list` subcommand),
- *             REQ-TOOL-006 (the `keys rm` subcommand)
+ *             REQ-TOOL-006 (the `keys rm` subcommand),
+ *             REQ-TOOL-007 (the `keys pub` subcommand)
  *
  * Consumes ONLY the public headers in include/ehem/ — it doubles as living
  * documentation of the API and as the manual driver for the M1/M2 gates.
@@ -43,6 +44,10 @@ typedef struct {
     int         assume_yes;   /* --yes */
     const char *prefixes[MAX_LABEL_PREFIXES];  /* --label-prefix (repeatable) */
     size_t      prefix_count;
+
+    /* keys pub output format (REQ-TOOL-007). */
+    int         hex;          /* --hex */
+    int         raw;          /* --raw */
 } cli_opts;
 
 static void usage(FILE *f)
@@ -62,6 +67,8 @@ static void usage(FILE *f)
         "                   (repeatable; exact match required for protected keys)\n"
         "  --dry-run        keys rm: show what would be deleted, delete nothing\n"
         "  --yes            keys rm: skip the bulk prompt (never for protected keys)\n"
+        "  --hex            keys pub: print the material as lowercase hex\n"
+        "  --raw            keys pub: write ONLY the raw material bytes to stdout\n"
         "  -h, --help       show this help\n"
         "\n"
         "commands:\n"
@@ -73,6 +80,8 @@ static void usage(FILE *f)
         "                   (authenticates, installs, REBOOTS, and verifies)\n"
         "  keys list        list every key on the device (read-only), marking\n"
         "                   protected device keys [PROTECTED] (needs a passphrase)\n"
+        "  keys pub KID     print a key's public material and typed metadata\n"
+        "                   (read-only; --hex / --raw select the encoding)\n"
         "  keys rm          delete keys: --all (non-protected) or --label-prefix P;\n"
         "                   protected keys need an exact label + per-key 'YES'\n");
 }
@@ -309,16 +318,58 @@ static int cmd_keys_rm(const cli_opts *o)
     return ret;
 }
 
-/* Dispatch the `keys` command group (list / rm). */
-static int cmd_keys(const cli_opts *o, const char *subcmd)
+/* REQ-TOOL-007: read-only public material + typed metadata for one key; the
+ * fetch/format logic lives in hem-tool-core (shared with the unit test). */
+static int cmd_keys_pub(const cli_opts *o, const char *kid)
+{
+    ehem_ctx *ctx = NULL;
+    hem_keys_pub_opts ko;
+    int ret;
+
+    if (o->hex && o->raw) {
+        fprintf(stderr, "error: --hex and --raw are mutually exclusive\n");
+        return 2;
+    }
+
+    ret = make_ctx(o, &ctx);
+    if (ret != 0) {
+        return ret;
+    }
+
+    memset(&ko, 0, sizeof ko);
+    ko.passphrase = o->passphrase;
+    ko.kid        = kid;
+    ko.format     = o->raw ? HEM_KEYS_PUB_RAW
+                           : (o->hex ? HEM_KEYS_PUB_HEX : HEM_KEYS_PUB_B64);
+    ko.out        = stdout;
+    ko.err        = stderr;
+
+    ret = hem_keys_pub_run(ctx, &ko);
+    if (ko.format != HEM_KEYS_PUB_RAW) {
+        print_cert_notice(ctx);       /* raw mode keeps stdout bytes-only */
+    }
+    ehem_ctx_destroy(ctx);
+    return ret;
+}
+
+/* Dispatch the `keys` command group (list / pub / rm). */
+static int cmd_keys(const cli_opts *o, const char *subcmd, const char *arg)
 {
     if (subcmd == NULL) {
-        fprintf(stderr, "error: 'keys' needs a subcommand (list, rm)\n");
+        fprintf(stderr, "error: 'keys' needs a subcommand (list, pub, rm)\n");
+        usage(stderr);
+        return 2;
+    }
+    if (arg != NULL && strcmp(subcmd, "pub") != 0) {
+        fprintf(stderr, "error: unexpected argument '%s'\n", arg);
         usage(stderr);
         return 2;
     }
     if (strcmp(subcmd, "list") == 0) {
         return cmd_keys_list(o);
+    }
+    if (strcmp(subcmd, "pub") == 0) {
+        return cmd_keys_pub(o, arg);
     }
     if (strcmp(subcmd, "rm") == 0) {
         return cmd_keys_rm(o);
@@ -333,6 +384,7 @@ int main(int argc, char **argv)
     cli_opts o;
     const char *cmd = NULL;
     const char *subcmd = NULL;
+    const char *arg = NULL;
     int i;
     int ret;
 
@@ -378,6 +430,10 @@ int main(int argc, char **argv)
             o.prefixes[o.prefix_count++] = a + 15;
         } else if (strcmp(a, "--insecure") == 0) {
             o.insecure = 1;
+        } else if (strcmp(a, "--hex") == 0) {
+            o.hex = 1;
+        } else if (strcmp(a, "--raw") == 0) {
+            o.raw = 1;
         } else if (strcmp(a, "-h") == 0 || strcmp(a, "--help") == 0) {
             usage(stdout);
             return 0;
@@ -389,6 +445,8 @@ int main(int argc, char **argv)
             cmd = a;
         } else if (subcmd == NULL) {
             subcmd = a;                 /* e.g. the `list` in `keys list` */
+        } else if (arg == NULL) {
+            arg = a;                    /* e.g. the KID in `keys pub KID` */
         } else {
             fprintf(stderr, "error: unexpected argument '%s'\n", a);
             usage(stderr);
@@ -412,7 +470,7 @@ int main(int argc, char **argv)
     } else if (strcmp(cmd, "cert-install") == 0) {
         ret = cmd_cert_install(&o);
     } else if (strcmp(cmd, "keys") == 0) {
-        ret = cmd_keys(&o, subcmd);
+        ret = cmd_keys(&o, subcmd, arg);
     } else {
         fprintf(stderr, "error: unknown command '%s'\n", cmd);
         usage(stderr);
