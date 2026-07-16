@@ -101,7 +101,12 @@ typedef struct {
  * the flake: transient network errors are retried a few times with a short
  * settle; device/protocol errors are never retried (a real failure fails fast).
  */
-#define MATRIX_RETRIES 6
+/* Tolerate the device's per-response flake (it closes TCP after every response
+ * and an occasional fresh connect is refused/times out) with a bounded retry —
+ * ~8 tries over ~40 s per op. A device that is genuinely DOWN for minutes is
+ * out of scope: the test fails rather than hanging indefinitely, which is the
+ * correct signal (rerun when the device is stable). */
+#define MATRIX_RETRIES 8
 static int is_transient(ehem_rc rc)
 {
     return rc == EHEM_ERR_UNREACHABLE || rc == EHEM_ERR_NETWORK;
