@@ -1,6 +1,9 @@
 /*
- * test_cert_install.c — hem-tool `cert-install` orchestration (REQ-TOOL-003),
- * driven entirely offline through the fake transport.
+ * test_cert_install.c — hem-tool `cert-install` orchestration, driven entirely
+ * offline through the fake transport.
+ *
+ * verifies: REQ-TOOL-003 (harvest → skip-if-current → install → reboot →
+ *           verify; skip path, --force, one distinct exit code per failure mode)
  *
  * The tool code under test (src/tools/hem-tool/cert_install.c, linked via
  * hem-tool-core) uses ONLY the public API; this test scripts the device + cloud
@@ -9,8 +12,6 @@
  * cheap and deterministic. Each failure mode is asserted to exit with its own
  * distinct code (REQ-TOOL-003 acceptance criteria).
  */
-#define _POSIX_C_SOURCE 200809L   /* open_memstream */
-
 #include <stdarg.h>
 #include <stddef.h>
 #include <setjmp.h>
@@ -95,17 +96,33 @@ static void push_auth(ehem_transport *fake)
     push_token(fake, EJWT_FX_NOW + 100000);
 }
 
-/* Output capture via an in-memory stream. */
-typedef struct { FILE *f; char *buf; size_t len; } cap;
+/* Output capture via a temp file (portable: tmpfile/fseek/fread, unlike the
+ * POSIX-only open_memstream — the unit suite must build on MinGW too). */
+typedef struct { FILE *f; char buf[8192]; } cap;
 static void cap_open(cap *c)
 {
-    c->buf = NULL;
-    c->len = 0;
-    c->f = open_memstream(&c->buf, &c->len);
+    c->f = tmpfile();
     assert_non_null(c->f);
+    c->buf[0] = '\0';
 }
-static const char *cap_str(cap *c) { fflush(c->f); return (c->buf != NULL) ? c->buf : ""; }
-static void cap_close(cap *c) { fclose(c->f); free(c->buf); }
+static const char *cap_str(cap *c)
+{
+    long n;
+    size_t r;
+    fflush(c->f);
+    n = ftell(c->f);
+    if (n < 0) {
+        n = 0;
+    }
+    if (n > (long)sizeof(c->buf) - 1) {
+        n = (long)sizeof(c->buf) - 1;
+    }
+    fseek(c->f, 0, SEEK_SET);
+    r = fread(c->buf, 1, (size_t)n, c->f);
+    c->buf[r] = '\0';
+    return c->buf;
+}
+static void cap_close(cap *c) { fclose(c->f); }
 
 /* Run cert-install on a fresh ctx wrapping `fake`, capturing out/err. */
 static int run(ehem_transport *fake, const char *passphrase, int force,

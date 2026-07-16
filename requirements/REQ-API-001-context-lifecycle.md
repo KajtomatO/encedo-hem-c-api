@@ -1,7 +1,7 @@
 ---
 id: REQ-API-001
 title: Opaque context handle with create/destroy lifecycle
-status: approved
+status: verified
 priority: must
 revision: 1
 source: ARCHITECTURE.md §4; HEM-SDK-1 (requirements/start_point/encedo-pkcs11/REQUIREMENTS-hem.md)

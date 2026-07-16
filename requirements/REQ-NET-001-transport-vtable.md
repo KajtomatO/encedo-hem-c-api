@@ -1,7 +1,7 @@
 ---
 id: REQ-NET-001
 title: All network I/O behind an injectable transport vtable
-status: approved
+status: verified
 priority: must
 revision: 1
 source: ARCHITECTURE.md §7; §1 (transport injection decision)

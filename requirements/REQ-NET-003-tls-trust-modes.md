@@ -1,7 +1,7 @@
 ---
 id: REQ-NET-003
 title: Three TLS trust modes selectable per context
-status: approved
+status: verified
 priority: must
 revision: 1
 source: ARCHITECTURE.md §7 (TLS trust); §12 risk 4 (device certificate model unknown)

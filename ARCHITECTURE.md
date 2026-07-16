@@ -463,8 +463,14 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
    device (live-proven 2026-07-16). The KDF is fixed per device at init
    time by whichever client registered the UserKey. M2 ships PBKDF2 only;
    Argon2 becomes an options-selectable KDF when a Manager-inited device
-   must be supported. *Resolved by:* the M2 gate recording the working
-   parameters in REQ-AUTH-001.
+   must be supported. **RESOLVED (M2 gate, STEP-M2-070, 2026-07-16):** the
+   dev device (my.ence.do) accepts the **PBKDF2-HMAC-SHA256 600k** derivation
+   and issues bearers with **`sub` = `U`** (UserKey identity, not Manager/
+   Argon2 `M`), TTL ~3600 s, requested scope echoed — verified live end to
+   end (`test_auth_live`, `test_config_live` green). The device is
+   UserKey/PBKDF2-initialised; Argon2 support stays deferred until a
+   Manager-initialised device is actually needed. Working parameters recorded
+   in REQ-AUTH-001.
 3. **Per-KID scope-token encoding unknown** — HEM-SDK-3 expects per-KID
    scopes; the auth doc shows only a free-form `scope` claim. *Resolved
    by:* reading the crypto/keymgmt doc pages and device experiments

@@ -1,7 +1,7 @@
 ---
 id: REQ-TEST-001
 title: Unit suite runs offline through injected fake transport
-status: approved
+status: verified
 priority: must
 revision: 1
 source: ARCHITECTURE.md §9 (Testing policy); §1 (CMocka decision)

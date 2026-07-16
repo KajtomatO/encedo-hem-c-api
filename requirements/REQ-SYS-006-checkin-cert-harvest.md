@@ -1,7 +1,7 @@
 ---
 id: REQ-SYS-006
 title: Expose the cloud-delivered TLS certificate chain from the check-in flow
-status: approved
+status: verified
 priority: must
 revision: 1
 source: user decision 2026-07-16 (cert-install tooling); approved 2026-07-16; REQ-SYS-003 root-cause finding (fw v1.2.2 discards newcrt; manual install needs the chain); encedo-hem-api-doc system/checkin.md (newcrt claim = base64 DER)

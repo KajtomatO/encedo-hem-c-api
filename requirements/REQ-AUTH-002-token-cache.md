@@ -1,7 +1,7 @@
 ---
 id: REQ-AUTH-002
 title: Scope-keyed token cache with silent refresh; logout and credential retention
-status: approved
+status: verified
 priority: must
 revision: 1
 source: ARCHITECTURE.md §5 (token cache, HEM-AUTH-6/7 upstream); encedo-hem-python-api auth.py (cache semantics)

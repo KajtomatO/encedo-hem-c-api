@@ -1,7 +1,7 @@
 ---
 id: REQ-AUTH-001
 title: Passphrase login — credential derivation and eJWT token acquisition
-status: approved
+status: verified
 priority: must
 revision: 1
 source: ARCHITECTURE.md §5; encedo-hem-api-doc auth/token.md; encedo-hem-python-api auth.py (build_ejwt — WORKING against the dev device, live-proven 2026-07-16); encedo-manager encedo.js postAuthToken (discrepancy, see criteria)

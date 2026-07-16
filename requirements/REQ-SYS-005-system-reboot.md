@@ -1,7 +1,7 @@
 ---
 id: REQ-SYS-005
 title: Binding for /api/system/reboot (pulled forward from M7 for cert install)
-status: approved
+status: verified
 priority: should
 revision: 1
 source: user decision 2026-07-16 (cert-install needs reboot-to-apply); encedo-hem-api-doc system/reboot.md; encedo-hem-python-api system.py (token invalidation semantics)

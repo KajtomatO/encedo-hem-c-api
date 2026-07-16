@@ -1,7 +1,7 @@
 ---
 id: REQ-NET-002
 title: Default transport implemented with libcurl
-status: approved
+status: verified
 priority: must
 revision: 1
 source: ARCHITECTURE.md §1 (libcurl decision), §7

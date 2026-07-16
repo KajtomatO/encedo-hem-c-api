@@ -1,7 +1,7 @@
 ---
 id: REQ-API-004
 title: Retrievable last-error detail on the context
-status: approved
+status: verified
 priority: must
 revision: 1
 source: ARCHITECTURE.md §4 (Errors)

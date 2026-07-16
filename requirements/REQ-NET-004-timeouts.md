@@ -1,7 +1,7 @@
 ---
 id: REQ-NET-004
 title: Separate connect and total-request timeouts
-status: approved
+status: verified
 priority: must
 revision: 1
 source: ARCHITECTURE.md §7 (Timeouts)

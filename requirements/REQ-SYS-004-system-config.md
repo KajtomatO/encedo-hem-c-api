@@ -1,7 +1,7 @@
 ---
 id: REQ-SYS-004
 title: Binding for /api/system/config — read config and install a TLS certificate
-status: approved
+status: verified
 priority: must
 revision: 1
 source: user decision 2026-07-16 (cert-install tooling); approved 2026-07-16; encedo-hem-api-doc system/config.md; live remediation 2026-07-16 (config tls.crt install verified working on fw v1.2.2)

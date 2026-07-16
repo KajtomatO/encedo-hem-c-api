@@ -1,7 +1,7 @@
 ---
 id: REQ-TOOL-001
 title: hem-tool status subcommand
-status: approved
+status: implemented
 priority: must
 revision: 1
 source: ARCHITECTURE.md §8; §11 M1 gate

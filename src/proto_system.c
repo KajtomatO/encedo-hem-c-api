@@ -1,14 +1,17 @@
 /*
- * proto_system.c — bindings for the `system` API group: status, version, and
- * the check-in handshake.
+ * proto_system.c — bindings for the `system` API group: status, version, the
+ * check-in handshake (+ cert harvest), device config, cert install, and reboot.
  *
- * implements: REQ-SYS-001, REQ-SYS-002, REQ-SYS-003, REQ-API-005
+ * implements: REQ-SYS-001, REQ-SYS-002, REQ-SYS-003, REQ-SYS-004, REQ-SYS-005,
+ *             REQ-SYS-006, REQ-API-005
  *
  * The first real protocol bindings and the template the rest follow: build a
  * request → send through the shared request path (proto_common, which also
  * carries the REQ-NET-005 auto-recovery) → parse the JSON body into a
  * caller-owned struct with tolerant parsing (unknown fields ignored, missing
- * required fields → EHEM_ERR_PROTOCOL).
+ * required fields → EHEM_ERR_PROTOCOL). Check-in additionally harvests the
+ * cloud-delivered certificate chain + current serial (REQ-SYS-006), and
+ * ehem_cert_inspect() reads a chain's leaf identity for the cert-install tool.
  */
 #include "ehem/system.h"
 

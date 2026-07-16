@@ -1,7 +1,7 @@
 ---
 id: REQ-TOOL-003
 title: hem-tool cert-install — harvest, install, reboot, verify
-status: approved
+status: verified
 priority: must
 revision: 1
 source: user decision 2026-07-16 ("implement the working cert install" → "plan hem-tool cert-install"); live remediation procedure executed 2026-07-16 (python script); REQ-SYS-003 root-cause finding

@@ -1,7 +1,7 @@
 ---
 id: REQ-API-002
 title: No mutable global state outside the context
-status: approved
+status: verified
 priority: must
 revision: 2
 source: ARCHITECTURE.md §1, §4 (context-based, no global state); HEM-GEN-5 (consumer extract)

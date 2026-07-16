@@ -1,5 +1,7 @@
 /*
- * cert_install.h — hem-tool `cert-install` orchestration (REQ-TOOL-003).
+ * cert_install.h — hem-tool `cert-install` orchestration.
+ *
+ * implements: REQ-TOOL-003
  *
  * Automates the manual remediation proven on 2026-07-16 for devices whose
  * firmware (v1.2.2) acknowledges but never installs the check-in certificate

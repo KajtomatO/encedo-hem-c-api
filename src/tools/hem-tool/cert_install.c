@@ -10,20 +10,31 @@
 #include "cert_install.h"
 
 #include <string.h>
-#include <time.h>
 
 #include "ehem/auth.h"
 #include "ehem/system.h"
 
+#ifdef _WIN32
+#  include <windows.h>            /* Sleep() — MinGW has no POSIX nanosleep */
+#else
+#  include <time.h>               /* nanosleep / struct timespec */
+#endif
+
 static void sleep_ms(unsigned ms)
 {
-    struct timespec ts;
     if (ms == 0) {
         return;
     }
-    ts.tv_sec  = (time_t)(ms / 1000u);
-    ts.tv_nsec = (long)(ms % 1000u) * 1000000L;
-    (void)nanosleep(&ts, NULL);
+#ifdef _WIN32
+    Sleep(ms);
+#else
+    {
+        struct timespec ts;
+        ts.tv_sec  = (time_t)(ms / 1000u);
+        ts.tv_nsec = (long)(ms % 1000u) * 1000000L;
+        (void)nanosleep(&ts, NULL);
+    }
+#endif
 }
 
 /* Print the last-error detail recorded on the context. */

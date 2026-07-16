@@ -1,10 +1,12 @@
 /*
  * proto_common.h — shared request/response machinery for protocol bindings.
  *
- * implements: REQ-NET-005 (the automatic certificate recovery lives in the
- *             common send path so every binding — M1 system, M2+ auth/keymgmt
- *             — inherits it), and the REQ-API-003 HTTP→rc mapping shared by
- *             all bindings.
+ * implements: REQ-AUTH-003 (the authenticated request path — bearer injection
+ *             for a scoped request, single 401 re-acquire+retry, 403 →
+ *             SCOPE_DENIED), REQ-NET-005 (the automatic certificate recovery
+ *             lives in the common send path so every binding — M1 system, M2+
+ *             auth/keymgmt — inherits it), and the REQ-API-003 HTTP→rc mapping
+ *             shared by all bindings.
  *
  * INTERNAL header. A binding calls ehem_proto_request_json() (or _raw for
  * verbatim-body flows like check-in) and gets back either a parsed JSON

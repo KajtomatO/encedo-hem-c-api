@@ -1,7 +1,7 @@
 ---
 id: REQ-TEST-002
 title: Integration tests gated on EHEM_TEST_URL
-status: approved
+status: verified
 priority: must
 revision: 1
 source: ARCHITECTURE.md §9; user decision 2026-07-15 (disposable dev device; CI without device stays green)

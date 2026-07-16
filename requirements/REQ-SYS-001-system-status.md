@@ -1,7 +1,7 @@
 ---
 id: REQ-SYS-001
 title: Binding for GET /api/system/status
-status: approved
+status: verified
 priority: must
 revision: 1
 source: encedo-hem-api-doc system/status.md (fetched 2026-07-15); ARCHITECTURE.md §11 M1

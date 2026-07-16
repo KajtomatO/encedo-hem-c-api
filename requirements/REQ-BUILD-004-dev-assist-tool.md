@@ -1,7 +1,7 @@
 ---
 id: REQ-BUILD-004
 title: Developer assist tool `./dev` — build, test, and environment runner
-status: approved
+status: implemented
 priority: should
 revision: 1
 source: user decision 2026-07-16 (commissioned with usage spec; name/runtime/extras/compiler-default chosen via Q&A same day; approved 2026-07-16)

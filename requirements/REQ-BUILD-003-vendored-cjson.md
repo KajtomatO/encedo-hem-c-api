@@ -1,7 +1,7 @@
 ---
 id: REQ-BUILD-003
 title: JSON handled by vendored cJSON
-status: approved
+status: verified
 priority: must
 revision: 1
 source: ARCHITECTURE.md §1 (vendored cJSON decision)

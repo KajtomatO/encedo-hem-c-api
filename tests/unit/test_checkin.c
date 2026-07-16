@@ -6,7 +6,9 @@
  *           verified, device legs relaxed only in-flow, typed result),
  *           REQ-NET-005 (auto-recovery: expired-only trigger, opt-out,
  *           single fresh-connection retry, recursion guard, original error
- *           preserved on recovery failure, ehem_cert_refreshed)
+ *           preserved on recovery failure, ehem_cert_refreshed),
+ *           REQ-SYS-006 (harvest: newcrt_chain + current_serial from the
+ *           leg-2/leg-1 JWT payloads; present, absent, unparseable)
  */
 #include <stdarg.h>
 #include <stddef.h>

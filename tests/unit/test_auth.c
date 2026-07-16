@@ -9,7 +9,9 @@
  *           REQ-AUTH-002 (scope-keyed cache: same-scope reuse, per-scope
  *           isolation, skew-window + device-shortened exp re-acquisition,
  *           retention-off → AUTH_EXPIRED without network, logout drops the
- *           cache and zeroizes credentials)
+ *           cache and zeroizes credentials),
+ *           REQ-AUTH-003 (authenticated request path: bearer injection, 401
+ *           re-acquire+retry, 403 → SCOPE_DENIED, auth×check-in composition)
  */
 #include <stdarg.h>
 #include <stddef.h>

@@ -1,7 +1,7 @@
 ---
 id: REQ-NET-005
 title: Automatic certificate recovery via check-in on expired-cert failure
-status: approved
+status: verified
 priority: must
 revision: 1
 source: user decision 2026-07-15 ("Lib should run check-in automatically when needed, e.g. when TLS is expired"); M1 gate finding (device cert expired 2026-04-18)

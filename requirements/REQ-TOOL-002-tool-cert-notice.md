@@ -1,7 +1,7 @@
 ---
 id: REQ-TOOL-002
 title: hem-tool reports certificate refresh and offers a checkin subcommand
-status: approved
+status: implemented
 priority: must
 revision: 1
 source: user decision 2026-07-15 ("hem-tool should inform user if certificate was invalid and was refreshed")

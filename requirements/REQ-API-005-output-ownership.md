@@ -1,7 +1,7 @@
 ---
 id: REQ-API-005
 title: Library-allocated outputs freed by matching free functions
-status: approved
+status: verified
 priority: must
 revision: 1
 source: ARCHITECTURE.md §4 (Memory)

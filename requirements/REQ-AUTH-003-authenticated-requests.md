@@ -1,7 +1,7 @@
 ---
 id: REQ-AUTH-003
 title: Authenticated request path — bearer injection and auth error mapping
-status: approved
+status: verified
 priority: must
 revision: 1
 source: ARCHITECTURE.md §5, §6, §7 ("no retries in 1.x beyond token re-acquisition and check-in recovery"); encedo-hem-api-doc (401/403 semantics)

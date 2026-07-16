@@ -1,7 +1,7 @@
 ---
 id: REQ-API-003
 title: Single error enum distinguishing consumer-required conditions
-status: approved
+status: verified
 priority: must
 revision: 1
 source: ARCHITECTURE.md §4; HEM-SDK-8 and HEM-ERR-1 (requirements/start_point/encedo-pkcs11/REQUIREMENTS-hem.md)

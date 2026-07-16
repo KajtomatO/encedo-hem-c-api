@@ -2,59 +2,50 @@
 
 # Traceability matrix
 
-Generated: 2026-07-15 (after STEP-M1-010 + STEP-M1-020 completed, CI green)
+Generated: 2026-07-16 (M2 gate, STEP-M2-070 — after cert-install landed; unit 15/15 gcc+clang + ASan clean, live integration 4/4).
 
-Scan inputs: 18 REQ files (`requirements/`), 18 step files (2 in
-`workplan/done/`, 16 in `workplan/todo/` — 8 detailed M1 steps + 8 milestone
-placeholders). Tag scan covered the build/source/test/CI files that carry
-`implements:`/`verifies:` tags (CMake and workflow files included, since the
-build/CI requirements are realized there, not under `src/` — per the §4.2
-SETUP note this project tags build REQs in `CMakeLists.txt`, `tests/`, and
-`.github/workflows/`).
+Scan inputs: 29 REQ files (`requirements/`), 28 step files (20 in `workplan/done/`, 8 in `workplan/todo/`). Code tags (`implements: REQ-`) scanned across `src/`, `CMakeLists.txt`, `dev`, `tests/CMakeLists.txt`, and `.github/workflows/` (build/tool REQs are realized there, per §4.2 SETUP). Test tags (`verifies:`/`supports: REQ-`) scanned across `tests/`. Multi-line tag blocks are read to the end of the tag comment; `,` and `/` both separate IDs.
 
 | REQ | Title | Status | Priority | Architecture | Steps | Code | Tests |
 |---|---|---|---|---|---|---|---|
-| REQ-API-001 | Opaque context handle with create/destroy lifecycle | approved | must | §4 | STEP-M1-040 (todo) | — | — |
-| REQ-API-002 | No mutable global state outside the context | approved | must | §4, §1 | STEP-M1-040 (todo) | — | — |
-| REQ-API-003 | Single error enum distinguishing consumer-required conditions | approved | must | §4 | STEP-M1-040 (todo) | — | — |
-| REQ-API-004 | Retrievable last-error detail on the context | approved | must | §4 | STEP-M1-040 (todo) | — | — |
-| REQ-API-005 | Library-allocated outputs freed by matching free functions | approved | must | §4 | STEP-M1-070 (todo) | — | — |
-| REQ-API-006 | Shared library exports only ehem_-prefixed symbols | **verified** | must | §4, §1 | STEP-M1-010 (done) | include/ehem/ehem.h:12, src/ehem.c:4 | tests/unit/test_version.c:7, tests/unit/check_exports.cmake:3 |
-| REQ-NET-001 | All network I/O behind an injectable transport vtable | approved | must | §7, §1 | STEP-M1-050 (todo) | — | — |
-| REQ-NET-002 | Default transport implemented with libcurl | approved | must | §7, §1 | STEP-M1-060 (todo) | — | — |
-| REQ-NET-003 | Three TLS trust modes selectable per context | approved | must | §7, §12 | STEP-M1-060 (todo) | — | — |
-| REQ-NET-004 | Separate connect and total-request timeouts | approved | must | §7 | STEP-M1-060 (todo) | — | — |
-| REQ-SYS-001 | Binding for GET /api/system/status | approved | must | §6, §11 | STEP-M1-070 (todo) | — | — |
-| REQ-SYS-002 | Binding for GET /api/system/version | approved | must | §6, §11 | STEP-M1-070 (todo) | — | — |
-| REQ-TOOL-001 | hem-tool status subcommand | approved | must | §8, §11 | STEP-M1-090 (todo) | — | — |
-| REQ-TEST-001 | Unit suite runs offline through injected fake transport | approved | must | §9 | STEP-M1-050 (todo) | — | — |
-| REQ-TEST-002 | Integration tests gated on EHEM_TEST_URL | approved | must | §9 | STEP-M1-080 (todo) | — | — |
-| REQ-BUILD-001 | CMake build: static+shared libs on Linux and Windows (MinGW) | **verified** | must | §1, §10 | STEP-M1-010 (done) | CMakeLists.txt:2, tests/CMakeLists.txt:6 | tests/unit/test_version.c:7 |
-| REQ-BUILD-002 | CI builds and runs unit tests on Linux and Windows | **implemented** | must | §1 | STEP-M1-020 (done) | .github/workflows/ci.yml:2 | — (CI infra; no unit test by nature) |
-| REQ-BUILD-003 | JSON handled by vendored cJSON | approved | must | §1, §10 | STEP-M1-030 (todo) | — | — |
-
-Steps with `implements: []` (chores/placeholders, excluded from coverage):
-STEP-M1-100 (M1 gate verification, justified in Notes); STEP-M2-000 through
-STEP-M9-000 (rolling-wave placeholders per §5.3 step 5).
+| REQ-API-001 | Opaque context handle with create/destroy lifecycle | verified | must | §4 | M1-040 (done) | src/context.c:4, src/context.h:4 | tests/unit/test_context.c:5 |
+| REQ-API-002 | No mutable global state outside the context | verified | must | §4, §1 | M1-040 (done) | src/context.c:4, src/context.h:4 | tests/unit/test_context.c:5 |
+| REQ-API-003 | Single error enum distinguishing consumer-required conditions | verified | must | §4 | M1-040 (done) | src/context.c:4, src/proto_common.h:4 | tests/unit/test_transport_curl.c:5, tests/unit/test_system.c:5, tests/unit/test_context.c:5 |
+| REQ-API-004 | Retrievable last-error detail on the context | verified | must | §4 | M1-040 (done) | src/context.c:4, src/context.h:4 | tests/unit/test_context.c:5 |
+| REQ-API-005 | Library-allocated outputs freed by matching free functions | verified | must | §4 | M1-070 (done) | src/proto_system.c:5 | tests/unit/test_system.c:5 |
+| REQ-API-006 | Shared library exports only ehem_-prefixed symbols | verified | must | §4, §1 | M1-010 (done) | src/ehem.c:4 | tests/unit/test_version.c:7, tests/unit/check_exports.cmake:3 |
+| REQ-AUTH-001 | Passphrase login — credential derivation and eJWT token acquisition | verified | must | §5 | M2-010 (done), M2-020 (done), M2-030 (done), M2-045 (done) | src/proto_auth.c:5, src/proto_auth.h:4, src/ejwt.h:4, src/crypto_shim.c:4, src/crypto_shim.h:4, src/ejwt.c:4 | tests/integration/test_auth_live.c:5, tests/unit/test_ejwt.c:4, tests/unit/test_crypto.c:4, tests/unit/test_auth.c:5, tests/unit/check_public_headers.cmake:4 |
+| REQ-AUTH-002 | Scope-keyed token cache with silent refresh; logout and credential retention | verified | must | §5 | M2-030 (done), M2-045 (done) | src/proto_auth.c:5, src/proto_auth.h:4 | tests/integration/test_auth_live.c:5, tests/unit/test_auth.c:5 |
+| REQ-AUTH-003 | Authenticated request path — bearer injection and auth error mapping | verified | must | §5, §6, §7 | M2-040 (done) | src/proto_common.h:4 | tests/integration/test_auth_live.c:5, tests/unit/test_auth.c:5 |
+| REQ-BUILD-001 | CMake build producing static and shared libraries on Linux and Windows (MinGW) | verified | must | §1, §10 | M1-010 (done) | CMakeLists.txt:2, tests/CMakeLists.txt:7 | tests/unit/test_version.c:7 |
+| REQ-BUILD-002 | CI builds and runs unit tests on Linux and Windows | implemented | must | §1 | M1-020 (done) | .github/workflows/ci.yml:2 | — |
+| REQ-BUILD-003 | JSON handled by vendored cJSON | verified | must | §1, §10 | M1-030 (done) | src/json.c:4, src/json.h:4 | tests/unit/test_json.c:4 |
+| REQ-BUILD-004 | Developer assist tool `./dev` — build, test, and environment runner | implemented | should | §9, §10 | M2-005 (done) | dev:5 | — |
+| REQ-NET-001 | All network I/O behind an injectable transport vtable | verified | must | §7, §1 | M1-050 (done) | src/transport.h:5, src/transport.c:4 | tests/unit/test_transport.c:5, tests/support/fake_transport.c:4, tests/support/fake_transport.h:4 |
+| REQ-NET-002 | Default transport implemented with libcurl | verified | must | §7, §1 | M1-060 (done) | src/transport.h:134, src/transport_curl.c:4 | tests/unit/test_transport_curl.c:5, tests/unit/check_public_headers.cmake:4 |
+| REQ-NET-003 | Three TLS trust modes selectable per context | verified | must | §7, §12 | M1-060 (done) | src/transport_curl.c:4 | tests/unit/test_transport_curl.c:5 |
+| REQ-NET-004 | Separate connect and total-request timeouts | verified | must | §7 | M1-060 (done) | src/transport_curl.c:4 | tests/unit/test_transport_curl.c:5 |
+| REQ-NET-005 | Automatic certificate recovery via check-in on expired-cert failure | verified | must | §7, §12 | M1-110 (done) | src/proto_common.h:4 | tests/unit/test_checkin.c:5 |
+| REQ-SYS-001 | Binding for GET /api/system/status | verified | must | §6, §11 | M1-070 (done) | src/proto_system.c:5 | tests/integration/test_system_live.c:5, tests/unit/test_system.c:5 |
+| REQ-SYS-002 | Binding for GET /api/system/version | verified | must | §6, §11 | M1-070 (done) | src/proto_system.c:5 | tests/integration/test_system_live.c:5, tests/unit/test_system.c:5 |
+| REQ-SYS-003 | Binding for the /api/system/checkin handshake (device + cloud relay) | verified | must | §6, §7 | M1-110 (done) | src/proto_system.c:5 | tests/integration/test_checkin_live.c:5, tests/unit/test_checkin.c:5 |
+| REQ-SYS-004 | Binding for /api/system/config — read config and install a TLS certificate | verified | must | §6 | M2-050 (done) | src/proto_system.c:5 | tests/integration/test_config_live.c:5, tests/unit/test_config.c:5 |
+| REQ-SYS-005 | Binding for /api/system/reboot (pulled forward from M7 for cert install) | verified | should | §6, §11 | M2-050 (done) | src/proto_system.c:5 | tests/unit/test_config.c:5 |
+| REQ-SYS-006 | Expose the cloud-delivered TLS certificate chain from the check-in flow | verified | must | §6 | M2-060 (done) | src/proto_system.c:5 | tests/unit/test_checkin.c:5, tests/unit/test_cert.c:5, tests/support/fixtures/cert_fixture.h:5 |
+| REQ-TEST-001 | Unit suite runs offline through injected fake transport | verified | must | §9 | M1-050 (done) | — | tests/unit/test_transport.c:5, tests/support/fake_transport.c:4, tests/support/fake_transport.h:4 |
+| REQ-TEST-002 | Integration tests gated on EHEM_TEST_URL | verified | must | §9 | M1-080 (done) | — | tests/integration/test_system_live.c:5, tests/integration/test_auth_live.c:5, tests/integration/test_checkin_live.c:5, tests/support/integration_env.h:4 |
+| REQ-TOOL-001 | hem-tool status subcommand | implemented | must | §8, §11 | M1-090 (done) | src/tools/hem-tool/main.c:4 | — |
+| REQ-TOOL-002 | hem-tool reports certificate refresh and offers a checkin subcommand | implemented | must | §8 | M1-110 (done) | src/tools/hem-tool/main.c:4 | — |
+| REQ-TOOL-003 | hem-tool cert-install — harvest, install, reboot, verify | verified | must | §8 | M2-060 (done) | src/tools/hem-tool/main.c:4, src/tools/hem-tool/cert_install.h:4 | tests/unit/test_cert_install.c:5, tests/unit/test_cert.c:5, tests/support/fixtures/cert_fixture.h:5 |
 
 ## Coverage report
 
-- **Approved REQs with no code tag (unimplemented):** REQ-API-001..005,
-  REQ-NET-001..004, REQ-SYS-001..002, REQ-TOOL-001, REQ-TEST-001..002,
-  REQ-BUILD-003 (15). Expected — each is covered by exactly one planned M1
-  step still in `todo/`.
-- **Implemented REQs with no passing tagged test (unverified):**
-  REQ-BUILD-002 — intentional. It is a CI-infrastructure requirement with no
-  `verifies:`-tagged unit test; its verification is the green CI run itself
-  (evidence in STEP-M1-020). It stays `implemented`, not `verified`.
-- **Open acceptance criteria on otherwise-advanced REQs:** REQ-API-006 — the
-  "vendored cJSON symbols are not exported" criterion is unchecked because
-  cJSON is not vendored until STEP-M1-030. The existing `export_symbols`
-  check already fails on ANY non-`ehem_` symbol, so it will cover this
-  automatically once cJSON lands; re-confirm at STEP-M1-030.
-- **Orphan tags (tags naming a nonexistent REQ):** none.
-- **Steps in `done/` with empty `evidence`:** none (STEP-M1-010 → f3364a5 +
-  a0d4fdb; STEP-M1-020 → a0d4fdb).
-- **Broken architecture anchors:** none — all declared anchors resolve to
-  ARCHITECTURE.md headings (§1, §4, §6, §7, §8, §9, §10, §11, §12).
-- **REQs in `needs-reverify`:** none.
+Totals: 29 REQs — 25 verified, 4 implemented, 0 approved (future milestones).
+
+- **Approved REQs with no code tag (unimplemented):** none — future milestones (M3–M9), not yet started.
+- **Code without a tagged passing test (unverified):** REQ-BUILD-002, REQ-BUILD-004, REQ-TOOL-001, REQ-TOOL-002. These are the tool/build REQs exercised manually or by running CI rather than by a `verifies:` unit test — TOOL-001/002 (status/checkin subcommands, driven live), BUILD-002 (CI, self-verifying on each run), BUILD-004 (`./dev`, a developer convenience). Their behavior is covered by the M1/M2 live gates.
+- **Orphan tags (naming a nonexistent REQ):** none.
+- **Broken architecture anchors:** none.
+- **`done/` steps with empty `evidence.commits` (hygiene):** STEP-M1-030, STEP-M1-040, STEP-M1-050, STEP-M1-060, STEP-M1-070, STEP-M1-080, STEP-M1-090, STEP-M1-100, STEP-M1-110, STEP-M2-040, STEP-M2-045, STEP-M2-050, STEP-M2-070. The M1 steps landed under the squashed `M1 complete` history; STEP-M2-040/045/050 have identifiable commits (f3f125f / 374ab55 / f99bb72) not yet backfilled, and STEP-M2-070 (this gate) is committed in the same change that regenerated this matrix. Non-blocking — the code/test evidence is present and green; SHAs can be backfilled when the user next touches those files.
+- **REQs in needs-reverify:** none.
+

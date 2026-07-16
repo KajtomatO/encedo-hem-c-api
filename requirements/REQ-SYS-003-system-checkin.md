@@ -1,7 +1,7 @@
 ---
 id: REQ-SYS-003
 title: Binding for the /api/system/checkin handshake (device + cloud relay)
-status: approved
+status: verified
 priority: must
 revision: 1
 source: user decision 2026-07-15 ("check-in is critical"); encedo-hem-api-doc system/checkin.md; encedo-hem-python-api transport.py/system.py (relay semantics, cloud TLS posture)
