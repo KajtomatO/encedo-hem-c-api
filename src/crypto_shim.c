@@ -23,6 +23,7 @@
 #include <wolfssl/wolfcrypt/asn_public.h>   /* wc_GetDateInfo/AsCalendarTime */
 #include <wolfssl/wolfcrypt/ecc.h>          /* local ECDSA verify (M4 gate) */
 #include <wolfssl/wolfcrypt/ed25519.h>      /* local Ed25519 verify */
+#include <wolfssl/wolfcrypt/ed448.h>        /* local Ed448 verify */
 #include <wolfssl/wolfcrypt/signature.h>    /* wc_SignatureVerify */
 #include <wolfssl/wolfcrypt/error-crypt.h>  /* SIG_VERIFY_E, ASN_PARSE_E */
 
@@ -352,6 +353,48 @@ ehem_rc ehem_ed25519_verify(const uint8_t pub[EHEM_ED25519_PUB_SIZE],
         }
     }
     wc_ed25519_free(&key);
+    return result;
+}
+
+ehem_rc ehem_ed448_verify(const uint8_t pub[EHEM_ED448_PUB_SIZE],
+                          const uint8_t *msg, size_t msg_len,
+                          const uint8_t *sig, size_t sig_len,
+                          int *valid_out)
+{
+    if (pub == NULL || sig == NULL || valid_out == NULL ||
+        sig_len != EHEM_ED448_SIG_SIZE || (msg == NULL && msg_len != 0)) {
+        return EHEM_ERR_ARG;
+    }
+    *valid_out = 0;
+    if (msg == NULL) {
+        msg = (const uint8_t *)"";      /* RFC 8032 allows the empty message */
+    }
+
+    ed448_key key;
+    int init_rc = wc_ed448_init(&key);
+    if (init_rc == NOT_COMPILED_IN) {
+        return EHEM_ERR_UNSUPPORTED;    /* build without HAVE_ED448 */
+    }
+    if (init_rc != 0) {
+        return EHEM_ERR_PROTOCOL;
+    }
+
+    ehem_rc result = EHEM_ERR_PROTOCOL;
+    if (wc_ed448_import_public(pub, EHEM_ED448_PUB_SIZE, &key) == 0) {
+        int res = 0;
+        int rc = wc_ed448_verify_msg(sig, EHEM_ED448_SIG_SIZE,
+                                     msg, (word32)msg_len, &res, &key,
+                                     NULL, 0);
+        if (rc == 0) {
+            *valid_out = (res == 1);
+            result = EHEM_OK;
+        } else if (rc == SIG_VERIFY_E) {
+            result = EHEM_OK;           /* well-formed, just not a match */
+        } else if (rc == NOT_COMPILED_IN) {
+            result = EHEM_ERR_UNSUPPORTED;
+        }
+    }
+    wc_ed448_free(&key);
     return result;
 }
 

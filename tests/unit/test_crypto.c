@@ -346,6 +346,66 @@ static void test_ed25519_verify(void **state)
                      EHEM_ERR_ARG);
 }
 
+/* verifies: REQ-TEST-004 (the sign leg of the matrix locally verifies Ed448
+ * device signatures via this shim entry point). RFC 8032 §7.4 vectors. */
+static void test_ed448_verify(void **state)
+{
+    (void)state;
+    uint8_t pub[57], sig[114];
+    int valid = -1;
+    ehem_rc rc;
+
+    /* Vector 1: empty message. */
+    unhex("5fd7449b59b461fd2ce787ec616ad46a1da1342485a70e1f8a0ea75d80e96778"
+          "edf124769b46c7061bd6783df1e50f6cd1fa1abeafe8256180", pub);
+    unhex("533a37f6bbe457251f023c0d88f976ae2dfb504a843e34d2074fd823d41a591f"
+          "2b233f034f628281f2fd7a22ddd47d7828c59bd0a21bfd3980ff0d2028d4b18a"
+          "9df63e006c5d1c2d345b925d8dc00b4104852db99ac5c7cdda8530a113a0f4db"
+          "b61149f05a7363268c71d95808ff2e652600", sig);
+    rc = ehem_ed448_verify(pub, NULL, 0, sig, 114, &valid);
+    if (rc == EHEM_ERR_UNSUPPORTED) {
+        print_message("NOTE: wolfSSL build lacks HAVE_ED448; "
+                      "Ed448 local verify unavailable — skipping.\n");
+        return;
+    }
+    assert_int_equal(rc, EHEM_OK);
+    assert_int_equal(valid, 1);
+
+    /* Tampered signature → clean invalid. */
+    sig[0] ^= 0x01;
+    assert_int_equal(ehem_ed448_verify(pub, NULL, 0, sig, 114, &valid), EHEM_OK);
+    assert_int_equal(valid, 0);
+    sig[0] ^= 0x01;
+
+    /* Vector 2: one-byte message 0x03. */
+    unhex("43ba28f430cdff456ae531545f7ecd0ac834a55d9358c0372bfa0c6c6798c086"
+          "6aea01eb00742802b8438ea4cb82169c235160627b4c3a9480", pub);
+    unhex("26b8f91727bd62897af15e41eb43c377efb9c610d48f2335cb0bd0087810f435"
+          "2541b143c4b981b7e18f62de8ccdf633fc1bf037ab7cd779805e0dbcc0aae1cb"
+          "cee1afb2e027df36bc04dcecbf154336c19f0af7e0a6472905e799f1953d2a0f"
+          "f3348ab21aa4adafd1d234441cf807c03a00", sig);
+    const uint8_t msg2 = 0x03;
+    assert_int_equal(ehem_ed448_verify(pub, &msg2, 1, sig, 114, &valid),
+                     EHEM_OK);
+    assert_int_equal(valid, 1);
+
+    /* Wrong message → clean invalid. */
+    const uint8_t wrong = 0x04;
+    assert_int_equal(ehem_ed448_verify(pub, &wrong, 1, sig, 114, &valid),
+                     EHEM_OK);
+    assert_int_equal(valid, 0);
+
+    /* Argument validation: only 114-byte signatures are Ed448. */
+    assert_int_equal(ehem_ed448_verify(pub, &msg2, 1, sig, 113, &valid),
+                     EHEM_ERR_ARG);
+    assert_int_equal(ehem_ed448_verify(NULL, &msg2, 1, sig, 114, &valid),
+                     EHEM_ERR_ARG);
+    assert_int_equal(ehem_ed448_verify(pub, NULL, 1, sig, 114, &valid),
+                     EHEM_ERR_ARG);
+    assert_int_equal(ehem_ed448_verify(pub, &msg2, 1, sig, 114, NULL),
+                     EHEM_ERR_ARG);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -356,6 +416,7 @@ int main(void)
         cmocka_unit_test(test_zeroize),
         cmocka_unit_test(test_ecdsa_verify),
         cmocka_unit_test(test_ed25519_verify),
+        cmocka_unit_test(test_ed448_verify),
     };
     /* wolfCrypt's process-global init: without it the X25519 tests crash on
      * Windows (uninitialized RNG mutex behind curve25519 blinding). */

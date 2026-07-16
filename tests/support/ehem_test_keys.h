@@ -60,6 +60,22 @@ static inline void ehem_test_track(ehem_test_keyreg *reg, const char *kid)
     }
 }
 
+/* Drop a kid from the registry (e.g. after the test deleted it itself), so the
+ * teardown cleanup does not try to delete it again. No-op if not tracked. */
+static inline void ehem_test_untrack(ehem_test_keyreg *reg, const char *kid)
+{
+    size_t i;
+    for (i = 0; i < reg->count; i++) {
+        if (strcmp(reg->kids[i], kid) == 0) {
+            reg->count--;
+            if (i < reg->count) {
+                memcpy(reg->kids[i], reg->kids[reg->count], EHEM_KID_HEX_SIZE);
+            }
+            return;
+        }
+    }
+}
+
 /*
  * Delete every tracked kid, best-effort: a kid already gone (EHEM_ERR_NOT_FOUND)
  * is fine, any other failure is logged but does not stop the sweep. Safe to call

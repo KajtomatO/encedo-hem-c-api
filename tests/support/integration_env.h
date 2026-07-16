@@ -80,4 +80,26 @@ static inline ehem_rc ehem_test_ctx(ehem_ctx **out)
     return ehem_ctx_create(ehem_test_url(), &opts, out);
 }
 
+/*
+ * Like ehem_test_ctx(), but overrides the whole-request timeout (ms). For live
+ * operations the 30 s default is too tight for — notably per-family key
+ * generation, where ML-DSA/ML-KEM keygen on the device MCU can run long.
+ */
+static inline ehem_rc ehem_test_ctx_timeout(ehem_ctx **out, long total_ms)
+{
+    ehem_options opts;
+    const char *cacert   = getenv("EHEM_TEST_CACERT");
+    const char *insecure = getenv("EHEM_TEST_INSECURE");
+
+    ehem_options_init(&opts);
+    if (insecure != NULL && insecure[0] == '1') {
+        opts.tls_mode = EHEM_TLS_INSECURE;
+    } else if (cacert != NULL) {
+        opts.tls_mode = EHEM_TLS_CA_FILE;
+        opts.ca_file  = cacert;
+    }
+    opts.total_timeout_ms = total_ms;
+    return ehem_ctx_create(ehem_test_url(), &opts, out);
+}
+
 #endif /* EHEM_INTEGRATION_ENV_H */

@@ -149,6 +149,8 @@ typedef enum ehem_ecdsa_curve {
 
 #define EHEM_ED25519_PUB_SIZE 32
 #define EHEM_ED25519_SIG_SIZE 64
+#define EHEM_ED448_PUB_SIZE   57
+#define EHEM_ED448_SIG_SIZE   114
 
 ehem_rc ehem_ecdsa_verify(ehem_ecdsa_curve curve,
                           const uint8_t *pub_x963, size_t pub_len,
@@ -160,6 +162,15 @@ ehem_rc ehem_ed25519_verify(const uint8_t pub[EHEM_ED25519_PUB_SIZE],
                             const uint8_t *msg, size_t msg_len,
                             const uint8_t *sig, size_t sig_len,
                             int *valid_out);
+
+/* Ed448 pure RFC 8032 (public 57 bytes, signature 114 bytes). Same tri-state
+ * contract as ehem_ed25519_verify; a wolfSSL build without HAVE_ED448 reports
+ * EHEM_ERR_UNSUPPORTED (NOT_COMPILED_IN). Both the Debian and MSYS2 builds
+ * ship HAVE_ED448, so that path is a guard for exotic builds only. */
+ehem_rc ehem_ed448_verify(const uint8_t pub[EHEM_ED448_PUB_SIZE],
+                          const uint8_t *msg, size_t msg_len,
+                          const uint8_t *sig, size_t sig_len,
+                          int *valid_out);
 
 /*
  * Process-global wolfCrypt init/cleanup (REQ-API-002). Idempotency is the
