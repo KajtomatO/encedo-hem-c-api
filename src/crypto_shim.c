@@ -56,43 +56,40 @@ ehem_rc ehem_hmac_sha256(const uint8_t *key, size_t key_len,
 }
 
 /*
- * out = X25519(scalar, u): the raw Montgomery-ladder scalar multiplication,
- * done through import_private + import_public + shared_secret (all _ex with
- * EC25519_LITTLE_ENDIAN). Both the keypair (u = base point) and the ECDH
- * (u = peer public) go through this ONE path deliberately: it avoids
- * wc_curve25519_export_public_ex, whose "compute the public on export"
- * behaviour differs across wolfSSL builds (the MSYS2/MinGW package failed it
- * while it works on Debian). If X25519 works at all on a platform, ECDH works,
- * and so does this. Verified against RFC 7748 §5.2/§6.1.
+ * out = X25519(scalar, u): the raw Montgomery-ladder scalar multiplication.
+ *
+ * Implemented with wc_curve25519_generic, which takes ONLY byte buffers — no
+ * curve25519_key struct crosses the wolfSSL ABI boundary. That is deliberate
+ * and load-bearing: the prebuilt MSYS2/MinGW wolfSSL (5.9.2) lays out
+ * curve25519_key at 128 bytes while the Debian build (5.6.6) uses 112, so
+ * handing a caller-allocated key to the DLL corrupted the stack and crashed
+ * (EXCEPTION_ACCESS_VIOLATION on CI). Passing only 32-byte arrays sidesteps the
+ * layout mismatch entirely. Bytes are little-endian (RFC 7748); verified
+ * against RFC 7748 §6.1 keypair + Diffie-Hellman. Both the keypair
+ * (u = base point) and the ECDH (u = peer public) go through this one path.
+ *
+ * generic validates u as a real public key and rejects e.g. small-order /
+ * non-canonical points (→ EHEM_ERR_PROTOCOL); the device's spk is always a
+ * valid key, so this only ever fires on a malformed/hostile peer key.
  */
 static ehem_rc x25519_scalarmult(const uint8_t scalar[EHEM_X25519_KEYSIZE],
                                  const uint8_t u[EHEM_X25519_KEYSIZE],
                                  uint8_t out[EHEM_X25519_KEYSIZE])
 {
-    curve25519_key mine, point;
-    if (wc_curve25519_init(&mine) != 0) {
-        return EHEM_ERR_PROTOCOL;
-    }
-    if (wc_curve25519_init(&point) != 0) {
-        wc_curve25519_free(&mine);
-        return EHEM_ERR_PROTOCOL;
-    }
+    /* wc_curve25519_generic requires an already-clamped scalar (it rejects an
+     * unclamped one with ECC_BAD_ARG_E, unlike the struct API which clamped
+     * internally). Clamp a local copy so callers may pass a raw seed. */
+    uint8_t k[EHEM_X25519_KEYSIZE];
+    memcpy(k, scalar, EHEM_X25519_KEYSIZE);
+    k[0]  &= 248;
+    k[31] &= 127;
+    k[31] |= 64;
 
-    ehem_rc result = EHEM_ERR_PROTOCOL;
-    word32 outlen = EHEM_X25519_KEYSIZE;
-    if (wc_curve25519_import_private_ex(scalar, EHEM_X25519_KEYSIZE, &mine,
-                                        EC25519_LITTLE_ENDIAN) == 0 &&
-        wc_curve25519_import_public_ex(u, EHEM_X25519_KEYSIZE, &point,
-                                       EC25519_LITTLE_ENDIAN) == 0 &&
-        wc_curve25519_shared_secret_ex(&mine, &point, out, &outlen,
-                                       EC25519_LITTLE_ENDIAN) == 0 &&
-        outlen == EHEM_X25519_KEYSIZE) {
-        result = EHEM_OK;
-    }
-
-    wc_curve25519_free(&point);
-    wc_curve25519_free(&mine);
-    return result;
+    int rc = wc_curve25519_generic(EHEM_X25519_KEYSIZE, out,
+                                   EHEM_X25519_KEYSIZE, k,
+                                   EHEM_X25519_KEYSIZE, u);
+    ehem_zeroize(k, sizeof k);
+    return rc == 0 ? EHEM_OK : EHEM_ERR_PROTOCOL;
 }
 
 ehem_rc ehem_x25519_keypair_from_seed(const uint8_t seed[EHEM_X25519_KEYSIZE],

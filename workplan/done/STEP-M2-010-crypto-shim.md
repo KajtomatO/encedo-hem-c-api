@@ -63,8 +63,24 @@ evidence:
     path and never call export_public_ex. Re-verified on Debian against RFC
     7748 §5.2/§6.1 (probe + test_crypto/test_ejwt green, gcc+clang+asan). The
     MinGW leg itself is re-confirmed by CI on the next push.
+
+    POST-CI FIX #2 (2026-07-16): the base-point fix (3fde0fd) did NOT help —
+    MinGW still crashed. A temporary struct-free diagnostic revealed the true
+    root cause: an ABI/struct-layout MISMATCH. MSYS2 prebuilt wolfSSL is 5.9.2
+    with sizeof(curve25519_key)=128; the Debian build is 5.6.6 with 112. Passing
+    a caller-allocated curve25519_key into the DLL overran the stack →
+    EXCEPTION_ACCESS_VIOLATION. Real fix: x25519_scalarmult now uses
+    `wc_curve25519_generic` — byte-array args only, NO curve25519_key crosses the
+    ABI — for both keypair (u=9) and ECDH. generic requires a PRE-CLAMPED scalar
+    (unclamped → ECC_BAD_ARG_E), so the shim clamps a local copy. generic also
+    validates u as a real public key, so the raw RFC 7748 §5.2 synthetic-u vector
+    is dropped from the test (rejected by design); §6.1 DH still covers scalarmult
+    with an arbitrary valid u. Re-verified gcc+clang+asan green on Debian; MinGW
+    re-confirmed by CI on push. A struct-FREE diagnostic remains in test_crypto.c
+    until the MinGW leg is confirmed green, then is removed.
 reopened:
   - {date: 2026-07-16, reason: "MinGW CI failed test_crypto (X25519 export_public_ex unsupported on MSYS2 wolfSSL); reworked to a portable base-point scalarmult"}
+  - {date: 2026-07-16, reason: "base-point fix insufficient — real cause was a curve25519_key ABI mismatch (MSYS2 wolfSSL 5.9.2, 128B vs Debian 5.6.6, 112B) crashing the DLL; switched to struct-free wc_curve25519_generic + explicit clamp"}
 cancelled: null
 ---
 
