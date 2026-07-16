@@ -7,7 +7,8 @@ traces:
   architecture: ["ARCHITECTURE.md#11-milestones", "ARCHITECTURE.md#12-risks--open-questions"]
 depends_on: ["STEP-M2-060"]
 evidence:
-  commits: []
+  commits:
+    - "b9686b4 — M2 gate: regenerate TRACE, close §12 risk 2, verify live"
   tests:
     - "tests/integration/test_auth_live.c — live login → scoped token → cache reuse; sub=U, TTL=3598s"
     - "tests/integration/test_config_live.c — live authenticated config GET (devid 3dfd39eb56787905, hostname my.ence.do)"
