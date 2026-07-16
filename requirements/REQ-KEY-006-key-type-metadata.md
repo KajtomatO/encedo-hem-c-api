@@ -73,8 +73,22 @@ REQ-OPS-001) — fixed r‖s sizes after conversion are the consumer's table.
       constants; LIVE cross-check green (test_sign_live + M4 gate,
       2026-07-16): ED25519 pubkey 32 == classifier 32, SECP256R1 pubkey
       33 (compressed) == classifier 33, DER sig 71 ≤ max 72.
-- [ ] OPEN (live, expected at M5's per-family matrix): record the live
-      flag-set strings for families not yet observed (AES, HMAC, ML-KEM,
-      ML-DSA) here; the tolerant-parsing rule means recording them must
-      require no parser change beyond token additions. — still open by
-      design at the M4 gate (those families are first created at M5).
+- [x] RESOLVED (live, M5 per-family matrix, STEP-M5-020, 2026-07-17): the
+      live `list` flag-set strings for every fw create type, captured by
+      test_keygen_matrix_live against the dev device:
+      - HMAC: `ATT,SHA2-256` / `ATT,SHA2-384` / `ATT,SHA2-512` /
+        `ATT,SHA3-256` / `ATT,SHA3-384` / `ATT,SHA3-512`
+      - AES:  `ATT,AES128` / `ATT,AES192` / `ATT,AES256`
+      - ML-KEM: `ATT,PKEY,PQC,MLKEM512` / `…MLKEM768` / `…MLKEM1024`
+      - ML-DSA: `ATT,PKEY,PQC,MLDSA44` / `…MLDSA65` / `…MLDSA87`
+      - (for reference, the asymmetric non-PQC families:
+        `ATT,PKEY,ECDH,ExDSA,SECP256R1/384R1/521R1/256K1`,
+        `ATT,PKEY,ExDSA,ED25519`/`…ED448`,
+        `ATT,PKEY,ECDH,CURVE25519`/`…CURVE448`)
+      A NEW token `PQC` appears on ML-KEM/ML-DSA; the tolerant token walk
+      classifies every string correctly WITH NO parser change (`PQC` is an
+      unrecognized token, ignored; the family resolves from the algorithm
+      token) — the classifier cross-check in the matrix passed for all 23
+      types, confirming the tolerance criterion. `get` returns the bare
+      algorithm name for asymmetric families and the flag-set form
+      (`ATT,<hash|aes>`) for symmetric ones; both parse to the right family.
