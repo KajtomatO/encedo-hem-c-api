@@ -1,7 +1,7 @@
 ---
 id: REQ-TEST-003
 title: Device-key hygiene in tests — EHEMTEST prefix, own-key-only mutation
-status: approved
+status: verified
 priority: must
 revision: 1
 source: ARCHITECTURE.md §9 (reserved EHEMTEST prefix); user decision 2026-07-15 (disposable device EXCEPT the protected set); REQ-TEST-002 rationale ("those rules bind from M3"); approved 2026-07-16

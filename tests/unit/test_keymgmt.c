@@ -1,15 +1,17 @@
 /*
- * test_keymgmt.c — the key-inventory bindings (REQ-KEY-001) driven offline
- * through the fake transport.
+ * test_keymgmt.c — the keymgmt bindings (list, search, create, delete, get)
+ * driven offline through the fake transport.
  *
- * verifies: REQ-KEY-001
- *   - ehem_key_list: full + minimal entry parse (absent descr → NULL/0),
- *     missing required entry field → EHEM_ERR_PROTOCOL, unknown fields ignored,
- *     descr base64-decoded, scope declaration + path construction, 401/403 per
- *     REQ-AUTH-003, 406/409 → EHEM_ERR_DEVICE with the device payload;
- *   - ehem_key_list_all: multi-page walk terminates on offset >= total; a
- *     mid-walk page with `listed < requested limit` does NOT end the walk early;
- *   - ehem_key_page_free NULL-safe.
+ * verifies: REQ-KEY-001, REQ-KEY-002, REQ-KEY-003, REQ-KEY-004, REQ-KEY-005
+ *   - ehem_key_list / _list_all: entry parse (absent descr → NULL/0), missing
+ *     required field → EHEM_ERR_PROTOCOL, unknown fields ignored, descr decode,
+ *     scope + path, 401/403 per REQ-AUTH-003, 406/409 → device; the multi-page
+ *     walk terminates on offset >= total, never on listed < limit;
+ *   - ehem_key_search / _search_all: anchored descr body bytes, 404 → empty page;
+ *   - ehem_key_create: body bytes, label policy, kid parse, 400/406 mapping;
+ *   - ehem_key_delete: DELETE + empty-200, malformed kid, 406 → NOT_FOUND;
+ *   - ehem_key_get: four response shapes, per-kid scope cache, 406 → NOT_FOUND;
+ *   - ehem_key_page_free / ehem_key_details_free NULL-safe.
  *
  * Every call is authenticated, so it is preceded by a login exchange (challenge
  * GET + token POST) queued via push_login(); the pattern mirrors test_config.c.

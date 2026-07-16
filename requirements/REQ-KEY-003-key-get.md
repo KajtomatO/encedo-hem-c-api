@@ -1,7 +1,7 @@
 ---
 id: REQ-KEY-003
 title: Binding for /api/keymgmt/get — public material and metadata by KID
-status: approved
+status: verified
 priority: must
 revision: 1
 source: ARCHITECTURE.md §6; encedo-hem-api-doc keymgmt/get.md; encedo-hem-python-api keymgmt.py (OQ-16 scope finding on fw v1.2.2-DIAG); HEM-SDK-5 (public-key read); approved 2026-07-16

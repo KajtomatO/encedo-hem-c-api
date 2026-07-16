@@ -1,7 +1,7 @@
 ---
 id: REQ-KEY-001
 title: Binding for /api/keymgmt/list — paginated key inventory
-status: approved
+status: verified
 priority: must
 revision: 1
 source: ARCHITECTURE.md §6, §11 (M3); encedo-hem-api-doc keymgmt/list.md; encedo-hem-python-api keymgmt.py (OQ-17 pagination fact); HEM-SDK-4/6 (requirements/start_point/encedo-pkcs11/REQUIREMENTS-hem.md); approved 2026-07-16

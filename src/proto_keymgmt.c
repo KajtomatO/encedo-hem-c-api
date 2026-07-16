@@ -1,10 +1,11 @@
 /*
- * proto_keymgmt.c — bindings for the `keymgmt` API group. This first cut covers
- * the paginated inventory (REQ-KEY-001): the single-page list and the full-repo
- * walk. Search (REQ-KEY-002) returns the identical `{offset,total,listed,list}`
- * envelope and will reuse parse_key_page() here.
+ * proto_keymgmt.c — bindings for the `keymgmt` API group: the paginated
+ * inventory (list + full-repo walk), descr search, create, delete, and
+ * single-key get. Search returns the identical `{offset,total,listed,list}`
+ * envelope as list and shares parse_key_page().
  *
- * implements: REQ-KEY-001, REQ-API-005
+ * implements: REQ-KEY-001, REQ-KEY-002, REQ-KEY-003, REQ-KEY-004, REQ-KEY-005,
+ *             REQ-API-005
  *
  * Follows the proto_system.c template: build the request → send it through the
  * shared request path (proto_common — scope-based bearer, REQ-NET-005 recovery,

@@ -3,7 +3,9 @@
  *
  * implements: REQ-TOOL-001 (the `status` subcommand),
  *             REQ-TOOL-002 (certificate-refresh notice, `checkin` subcommand),
- *             REQ-TOOL-003 (the `cert-install` subcommand)
+ *             REQ-TOOL-003 (the `cert-install` subcommand),
+ *             REQ-TOOL-004 (the `keys list` subcommand),
+ *             REQ-TOOL-006 (the `keys rm` subcommand)
  *
  * Consumes ONLY the public headers in include/ehem/ — it doubles as living
  * documentation of the API and as the manual driver for the M1/M2 gates.

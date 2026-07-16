@@ -1,7 +1,7 @@
 ---
 id: REQ-KEY-002
 title: Binding for /api/keymgmt/search — DESCR pattern search
-status: approved
+status: verified
 priority: must
 revision: 1
 source: ARCHITECTURE.md §6; encedo-hem-api-doc keymgmt/search.md; encedo-hem-python-api keymgmt.py (404 = no-match behavior); HEM-SDK-4 (DESCR-prefix search); approved 2026-07-16

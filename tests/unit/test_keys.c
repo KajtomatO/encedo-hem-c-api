@@ -1,12 +1,14 @@
 /*
- * test_keys.c — hem-tool `keys` support: the protected-key classifier and the
- * `keys list` subcommand, driven offline through the fake transport.
+ * test_keys.c — hem-tool `keys` support: the protected-key classifier, `keys
+ * list`, and `keys rm`, driven offline through the fake transport.
  *
- * verifies: REQ-TOOL-005 (label-only protected classification: exact TLS labels,
- *           near-misses unprotected, (Android)/(iPhone) any case/position), and
- *           REQ-TOOL-004 (keys list: full-repo walk prints every key once with
- *           [PROTECTED] marks + summary counts; read-only = auth + list only;
- *           missing passphrase → exit 2; auth failure → exit 1).
+ * verifies: REQ-TOOL-004 (keys list: full-repo walk prints every key once with
+ *           [PROTECTED] marks + summary; read-only; missing passphrase → exit 2;
+ *           auth failure → exit 1), REQ-TOOL-005 (label-only protected
+ *           classification: exact TLS labels, near-misses unprotected,
+ *           (Android)/(iPhone) any case/position), REQ-TOOL-006 (keys rm:
+ *           partition, --all vs --label-prefix, protected exact/partial guard,
+ *           per-key literal-YES prompt, --yes bulk-only, dry-run, exit codes).
  *
  * The tool code under test (src/tools/hem-tool/keys.c via hem-tool-core) uses
  * ONLY the public API; the auth exchange is driven with the internal clock/KDF

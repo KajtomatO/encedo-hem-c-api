@@ -1,13 +1,14 @@
 /*
  * keys.h — hem-tool `keys` subcommands + the protected-key classifier.
  *
- * implements: REQ-TOOL-005 (label-based protected-key policy),
- *             REQ-TOOL-004 (`keys list` — read-only inventory with marking)
+ * implements: REQ-TOOL-004 (`keys list` — read-only inventory with marking),
+ *             REQ-TOOL-005 (label-based protected-key policy),
+ *             REQ-TOOL-006 (`keys rm` — removal with the protected-key guard)
  *
  * Lives in hem-tool-core (like cert_install.c) so the CLI and the unit tests
- * drive one code path, using ONLY the public SDK API. `keys rm` (REQ-TOOL-006)
- * will land here too and reuse hem_key_is_protected() — the single source of
- * the protected-label policy (no duplicated label constants anywhere else).
+ * drive one code path, using ONLY the public SDK API. `keys list` (marking) and
+ * `keys rm` (guarding) share hem_key_is_protected() — the single source of the
+ * protected-label policy (no duplicated label constants anywhere else).
  */
 #ifndef HEM_KEYS_H
 #define HEM_KEYS_H

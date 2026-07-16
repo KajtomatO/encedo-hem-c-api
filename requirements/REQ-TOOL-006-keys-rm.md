@@ -1,7 +1,7 @@
 ---
 id: REQ-TOOL-006
 title: hem-tool keys rm — removal with protected-key guard
-status: approved
+status: verified
 priority: must
 revision: 1
 source: ARCHITECTURE.md §8, §11 (M3 gate: guard refuses bulk removal); requirements/start_point/goal.txt ("allow to remove keys … including 'protected' keys"); encedo-hem-python-api wipe_keys.py (reference semantics); approved 2026-07-16

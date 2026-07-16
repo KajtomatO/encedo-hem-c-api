@@ -1,7 +1,7 @@
 ---
 id: REQ-KEY-004
 title: Binding for /api/keymgmt/delete — remove a key by KID
-status: approved
+status: verified
 priority: must
 revision: 1
 source: ARCHITECTURE.md §6, §11 (M3); encedo-hem-api-doc keymgmt/delete.md; HEM-SDK-6 (delete by KID); approved 2026-07-16

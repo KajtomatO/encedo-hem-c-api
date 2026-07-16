@@ -1,7 +1,7 @@
 ---
 id: REQ-KEY-005
 title: Binding for /api/keymgmt/create — generate a key on the device
-status: approved
+status: verified
 priority: must
 revision: 1
 source: ARCHITECTURE.md §6, §11 (M3 integration tests create EHEMTEST keys); encedo-hem-api-doc keymgmt/create.md; encedo-hem-python-api keymgmt.py (label ≤31, NIST-ECC mode default, descr cap); HEM-SDK-6 (generate); approved 2026-07-16

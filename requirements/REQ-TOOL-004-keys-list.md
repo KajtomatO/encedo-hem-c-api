@@ -1,7 +1,7 @@
 ---
 id: REQ-TOOL-004
 title: hem-tool keys list — inventory with protected-key marking
-status: approved
+status: verified
 priority: must
 revision: 1
 source: ARCHITECTURE.md §8, §11 (M3 gate = goal.txt tool milestone); requirements/start_point/goal.txt ("a tool that will list keys"); encedo-hem-python-api wipe_keys.py --list (reference behavior); approved 2026-07-16

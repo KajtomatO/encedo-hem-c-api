@@ -1,7 +1,7 @@
 /*
  * keys.c — hem-tool `keys` subcommands + the protected-key classifier.
  *
- * implements: REQ-TOOL-005, REQ-TOOL-004
+ * implements: REQ-TOOL-004, REQ-TOOL-005, REQ-TOOL-006
  *
  * Public-API-only (include/ehem/), so the same code drives the real device from
  * main() and the fake transport from the unit test.

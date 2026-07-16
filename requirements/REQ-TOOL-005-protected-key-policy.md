@@ -1,7 +1,7 @@
 ---
 id: REQ-TOOL-005
 title: Protected-key classification policy (label-based)
-status: approved
+status: verified
 priority: must
 revision: 1
 source: ARCHITECTURE.md §8 (protected-key policy); user decision 2026-07-15 (disposable device EXCEPT TLS material and paired authenticators); encedo-hem-python-api wipe_keys.py (_PROTECTED_LABELS / _PROTECTED_LABEL_SUBSTRINGS — authoritative reference); approved 2026-07-16
