@@ -43,6 +43,24 @@ static inline void ehem_require_test_url(void)
 }
 
 /*
+ * Call at the top of a `disruptive`-labeled test's main(): like
+ * ehem_require_test_url(), but ALSO requires EHEM_ALLOW_DISRUPTIVE=1 — an
+ * explicit opt-in, because these tests mutate and reboot the device
+ * (ARCHITECTURE.md §9). Skips (exit 77) when either gate is missing.
+ */
+static inline void ehem_require_disruptive(void)
+{
+    const char *allow = getenv("EHEM_ALLOW_DISRUPTIVE");
+    ehem_require_test_url();
+    if (allow == NULL || allow[0] != '1') {
+        fprintf(stderr,
+                "EHEM_ALLOW_DISRUPTIVE=1 not set — skipping disruptive test "
+                "(it mutates + reboots the device)\n");
+        exit(EHEM_SKIP_EXIT);
+    }
+}
+
+/*
  * Create a context for the configured test device, applying the TLS mode the
  * environment asks for. Returns the ehem_ctx_create() result.
  */

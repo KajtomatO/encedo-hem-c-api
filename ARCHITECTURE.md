@@ -301,6 +301,14 @@ sequenceDiagram
   `EHEM_ERR_PROTOCOL` with detail.
 - **Doc discrepancies:** where doc, Manager, and test suite disagree, the
   real device wins; findings are recorded back into requirement files.
+- **Check-in cert harvest** (REQ-SYS-006): the check-in binding decodes the
+  leg-2 `checked` JWT payload and exposes the cloud-delivered chain
+  (`ehem_checkin_info.newcrt_chain`), plus the device's current serial from
+  the leg-1 `csn` claim (`current_serial`) — the inputs the cert-install
+  tool uses to rotate a certificate the firmware itself cannot apply
+  (REQ-SYS-003 root cause). A public `ehem_cert_inspect()` reads a base64
+  DER chain's leaf identity (serial + validity) via the crypto shim's
+  wolfCrypt cert decoder, so no ASN.1 leaks out of the shim.
 
 ## 7. Transport
 
@@ -326,9 +334,19 @@ sequenceDiagram
 - Thin consumer of the public API only — doubles as living documentation
   and the manual integration driver.
 - Subcommands (grow with milestones): `hem-tool status` (MVP connection
-  test), `hem-tool keys list`, `hem-tool keys rm`.
-- Connection parameters via flags or env (`EHEM_URL`, `EHEM_PASSPHRASE`
-  with stdin prompt fallback — passphrase never on the command line).
+  test), `hem-tool checkin`, `hem-tool cert-install` (M2), and later
+  `hem-tool keys list` / `hem-tool keys rm`.
+- **`cert-install`** (REQ-TOOL-003): harvests the cloud certificate
+  (REQ-SYS-006), skips if the device already serves it (leg-1 `csn` vs the
+  harvested leaf serial, or the broker suppressing the chain), else
+  authenticates, installs (REQ-SYS-004), **reboots** (REQ-SYS-005), waits
+  for the device, and verifies — one distinct exit code per failure mode.
+  Its orchestration lives in a small `hem-tool-core` static lib the CLI, the
+  unit test, and the disruptive live test all share; its live test is
+  `disruptive`-gated.
+- Connection parameters via flags or env (`EHEM_URL`, `EHEM_PASSPHRASE` —
+  the passphrase currently accepted via `--passphrase`/env; a stdin prompt
+  fallback so it never need appear on the command line is a later refinement).
 - **Protected-key policy** (mirrors Python `wipe_keys.py`): keys labeled
   exactly `TLS PrivateKey` / `TLS Certificate`, or containing `(Android)`
   / `(iPhone)`, are never removed by bulk operations; removing one

@@ -76,6 +76,50 @@ ehem_rc ehem_x25519_shared(const uint8_t priv[EHEM_X25519_KEYSIZE],
  */
 void ehem_zeroize(void *p, size_t n);
 
+/* --------------------------------------------------------------------------
+ * X.509 leaf inspection — REQ-SYS-006 harvest / REQ-TOOL-003 skip-if-current.
+ *
+ * The check-in cert-install path needs three facts about the cloud-delivered
+ * certificate: its serial (to compare with the device's currently-loaded one),
+ * and its validity window (for the summary). Rather than hand-roll an ASN.1
+ * walk we lean on wolfCrypt's cert decoder — the same containment rule as the
+ * rest of the shim, so no ASN.1/wolfSSL type escapes into a public header.
+ * -------------------------------------------------------------------------- */
+
+#define EHEM_CERT_SERIAL_HEX_CAP 67  /* 33 serial bytes * 2 + NUL (generous) */
+#define EHEM_CERT_CN_CAP         128 /* subject CN, truncated if longer */
+#define EHEM_CERT_DATE_CAP       21  /* "YYYY-MM-DDTHH:MM:SSZ" + NUL */
+
+typedef struct ehem_cert_fields {
+    char serial_hex[EHEM_CERT_SERIAL_HEX_CAP];  /* uppercase hex, no separators;
+                                                 * a single leading 0x00 DER
+                                                 * sign byte is dropped so the
+                                                 * value is convention-stable */
+    char subject_cn[EHEM_CERT_CN_CAP];          /* "" if the cert carries none */
+    char not_before[EHEM_CERT_DATE_CAP];        /* UTC ISO-8601 (…Z); "" if
+                                                 * the date could not be read */
+    char not_after[EHEM_CERT_DATE_CAP];
+} ehem_cert_fields;
+
+/*
+ * Parse the leaf certificate at the START of `der` (the first cert of a
+ * concatenated DER chain). On success fills *out and returns EHEM_OK. Returns
+ * EHEM_ERR_ARG on a NULL/empty argument, EHEM_ERR_PROTOCOL if the bytes do not
+ * parse as an X.509 certificate. Structure only — no signature/date validation.
+ */
+ehem_rc ehem_cert_parse_leaf(const uint8_t *der, size_t der_len,
+                             ehem_cert_fields *out);
+
+/*
+ * Format raw serial-number bytes as an uppercase hex string in `out` (capacity
+ * `cap`, always NUL-terminated). A single leading 0x00 DER sign byte is dropped
+ * so the two producers of a serial (this shim's cert parse, and the device's
+ * base64 `csn` claim decoded by the caller) yield the SAME string for the same
+ * certificate regardless of sign-byte convention — that equality is what
+ * skip-if-current relies on (REQ-TOOL-003).
+ */
+void ehem_serial_hex(const uint8_t *serial, size_t len, char *out, size_t cap);
+
 /*
  * Process-global wolfCrypt init/cleanup (REQ-API-002). Idempotency is the
  * caller's (ehem_global_init/cleanup); these run the raw wolfCrypt_Init /

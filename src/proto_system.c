@@ -16,6 +16,8 @@
 #include <string.h>
 
 #include "context.h"
+#include "crypto_shim.h"     /* ehem_cert_parse_leaf, ehem_serial_hex */
+#include "ejwt.h"            /* base64 / base64url decoders */
 #include "json.h"
 #include "proto_auth.h"      /* ehem_auth_invalidate — reboot drops the cache */
 #include "proto_common.h"
@@ -268,6 +270,102 @@ void ehem_system_version_free(ehem_version_info *version)
 /* check-in (REQ-SYS-003)                                                     */
 /* -------------------------------------------------------------------------- */
 
+/*
+ * Extract a string claim from a JWT carried in a JSON envelope (REQ-SYS-006).
+ * `envelope` is a raw check-in leg body — {"check":"<jwt>"} (leg 1) or
+ * {"checked":"<jwt>"} (leg 2); `env_key` names the JWT field, `claim` the claim
+ * inside the JWT's base64url payload segment. The payload is NOT encrypted and
+ * the signature is NOT verified here — the SDK only reads the value (the leg-3
+ * relay stays verbatim; the cloud leg was already TLS-verified). On finding the
+ * claim, dups its value into *out (caller frees). A missing envelope / segment
+ * / claim is tolerated: *out is left untouched and EHEM_OK returned. Returns
+ * EHEM_ERR_NOMEM only on allocation failure.
+ */
+static ehem_rc harvest_jwt_claim(const char *envelope, const char *env_key,
+                                 const char *claim, char **out)
+{
+    ehem_json *env = NULL;
+    ehem_json *payload = NULL;
+    const char *jwt;
+    const char *p1;
+    const char *p2;
+    const char *value;
+    uint8_t *raw = NULL;
+    size_t seg_len;
+    size_t n;
+    ehem_rc rc = EHEM_OK;
+
+    env = ehem_json_parse(envelope, strlen(envelope));
+    if (env == NULL) {
+        return EHEM_OK;                    /* not JSON — nothing to harvest */
+    }
+    if (!ehem_json_get_string(env, env_key, &jwt)) {
+        goto done;
+    }
+    p1 = strchr(jwt, '.');                 /* header . payload . signature */
+    if (p1 == NULL || (p2 = strchr(p1 + 1, '.')) == NULL) {
+        goto done;
+    }
+    seg_len = (size_t)(p2 - (p1 + 1));
+    if (seg_len == 0) {
+        goto done;
+    }
+    raw = malloc(seg_len);                 /* decoded is never larger than input */
+    if (raw == NULL) {
+        rc = EHEM_ERR_NOMEM;
+        goto done;
+    }
+    n = ehem_b64url_decode(p1 + 1, seg_len, raw, seg_len);
+    if (n == (size_t)-1) {
+        goto done;                         /* undecodable payload — tolerant */
+    }
+    payload = ehem_json_parse((const char *)raw, n);
+    if (payload != NULL && ehem_json_get_string(payload, claim, &value)) {
+        char *dup = dup_str(value);
+        if (dup == NULL) {
+            rc = EHEM_ERR_NOMEM;
+            goto done;
+        }
+        *out = dup;
+    }
+
+done:
+    free(raw);
+    ehem_json_free(payload);
+    ehem_json_free(env);
+    return rc;
+}
+
+/*
+ * Harvest the device's currently-loaded certificate serial from the leg-1
+ * `csn` claim (base64 of the raw serial bytes) and store it on the result as
+ * normalized uppercase hex, matching ehem_cert_inspect()'s representation so
+ * the two can be compared directly. Tolerant: any failure leaves current_serial
+ * NULL. Returns EHEM_ERR_NOMEM only on allocation failure.
+ */
+static ehem_rc harvest_current_serial(const char *challenge,
+                                      ehem_checkin_info *r)
+{
+    char *csn_b64 = NULL;
+    uint8_t serial[64];
+    char hex[EHEM_CERT_SERIAL_HEX_CAP];
+    size_t n;
+    ehem_rc rc;
+
+    rc = harvest_jwt_claim(challenge, "check", "csn", &csn_b64);
+    if (rc != EHEM_OK || csn_b64 == NULL) {
+        return rc;
+    }
+    n = ehem_b64_std_decode(csn_b64, strlen(csn_b64), serial, sizeof serial);
+    free(csn_b64);
+    if (n == (size_t)-1 || n == 0) {
+        return EHEM_OK;                    /* undecodable serial — tolerant */
+    }
+    ehem_serial_hex(serial, n, hex, sizeof hex);
+    r->current_serial = dup_str(hex);
+    return (r->current_serial != NULL) ? EHEM_OK : EHEM_ERR_NOMEM;
+}
+
 /* Leg-3 response → ehem_checkin_info (all fields optional, tolerant). */
 static ehem_rc parse_checkin(ehem_ctx *ctx, const ehem_json *root,
                              ehem_checkin_info **out)
@@ -332,6 +430,22 @@ ehem_rc ehem_checkin_run(ehem_ctx *ctx, int relax_device_tls,
 
     if (out != NULL) {
         rc = parse_checkin(ctx, root, out);
+        if (rc == EHEM_OK) {
+            /* REQ-SYS-006: expose the cloud-DELIVERED chain (leg-2 `newcrt`)
+             * and the device's CURRENT serial (leg-1 `csn`) for cert-install.
+             * Harvesting is best-effort and never fails the check-in itself —
+             * only an allocation failure propagates. */
+            rc = harvest_jwt_claim(verified, "checked", "newcrt",
+                                   &(*out)->newcrt_chain);
+            if (rc == EHEM_OK) {
+                rc = harvest_current_serial(challenge, *out);
+            }
+            if (rc != EHEM_OK) {
+                ehem_checkin_result_free(*out);
+                *out = NULL;
+                rc = ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+            }
+        }
     }
 
 done:
@@ -364,7 +478,81 @@ void ehem_checkin_result_free(ehem_checkin_info *result)
     free(result->newcrt);
     free(result->newfws);
     free(result->newuis);
+    free(result->newcrt_chain);
+    free(result->current_serial);
     free(result);
+}
+
+/* -------------------------------------------------------------------------- */
+/* certificate inspection (REQ-SYS-006 / REQ-TOOL-003)                        */
+/* -------------------------------------------------------------------------- */
+
+ehem_rc ehem_cert_inspect(ehem_ctx *ctx, const char *crt_b64,
+                          ehem_cert_info **out)
+{
+    uint8_t *der = NULL;
+    size_t b64_len;
+    size_t der_len;
+    ehem_cert_fields f;
+    ehem_cert_info *info;
+    ehem_rc rc;
+
+    if (ctx == NULL || crt_b64 == NULL || out == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    *out = NULL;
+    ehem_ctx_clear_error(ctx);
+
+    b64_len = strlen(crt_b64);
+    if (b64_len == 0) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 0, NULL,
+                             "cert: empty certificate string");
+    }
+    der = malloc(b64_len);              /* decoded is never larger than input */
+    if (der == NULL) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    der_len = ehem_b64_std_decode(crt_b64, b64_len, der, b64_len);
+    if (der_len == (size_t)-1) {
+        free(der);
+        return ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 0, NULL,
+                             "cert: not valid base64");
+    }
+    rc = ehem_cert_parse_leaf(der, der_len, &f);
+    free(der);
+    if (rc != EHEM_OK) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 0, NULL,
+                             "cert: could not parse X.509 leaf certificate");
+    }
+
+    info = calloc(1, sizeof *info);
+    if (info == NULL) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    info->serial     = dup_str(f.serial_hex);
+    info->subject_cn = dup_str(f.subject_cn);
+    info->not_before = dup_str(f.not_before);
+    info->not_after  = dup_str(f.not_after);
+    if (info->serial == NULL || info->subject_cn == NULL ||
+        info->not_before == NULL || info->not_after == NULL) {
+        ehem_cert_info_free(info);
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+
+    *out = info;
+    return EHEM_OK;
+}
+
+void ehem_cert_info_free(ehem_cert_info *info)
+{
+    if (info == NULL) {
+        return;
+    }
+    free(info->serial);
+    free(info->subject_cn);
+    free(info->not_before);
+    free(info->not_after);
+    free(info);
 }
 
 /* -------------------------------------------------------------------------- */

@@ -156,8 +156,17 @@ install(FILES
 # library-only consumer.
 option(EHEM_BUILD_TOOL "Build the hem-tool CLI" ON)
 if(EHEM_BUILD_TOOL)
+  # The cert-install orchestration (REQ-TOOL-003) lives in a small static lib so
+  # the tool binary and the unit/disruptive tests share ONE copy of it. Like the
+  # rest of the tool it uses only the public API (through the static SDK).
+  add_library(hem-tool-core STATIC src/tools/hem-tool/cert_install.c)
+  target_link_libraries(hem-tool-core PUBLIC encedo-hem::encedo-hem-static)
+  target_include_directories(hem-tool-core PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tools/hem-tool)
+  target_compile_options(hem-tool-core PRIVATE ${EHEM_WARNING_FLAGS})
+
   add_executable(hem-tool src/tools/hem-tool/main.c)
-  target_link_libraries(hem-tool PRIVATE encedo-hem::encedo-hem-static)
+  target_link_libraries(hem-tool PRIVATE hem-tool-core)
   target_compile_options(hem-tool PRIVATE ${EHEM_WARNING_FLAGS})
   install(TARGETS hem-tool RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()

@@ -38,20 +38,45 @@ about to do, and its live integration test is disruptive-gated
 (`disruptive` CTest label + `EHEM_ALLOW_DISRUPTIVE=1`) — the unit-level
 flow is covered via the fake transport.
 
+**Skip-if-current mechanism (RESOLVED at implementation, 2026-07-16):** two
+signals, both keyed on the leg-1 `csn` serial (REQ-SYS-006 `current_serial`),
+whichever the broker gives:
+1. **Broker-suppressed chain.** The broker delivers a `newcrt` chain only when
+   it deems the device's `csn` stale. So `newcrt_chain` absent WITH a
+   `current_serial` present means the broker already judged the device current
+   → the tool reports "already current" and exits 0. (`newcrt_chain` absent AND
+   `current_serial` absent — no cert loaded / non-TLD hostname — is the genuine
+   nothing-to-do error, exit 3.)
+2. **Explicit serial match.** When a chain IS delivered, the tool parses its
+   leaf serial with `ehem_cert_inspect()` (wolfCrypt `wc_ParseCert` in the
+   crypto shim; serials normalized to hex with a single leading 0x00 sign byte
+   dropped so both producers agree) and compares it to `current_serial`; equal →
+   "already current", exit 0. `--force` overrides only path 2 (path 1 has no
+   chain to reinstall).
+Live-confirmed 2026-07-16: against the current dev device the broker took path 1
+(`current_serial=C173D2A9…`, no chain) and the tool exited 0 without rebooting.
+
 **Acceptance criteria:**
-- [ ] Full flow against the fake transport: check-in legs, install POST
+- [x] Full flow against the fake transport: check-in legs, install POST
       body, reboot GET, polling, and final verify asserted in sequence;
-      exit 0 with a summary naming old→new validity (unit test).
-- [ ] Skip-if-current path exits 0 without install/reboot; `--force`
-      proceeds (unit test). OPEN: mechanism for reading the served
-      certificate's identity for the comparison — candidate: leg-1
-      challenge `csn` claim (serial of the loaded cert, per
-      system/checkin.md) vs the harvested leaf's serial; decide at
-      implementation and record here.
-- [ ] Each failure mode (no chain, auth failure, install rejected, device
-      never returns after reboot, verify fails) exits nonzero with a
-      distinct, actionable message (unit tests).
-- [ ] Live disruptive-gated integration run against the dev device recorded
-      in evidence (may be deferred to the next natural expiry to avoid a
-      pointless reboot; the 2026-07-16 python-script run is the reference
-      behavior).
+      exit 0 with a summary naming old→new serial + the new validity window
+      (test_cert_install.c `test_full_install_flow`).
+- [x] Skip-if-current path exits 0 without install/reboot; `--force`
+      proceeds (test_cert_install.c `test_skip_if_current`,
+      `test_already_current_no_chain`, `test_force_reinstalls`). Mechanism
+      recorded above.
+- [x] Each failure mode exits nonzero with a distinct code + actionable
+      message: no-chain(3), no-passphrase(2), check-in(4), parse(5), auth(6),
+      install-rejected(7), reboot(8), device-timeout(9) — one
+      test_cert_install.c case each; the timeout message adapts to the TLS mode
+      (insecure vs verifying).
+- [x] `disruptive` CTest label + `EHEM_ALLOW_DISRUPTIVE=1` gate wired
+      (tests/disruptive/test_cert_install_live.c, excluded from
+      `-L integration`; skips 77 without the gate).
+- [x] Live run recorded (2026-07-16, NON-disruptive): `hem-tool cert-install`
+      against my.ence.do harvested the chain and exited 0 "already current"
+      (serial C173D2A9148ECD6225A3DFE5299B82CE) with no reboot — proving the
+      harvest + skip-if-current path end to end. The full install→reboot→verify
+      path stays **deferred** to the next natural cert expiry (running it now
+      would pointlessly reboot a current device); the 2026-07-16 python-script
+      remediation is the reference behavior for that path.

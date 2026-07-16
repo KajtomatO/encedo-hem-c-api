@@ -2,16 +2,19 @@
  * hem-tool — a thin CLI over the Encedo HEM C SDK public API.
  *
  * implements: REQ-TOOL-001 (the `status` subcommand),
- *             REQ-TOOL-002 (certificate-refresh notice, `checkin` subcommand)
+ *             REQ-TOOL-002 (certificate-refresh notice, `checkin` subcommand),
+ *             REQ-TOOL-003 (the `cert-install` subcommand)
  *
  * Consumes ONLY the public headers in include/ehem/ — it doubles as living
- * documentation of the API and as the manual driver for the M1 gate. Argument
- * parsing is dependency-free; the subcommand table is structured so `keys list`
- * / `keys rm` (M3) slot in without reworking main().
+ * documentation of the API and as the manual driver for the M1/M2 gates.
+ * Argument parsing is dependency-free; the subcommand table is structured so
+ * `keys list` / `keys rm` (M3) slot in without reworking main().
  *
  * Usage:
- *   hem-tool [--url URL] [--cacert FILE | --insecure] <status|checkin>
- * Connection URL comes from --url or the EHEM_URL environment variable.
+ *   hem-tool [--url URL] [--cacert FILE | --insecure] [--passphrase PW]
+ *            [--force] <status|checkin|cert-install>
+ * Connection URL comes from --url or the EHEM_URL environment variable; the
+ * passphrase from --passphrase or EHEM_PASSPHRASE.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,10 +23,14 @@
 #include "ehem/ehem.h"
 #include "ehem/system.h"
 
+#include "cert_install.h"
+
 typedef struct {
     const char *url;
     const char *cacert;
     int         insecure;
+    const char *passphrase;   /* --passphrase / EHEM_PASSPHRASE (cert-install) */
+    int         force;        /* --force (cert-install) */
 } cli_opts;
 
 static void usage(FILE *f)
@@ -36,12 +43,17 @@ static void usage(FILE *f)
         "  --url URL        device base URL (or set EHEM_URL)\n"
         "  --cacert FILE    verify TLS against this CA/pinned certificate\n"
         "  --insecure       skip TLS verification (lab use only)\n"
+        "  --passphrase PW  login passphrase (or set EHEM_PASSPHRASE)\n"
+        "  --force          cert-install: reinstall even if already current\n"
         "  -h, --help       show this help\n"
         "\n"
         "commands:\n"
         "  status           print device status and version\n"
         "  checkin          run the check-in handshake (refreshes the device\n"
-        "                   TLS certificate and clock via the Encedo cloud)\n");
+        "                   TLS certificate and clock via the Encedo cloud)\n"
+        "  cert-install     harvest the cloud certificate and install it on a\n"
+        "                   device whose firmware cannot apply it itself\n"
+        "                   (authenticates, installs, REBOOTS, and verifies)\n");
 }
 
 /* REQ-TOOL-002: a security-relevant event (the device presented an invalid
@@ -195,6 +207,33 @@ static int cmd_checkin(const cli_opts *o)
     return 0;
 }
 
+/* REQ-TOOL-003: harvest the cloud-delivered certificate and install it on a
+ * device whose firmware cannot apply it itself, then reboot and verify. */
+static int cmd_cert_install(const cli_opts *o)
+{
+    ehem_ctx *ctx = NULL;
+    hem_cert_install_opts co;
+    int ret;
+
+    ret = make_ctx(o, &ctx);
+    if (ret != 0) {
+        return ret;
+    }
+
+    memset(&co, 0, sizeof co);
+    co.passphrase    = o->passphrase;
+    co.force         = o->force;
+    co.insecure      = o->insecure;
+    co.poll_attempts = HEM_CERT_DEFAULT_POLL_ATTEMPTS;
+    co.poll_delay_ms = HEM_CERT_DEFAULT_POLL_DELAY_MS;   /* real wait between polls */
+    co.out           = stdout;
+    co.err           = stderr;
+
+    ret = hem_cert_install_run(ctx, &co);
+    ehem_ctx_destroy(ctx);
+    return ret;
+}
+
 int main(int argc, char **argv)
 {
     cli_opts o;
@@ -203,7 +242,8 @@ int main(int argc, char **argv)
     int ret;
 
     memset(&o, 0, sizeof o);
-    o.url = getenv("EHEM_URL");   /* --url overrides below */
+    o.url = getenv("EHEM_URL");           /* --url overrides below */
+    o.passphrase = getenv("EHEM_PASSPHRASE");  /* --passphrase overrides below */
 
     for (i = 1; i < argc; i++) {
         const char *a = argv[i];
@@ -215,6 +255,12 @@ int main(int argc, char **argv)
             o.cacert = argv[++i];
         } else if (strncmp(a, "--cacert=", 9) == 0) {
             o.cacert = a + 9;
+        } else if (strcmp(a, "--passphrase") == 0 && i + 1 < argc) {
+            o.passphrase = argv[++i];
+        } else if (strncmp(a, "--passphrase=", 13) == 0) {
+            o.passphrase = a + 13;
+        } else if (strcmp(a, "--force") == 0) {
+            o.force = 1;
         } else if (strcmp(a, "--insecure") == 0) {
             o.insecure = 1;
         } else if (strcmp(a, "-h") == 0 || strcmp(a, "--help") == 0) {
@@ -246,6 +292,8 @@ int main(int argc, char **argv)
         ret = cmd_status(&o);
     } else if (strcmp(cmd, "checkin") == 0) {
         ret = cmd_checkin(&o);
+    } else if (strcmp(cmd, "cert-install") == 0) {
+        ret = cmd_cert_install(&o);
     } else {
         fprintf(stderr, "error: unknown command '%s'\n", cmd);
         usage(stderr);

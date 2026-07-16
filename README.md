@@ -113,7 +113,14 @@ ctest --test-dir build -L unit --output-on-failure
 
 - **`disruptive`** — mutates device availability or state (reboot / firmware /
   wipe). Run deliberately and attended, never in unattended CI; requires
-  both the label and `EHEM_ALLOW_DISRUPTIVE=1`.
+  both the label and `EHEM_ALLOW_DISRUPTIVE=1`. First such test:
+  `test_cert_install_live` (the `hem-tool cert-install` flow — it may reboot
+  the device).
+
+  ```bash
+  EHEM_TEST_URL="https://my-hem.example" EHEM_TEST_PASSPHRASE="…" \
+      EHEM_ALLOW_DISRUPTIVE=1 ctest --test-dir build -L disruptive
+  ```
 
 ## Developer workflow (`./dev`)
 

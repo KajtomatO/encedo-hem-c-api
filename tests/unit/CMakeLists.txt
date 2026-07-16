@@ -20,6 +20,16 @@ ehem_add_unit_test(test_system SOURCES test_system.c)
 # REQ-SYS-003, REQ-NET-005: check-in flow + automatic certificate recovery.
 ehem_add_unit_test(test_checkin SOURCES test_checkin.c)
 
+# REQ-SYS-006, REQ-TOOL-003: public cert-inspection helper (serial + validity).
+ehem_add_unit_test(test_cert SOURCES test_cert.c)
+
+# REQ-TOOL-003: hem-tool cert-install orchestration via the fake transport.
+# Links hem-tool-core (the shared tool code) alongside the test support lib.
+if(TARGET hem-tool-core)
+  ehem_add_unit_test(test_cert_install SOURCES test_cert_install.c)
+  target_link_libraries(test_cert_install PRIVATE hem-tool-core)
+endif()
+
 # REQ-SYS-004, REQ-SYS-005: config GET / cert install / reboot bindings.
 ehem_add_unit_test(test_config SOURCES test_config.c)
 

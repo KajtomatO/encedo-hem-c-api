@@ -123,10 +123,31 @@ EHEM_API void ehem_system_version_free(ehem_version_info *version);
  */
 typedef struct ehem_checkin_info {
     char *status;   /* general check-in status */
-    char *newcrt;   /* TLS certificate update status */
+    char *newcrt;   /* TLS certificate update status ("OK"/"ERROR") */
     char *newfws;   /* available firmware update info */
     char *newuis;   /* available Manager UI update info */
     bool  cert_updated;  /* derived: newcrt present and non-empty */
+
+    /*
+     * REQ-SYS-006 — the certificate the cloud DELIVERED, harvested from the
+     * leg-2 `checked` JWT's `newcrt` claim (base64 DER certificate chain),
+     * NULL when the cloud sent none. Distinct from `newcrt` above, which is the
+     * device's leg-3 status string. Firmware v1.2.2 acknowledges the claim but
+     * never installs it (REQ-SYS-003 root cause), so this is what a caller
+     * feeds to ehem_system_config_install_cert() to rotate the cert manually
+     * (hem-tool cert-install / REQ-TOOL-003).
+     */
+    char *newcrt_chain;
+
+    /*
+     * The serial number (uppercase hex, no separators) of the certificate the
+     * device currently serves, taken from the leg-1 `check` JWT's `csn` claim
+     * — the same value the cloud uses to detect a stale cert. NULL when the
+     * device reported none (no cert loaded, or hostname outside the default
+     * TLD). Compare against the harvested leaf's serial (ehem_cert_inspect on
+     * newcrt_chain) to decide whether a delivered cert is already installed.
+     */
+    char *current_serial;
 } ehem_checkin_info;
 
 /*
@@ -149,6 +170,34 @@ EHEM_API ehem_rc ehem_system_checkin(ehem_ctx *ctx, ehem_checkin_info **out);
 
 /* Release a check-in result from ehem_system_checkin(). NULL is a no-op. */
 EHEM_API void ehem_checkin_result_free(ehem_checkin_info *result);
+
+/*
+ * Identity of an X.509 certificate, as read by ehem_cert_inspect(). All strings
+ * are owned by the struct and released by ehem_cert_info_free(); an optional
+ * field the certificate omits is an empty string, never NULL.
+ */
+typedef struct ehem_cert_info {
+    char *serial;       /* serial number, uppercase hex (no separators) */
+    char *subject_cn;   /* subject Common Name */
+    char *not_before;   /* validity start, UTC ISO-8601 (e.g. 2026-07-08T00:00:00Z) */
+    char *not_after;    /* validity end,   UTC ISO-8601 */
+} ehem_cert_info;
+
+/*
+ * Inspect a base64 DER certificate chain (such as ehem_checkin_info.newcrt_chain
+ * or the argument to ehem_system_config_install_cert()): decode it and read the
+ * identity of the LEAF certificate — the first one in the chain. On success
+ * writes *out (caller frees with ehem_cert_info_free) and returns EHEM_OK;
+ * returns EHEM_ERR_ARG on a NULL argument, EHEM_ERR_PROTOCOL if `crt_b64` is not
+ * valid base64 or the bytes do not parse as a certificate (detail on the
+ * context). Reads structure only — it does not verify the chain, signatures, or
+ * whether the certificate is currently within its validity window.
+ */
+EHEM_API ehem_rc ehem_cert_inspect(ehem_ctx *ctx, const char *crt_b64,
+                                   ehem_cert_info **out);
+
+/* Release a cert-info struct from ehem_cert_inspect(). NULL is a no-op. */
+EHEM_API void ehem_cert_info_free(ehem_cert_info *info);
 
 /* ==========================================================================
  * Device configuration + reboot (authenticated; scope "system:config").

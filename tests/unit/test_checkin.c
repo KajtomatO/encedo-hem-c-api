@@ -18,6 +18,7 @@
 #include "ehem/system.h"
 #include "transport.h"        /* internal: ehem_tls_req_override values */
 #include "fake_transport.h"
+#include "fixtures/cert_fixture.h"
 
 /* Canned bodies. */
 static const char CHALLENGE[] = "{\"check\":\"CHALLENGE-BLOB\"}";
@@ -115,6 +116,96 @@ static void test_checkin_custom_cloud_url(void **state)
     assert_int_equal(ehem_system_checkin(ctx, &res), EHEM_OK);
     assert_string_equal(fake_transport_request(fake, 1)->path,
                         "https://cloud.example/checkin");
+
+    ehem_checkin_result_free(res);
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* --- certificate harvest (REQ-SYS-006) ------------------------------------ */
+
+/* Leg-2 carries a `newcrt` chain and leg-1 a matching `csn`: both are harvested
+ * onto the result while the leg-3 relay stays verbatim. */
+static void test_checkin_harvests_chain_and_serial(void **state)
+{
+    (void)state;
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+                                                  EHEM_FX_CHECK_CSN_MATCH), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+                                                  EHEM_FX_CHECKED_WITH_NEWCRT), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200, CHECKIN_OK), 0);
+
+    ehem_ctx *ctx = ctx_with(fake, NULL);
+    ehem_checkin_info *res = NULL;
+    assert_int_equal(ehem_system_checkin(ctx, &res), EHEM_OK);
+    assert_non_null(res);
+
+    /* Harvested cloud-delivered chain (distinct from the leg-3 status string). */
+    assert_non_null(res->newcrt_chain);
+    assert_string_equal(res->newcrt_chain, EHEM_FX_LEAF_B64);
+    assert_string_equal(res->newcrt, "cert refreshed");   /* leg-3 status intact */
+    /* Device's current serial from the leg-1 `csn`, normalized hex. */
+    assert_non_null(res->current_serial);
+    assert_string_equal(res->current_serial, EHEM_FX_LEAF_SERIAL);
+
+    /* Leg-3 body relayed verbatim (the cloud's leg-2 response), untouched by the
+     * harvest of its payload. */
+    assert_string_equal((const char *)fake_transport_request(fake, 2)->body,
+                        EHEM_FX_CHECKED_WITH_NEWCRT);
+
+    ehem_checkin_result_free(res);
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* No `newcrt` claim and no `csn`: the harvested fields are NULL and the check-in
+ * still succeeds (tolerant). */
+static void test_checkin_harvest_absent(void **state)
+{
+    (void)state;
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+                                                  EHEM_FX_CHECK_NO_CSN), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+                                                  EHEM_FX_CHECKED_NO_NEWCRT), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200, CHECKIN_OK), 0);
+
+    ehem_ctx *ctx = ctx_with(fake, NULL);
+    ehem_checkin_info *res = NULL;
+    assert_int_equal(ehem_system_checkin(ctx, &res), EHEM_OK);
+    assert_non_null(res);
+    assert_null(res->newcrt_chain);
+    assert_null(res->current_serial);
+
+    ehem_checkin_result_free(res);
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* A leg-2 JWT whose payload segment is undecodable → newcrt_chain NULL, still
+ * a successful check-in (harvest never fails the flow). */
+static void test_checkin_harvest_unparseable_payload(void **state)
+{
+    (void)state;
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+                                                  EHEM_FX_CHECK_CSN_OTHER), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+                                                  EHEM_FX_CHECKED_BADPAYLOAD), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200, CHECKIN_OK), 0);
+
+    ehem_ctx *ctx = ctx_with(fake, NULL);
+    ehem_checkin_info *res = NULL;
+    assert_int_equal(ehem_system_checkin(ctx, &res), EHEM_OK);
+    assert_non_null(res);
+    assert_null(res->newcrt_chain);
+    /* The leg-1 `csn` still parses even though leg-2's payload did not. */
+    assert_non_null(res->current_serial);
+    assert_string_equal(res->current_serial, EHEM_FX_OTHER_SERIAL);
 
     ehem_checkin_result_free(res);
     ehem_ctx_destroy(ctx);
@@ -289,6 +380,9 @@ int main(void)
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_checkin_happy_flow),
         cmocka_unit_test(test_checkin_custom_cloud_url),
+        cmocka_unit_test(test_checkin_harvests_chain_and_serial),
+        cmocka_unit_test(test_checkin_harvest_absent),
+        cmocka_unit_test(test_checkin_harvest_unparseable_payload),
         cmocka_unit_test(test_auto_recovery),
         cmocka_unit_test(test_auto_recovery_optout),
         cmocka_unit_test(test_non_expired_failure_no_recovery),
