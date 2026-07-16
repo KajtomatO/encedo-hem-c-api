@@ -42,8 +42,16 @@ jobs:
       - name: Unit tests
         run: ctest --test-dir build -L unit --output-on-failure
 
+  # DISABLED — Windows (MinGW) is shelved (user decision 2026-07-16). The
+  # prebuilt MSYS2 wolfSSL (5.9.2) crashes inside its own curve25519 code on
+  # Windows (EXCEPTION_ACCESS_VIOLATION, independent of how the SDK calls it),
+  # so the auth crypto (REQ-AUTH-001) cannot run there yet. Full write-up and
+  # the two paths to re-enable (vendor a portable X25519, or FetchContent-build
+  # wolfSSL with SP asm off) are in KNOWN-ISSUES.md. Re-enable by removing the
+  # `if: false` below once one of those lands.
   windows-mingw:
     name: Windows (MinGW)
+    if: false
     runs-on: windows-latest
     defaults:
       run:

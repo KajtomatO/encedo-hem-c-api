@@ -13,32 +13,6 @@
 
 #include "crypto_shim.h"
 
-/* TEMPORARY DIAGNOSTIC (remove once the MinGW X25519 fix is confirmed green on
- * CI): prints the wolfSSL version and wc_curve25519_generic's return code for
- * the keypair vector. It is STRUCT-FREE on purpose — it must not hand a
- * curve25519_key to the DLL, since that ABI layout mismatch (128 vs 112 bytes
- * across wolfSSL builds) is the very crash being fixed. Printed from the X25519
- * test so ctest --output-on-failure shows it if the fix still fails. */
-#include <stdio.h>
-#include <wolfssl/options.h>
-#include <wolfssl/version.h>
-#include <wolfssl/wolfcrypt/curve25519.h>
-
-static void dump_curve25519_diag(void)
-{
-    /* Alice's clamped scalar (RFC 7748 §6.1) · base point u=9. */
-    static const uint8_t a[32] = {
-        0x70,0x07,0x6d,0x0a,0x73,0x18,0xa5,0x7d,0x3c,0x16,0xc1,0x72,0x51,0xb2,0x66,0x45,
-        0xdf,0x4c,0x2f,0x87,0xeb,0xc0,0x99,0x2a,0xb1,0x77,0xfb,0xa5,0x1d,0xb9,0x2c,0x6a};
-    uint8_t base[32] = {9}, out[32];
-    int rc = wc_curve25519_generic(32, out, 32, a, 32, base);
-    fprintf(stderr,
-            "\n=== WOLFSSL X25519 DIAG === version=%s sizeof(curve25519_key)=%zu "
-            "generic(keypair) rc=%d\n=== END DIAG ===\n",
-            LIBWOLFSSL_VERSION_STRING, sizeof(curve25519_key), rc);
-    fflush(stderr);
-}
-
 /* Decode a hex string into `out` (out must hold strlen(hex)/2 bytes). */
 static size_t unhex(const char *hex, uint8_t *out)
 {
@@ -129,7 +103,6 @@ static void test_hmac_sha256(void **state)
 static void test_x25519_keypair(void **state)
 {
     (void)state;
-    dump_curve25519_diag();   /* TEMPORARY — see note at top of file */
     uint8_t seed[32], priv[32], pub[32];
 
     /* Alice. */

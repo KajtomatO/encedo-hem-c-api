@@ -454,8 +454,14 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
    — affects transport trust options and `hem-tool` UX. *Resolved by:*
    M1 gate against the real device plus the Python client's TLS handling.
 5. **MinGW build friction for wolfSSL/libcurl** — less-trodden path than
-   MSVC or Linux. *Resolved by:* M1 CI bring-up; fallback is pinning
-   MSYS2 packages for libcurl and FetchContent for wolfSSL.
+   MSVC or Linux. M1 built and tested clean on MinGW. **MATERIALIZED at M2
+   (2026-07-16):** the prebuilt MSYS2 wolfSSL 5.9.2 crashes inside its own
+   curve25519 code on Windows (EXCEPTION_ACCESS_VIOLATION), independent of
+   how the SDK calls it — so auth crypto cannot run there. **Windows is
+   shelved** (user decision): the `windows-mingw` CI job is disabled and the
+   two re-enable paths (vendor a portable X25519, or FetchContent-build
+   wolfSSL with SP asm off) are written up in **KNOWN-ISSUES.md**. Linux CI
+   is unaffected.
 6. **Mobile-auth flow under-documented** (`auth/ext-*.md` not yet
    analyzed) — *Resolved by:* doc analysis + device experiments at M8;
    the session design keeps the flow additive.
