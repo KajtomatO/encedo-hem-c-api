@@ -47,6 +47,15 @@ include(CMakePackageConfigHelpers)
 # imported target CURL::libcurl; no cURL type appears in public headers.
 find_package(CURL REQUIRED)
 
+# Crypto primitives for the auth flow (REQ-AUTH-001): wolfCrypt via wolfSSL,
+# used from M2 on (PBKDF2-HMAC-SHA256 / HMAC-SHA256 / X25519). The dev distros
+# (Debian/Ubuntu apt, MSYS2 pacman) ship a pkg-config file but no CMake package
+# config, so discover via pkg-config into the imported target PkgConfig::WOLFSSL.
+# Like libcurl, no wolfSSL type appears in public headers (crypto_shim contains
+# it), so it links privately into the shared library.
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(WOLFSSL REQUIRED IMPORTED_TARGET wolfssl)
+
 # --- vendored third-party (cJSON) -----------------------------------------
 # Compiled into an OBJECT library so the vendored sources are held to their
 # own (relaxed) warning policy — our -Werror must not gate on code we don't
@@ -67,7 +76,8 @@ set(EHEM_SOURCES
   src/transport.c
   src/transport_curl.c
   src/proto_common.c
-  src/proto_system.c)
+  src/proto_system.c
+  src/crypto_shim.c)
 
 add_library(encedo-hem        SHARED ${EHEM_SOURCES} $<TARGET_OBJECTS:ehem-cjson>)
 add_library(encedo-hem-static STATIC ${EHEM_SOURCES} $<TARGET_OBJECTS:ehem-cjson>)
@@ -88,10 +98,11 @@ foreach(_t encedo-hem encedo-hem-static)
   set_target_properties(${_t} PROPERTIES OUTPUT_NAME encedo-hem)
 endforeach()
 
-# libcurl links into the shared lib privately (baked in, not re-exported), but
-# is an INTERFACE requirement of the static lib so downstream links propagate.
-target_link_libraries(encedo-hem        PRIVATE CURL::libcurl)
-target_link_libraries(encedo-hem-static PUBLIC  CURL::libcurl)
+# libcurl and wolfSSL link into the shared lib privately (baked in, not
+# re-exported), but are INTERFACE requirements of the static lib so downstream
+# links propagate.
+target_link_libraries(encedo-hem        PRIVATE CURL::libcurl PkgConfig::WOLFSSL)
+target_link_libraries(encedo-hem-static PUBLIC  CURL::libcurl PkgConfig::WOLFSSL)
 
 # Only the shared build gets the export-enabling macro.
 target_compile_definitions(encedo-hem PRIVATE EHEM_BUILDING_SHARED)

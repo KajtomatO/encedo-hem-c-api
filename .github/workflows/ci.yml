@@ -27,10 +27,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # Dogfood the project's own installer (keeps it honest). --no-crypto:
-      # wolfSSL isn't needed until M2.
+      # Dogfood the project's own installer (keeps it honest). wolfSSL (the
+      # crypto shim dependency, REQ-AUTH-001) is required from M2 on, so the
+      # crypto packages are installed too (no --no-crypto).
       - name: Install dependencies
-        run: ./scripts/install-deps-linux.sh --yes --no-crypto
+        run: ./scripts/install-deps-linux.sh --yes
 
       - name: Configure
         run: cmake -B build -G Ninja -DCMAKE_C_COMPILER=${{ matrix.cc }}
@@ -64,6 +65,7 @@ jobs:
             mingw-w64-x86_64-pkgconf
             mingw-w64-x86_64-curl
             mingw-w64-x86_64-cmocka
+            mingw-w64-x86_64-wolfssl
 
       - name: Configure
         run: cmake -B build -G Ninja

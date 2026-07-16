@@ -222,7 +222,7 @@ cmd_check() {
   local cc dir; cc="$(active_cc)"; dir="$(build_dir_for "$cc")"
   configure_and_build "$dir" "$cc"
   log "static gates: export-symbols + public-header checks"
-  run ctest --test-dir "$dir" -R '^(export_symbols|public_headers_curl_free)$' \
+  run ctest --test-dir "$dir" -R '^(export_symbols|public_headers_dep_free)$' \
       --output-on-failure
 }
 

@@ -20,12 +20,15 @@ ehem_add_unit_test(test_system SOURCES test_system.c)
 # REQ-SYS-003, REQ-NET-005: check-in flow + automatic certificate recovery.
 ehem_add_unit_test(test_checkin SOURCES test_checkin.c)
 
-# REQ-NET-002: the public headers must not reference libcurl.
-add_test(NAME public_headers_curl_free
+# REQ-AUTH-001: crypto shim (PBKDF2 / HMAC-SHA256 / X25519) against RFC vectors.
+ehem_add_unit_test(test_crypto SOURCES test_crypto.c)
+
+# REQ-NET-002 + REQ-AUTH-001: public headers must not reference libcurl/wolfSSL.
+add_test(NAME public_headers_dep_free
   COMMAND ${CMAKE_COMMAND}
     -DEHEM_INCLUDE_DIR=${PROJECT_SOURCE_DIR}/include
     -P ${CMAKE_CURRENT_SOURCE_DIR}/check_public_headers.cmake)
-set_tests_properties(public_headers_curl_free PROPERTIES LABELS unit)
+set_tests_properties(public_headers_dep_free PROPERTIES LABELS unit)
 
 # REQ-API-006: the shared library must export only ehem_* symbols.
 # Scripted nm/objdump check, run as a CTest with the `unit` label.

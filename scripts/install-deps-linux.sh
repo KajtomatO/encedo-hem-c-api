@@ -179,6 +179,16 @@ if [ -e /usr/include/cmocka.h ] || pkg-config --exists cmocka 2>/dev/null; then
 else
   printf '  \033[1;31mMISS\033[0m %-12s (dev headers not found)\n' "cmocka"; ok=0
 fi
+# wolfSSL is the crypto shim dependency, required from M2 on (REQ-AUTH-001). Only
+# checked when crypto was requested; a miss is a warning (M2 may fall back to a
+# FetchContent build), not a hard failure of the M1 toolchain.
+if [ "$WITH_CRYPTO" -eq 1 ]; then
+  if pkg-config --exists wolfssl 2>/dev/null; then
+    printf '  \033[1;32mok\033[0m   %-12s wolfSSL dev present (%s)\n' "wolfssl" "$(pkg-config --modversion wolfssl)"
+  else
+    warn "wolfSSL dev headers not found — required to build from M2 on (crypto shim)"
+  fi
+fi
 
 echo
 if [ "$ok" -eq 1 ]; then
