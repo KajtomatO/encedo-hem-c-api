@@ -33,6 +33,9 @@ endif()
 # REQ-SYS-004, REQ-SYS-005: config GET / cert install / reboot bindings.
 ehem_add_unit_test(test_config SOURCES test_config.c)
 
+# REQ-KEY-001: keymgmt list binding + full-repository walk (pagination).
+ehem_add_unit_test(test_keymgmt SOURCES test_keymgmt.c)
+
 # REQ-AUTH-001: crypto shim (PBKDF2 / HMAC-SHA256 / X25519) against RFC vectors.
 ehem_add_unit_test(test_crypto SOURCES test_crypto.c)
 

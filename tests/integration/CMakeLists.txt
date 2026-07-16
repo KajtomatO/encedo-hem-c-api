@@ -9,6 +9,9 @@ ehem_add_integration_test(test_checkin_live SOURCES test_checkin_live.c)
 # REQ-SYS-004: live authenticated config GET (public API only).
 ehem_add_integration_test(test_config_live SOURCES test_config_live.c)
 
+# REQ-KEY-001: live authenticated keymgmt list walk (public API only).
+ehem_add_integration_test(test_keymgmt_live SOURCES test_keymgmt_live.c)
+
 # REQ-AUTH-001/002/003: live authenticated token acquisition. Exception to the
 # public-API-only rule for integration tests — no public authenticated binding
 # exists until M2-050, so this drives the INTERNAL ehem_auth_ensure_token and

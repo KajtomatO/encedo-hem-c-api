@@ -41,16 +41,19 @@ response carries it per the doc — how mode metadata is obtained must be
 resolved at M4 decomposition (candidate: §12 risk 3 device experiments).
 
 **Acceptance criteria:**
-- [ ] Page call parses full and minimal fixtures (absent `descr` → NULL/0
+- [x] Page call parses full and minimal fixtures (absent `descr` → NULL/0
       length); missing `kid`/`type` in an entry → `EHEM_ERR_PROTOCOL`;
       unknown fields ignored; `_free` NULL-safe; ASan/LSan clean
-      (fake-transport unit tests).
-- [ ] Full walk paginates using `offset ≥ total` / `listed == 0`; a fixture
+      (fake-transport unit tests). — tests/unit/test_keymgmt.c
+- [x] Full walk paginates using `offset ≥ total` / `listed == 0`; a fixture
       sequence where `listed < requested limit` mid-walk does NOT terminate
-      the walk early (unit test).
-- [ ] Declares scope `keymgmt:list`; 401/403 map per REQ-AUTH-003; 406/409
+      the walk early (unit test). — test_list_all_multipage_walk (page 2
+      returns listed 8 < limit 10, walk continues to offset ≥ total).
+- [x] Declares scope `keymgmt:list`; 401/403 map per REQ-AUTH-003; 406/409
       → `EHEM_ERR_DEVICE` with device payload in `ehem_last_error`
-      (unit tests).
-- [ ] Live: full walk against the dev device returns its key population
+      (unit tests). — test_list_401_reacquire_then_success,
+      test_list_403_scope, test_list_406_device, test_list_409_device.
+- [x] Live: full walk against the dev device returns its key population
       (≥ the protected TLS pair) with kid/type/label populated
-      (integration test).
+      (integration test). — tests/integration/test_keymgmt_live.c: 6 keys
+      including "TLS PrivateKey"/"TLS Certificate", kid/type populated.
