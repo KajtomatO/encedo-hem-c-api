@@ -8,7 +8,7 @@ traces:
 depends_on: ["STEP-M4-010", "STEP-M4-020", "STEP-M4-030", "STEP-M4-040", "STEP-M4-050"]
 evidence:
   commits:
-    - "(this commit) — M4 gate: §12 risk 3 RESOLVED, REQ records, TRACE regen"
+    - "ac78310 — M4 gate: §12 risk 3 RESOLVED, REQ records, TRACE regen"
   tests:
     - "gate run 2026-07-16: ./dev test it 10/10 GREEN incl. test_sign_live (the gate criterion: device signatures verify locally — ED25519 64B raw + SECP256R1 71B DER vs the 33B compressed pubkey; scope probe keymgmt:get → 403); unit 21/21 gcc+clang + asan clean; GitHub CI green on linux + windows-mingw (user-confirmed post-push)"
   notes: >
