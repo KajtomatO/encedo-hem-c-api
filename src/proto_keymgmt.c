@@ -351,20 +351,8 @@ ehem_rc ehem_key_list_all(ehem_ctx *ctx, ehem_key_page **out)
 /* create + delete                                                            */
 /* -------------------------------------------------------------------------- */
 
-/* True iff `s` is exactly KID_HEX_LEN hex digits (either case) then NUL. Reads
- * no further than the first non-hex byte, so a short string is safe. */
-static bool is_kid_hex(const char *s)
-{
-    size_t i;
-    for (i = 0; i < KID_HEX_LEN; i++) {
-        char c = s[i];
-        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') ||
-              (c >= 'A' && c <= 'F'))) {
-            return false;
-        }
-    }
-    return s[KID_HEX_LEN] == '\0';
-}
+/* Kid validation lives in proto_common (ehem_proto_is_kid_hex) — shared with
+ * the crypto bindings, which authenticate per kid too. */
 
 /*
  * Remap a device 406 ("not in repo") to EHEM_ERR_NOT_FOUND with a fresh message;
@@ -473,7 +461,7 @@ ehem_rc ehem_key_create(ehem_ctx *ctx, const ehem_key_create_params *params,
     if (!ehem_json_get_string(root, "kid", &kid)) {
         rc = ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 200, NULL,
                            "keymgmt/create: response missing 'kid'");
-    } else if (!is_kid_hex(kid)) {
+    } else if (!ehem_proto_is_kid_hex(kid)) {
         rc = ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 200, NULL,
                            "keymgmt/create: 'kid' is not 32 hex chars");
     } else {
@@ -500,7 +488,7 @@ ehem_rc ehem_key_delete(ehem_ctx *ctx, const char *kid)
         return EHEM_ERR_ARG;
     }
     ehem_ctx_clear_error(ctx);
-    if (!is_kid_hex(kid)) {
+    if (!ehem_proto_is_kid_hex(kid)) {
         return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
                              "keymgmt/delete: kid must be exactly 32 hex chars");
     }
@@ -765,7 +753,7 @@ ehem_rc ehem_key_get(ehem_ctx *ctx, const char *kid, ehem_key_details **out)
     }
     *out = NULL;
     ehem_ctx_clear_error(ctx);
-    if (!is_kid_hex(kid)) {
+    if (!ehem_proto_is_kid_hex(kid)) {
         return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
                              "keymgmt/get: kid must be exactly 32 hex chars");
     }

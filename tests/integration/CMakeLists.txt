@@ -30,6 +30,16 @@ target_compile_options(test_keymgmt_get_live PRIVATE ${EHEM_WARNING_FLAGS})
 add_test(NAME test_keymgmt_get_live COMMAND test_keymgmt_get_live)
 set_tests_properties(test_keymgmt_get_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
 
+# REQ-OPS-001 (+ REQ-KEY-006 live cross-check): live sign → local wolfCrypt
+# verify (the M4 gate criterion) + the sign scope probe closing §12 risk 3.
+# Internal-linking like test_keymgmt_get_live (probe + crypto shim).
+add_executable(test_sign_live test_sign_live.c)
+target_link_libraries(test_sign_live PRIVATE ehem_test_support cmocka::cmocka)
+target_include_directories(test_sign_live PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
+target_compile_options(test_sign_live PRIVATE ${EHEM_WARNING_FLAGS})
+add_test(NAME test_sign_live COMMAND test_sign_live)
+set_tests_properties(test_sign_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
+
 # REQ-AUTH-001/002/003: live authenticated token acquisition. Exception to the
 # public-API-only rule for integration tests — no public authenticated binding
 # exists until M2-050, so this drives the INTERNAL ehem_auth_ensure_token and

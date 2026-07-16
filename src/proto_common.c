@@ -24,6 +24,19 @@ ehem_rc ehem_proto_map_http_status(long status)
     }
 }
 
+bool ehem_proto_is_kid_hex(const char *s)
+{
+    size_t i;
+    for (i = 0; i < EHEM_PROTO_KID_HEX_LEN; i++) {
+        char c = s[i];
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') ||
+              (c >= 'A' && c <= 'F'))) {
+            return false;
+        }
+    }
+    return s[EHEM_PROTO_KID_HEX_LEN] == '\0';
+}
+
 /* Build an "Authorization: Bearer <token>" header value (heap, caller frees). */
 static char *make_bearer(const char *token)
 {

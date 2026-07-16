@@ -43,6 +43,9 @@ ehem_add_unit_test(test_keymgmt SOURCES test_keymgmt.c)
 # REQ-KEY-006: key-type classifier (pure — no transport, no crypto backend).
 ehem_add_unit_test(test_keytype SOURCES test_keytype.c)
 
+# REQ-OPS-001: exdsa sign binding — body/scope/decode/error mapping.
+ehem_add_unit_test(test_sign SOURCES test_sign.c)
+
 # REQ-AUTH-001: crypto shim (PBKDF2 / HMAC-SHA256 / X25519) against RFC vectors.
 ehem_add_unit_test(test_crypto SOURCES test_crypto.c)
 

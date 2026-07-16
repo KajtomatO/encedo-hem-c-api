@@ -62,24 +62,37 @@ a signature produced via the SDK verifies locally with wolfCrypt — lives
 here as the live acceptance criterion.
 
 **Acceptance criteria:**
-- [ ] Request body carries exactly `{kid, msg(b64), alg}` plus `ctx(b64)`
+- [x] Request body carries exactly `{kid, msg(b64), alg}` plus `ctx(b64)`
       only when given; `sign` is decoded from padded base64 into a
       caller-owned buffer; `_free` NULL-safe; ASan/LSan clean
-      (fake-transport unit tests asserting body bytes).
-- [ ] Declares exact scope `keymgmt:use:<kid>`; after a `ehem_key_get` of
+      (fake-transport unit tests asserting body bytes). —
+      test_sign_body_and_decode / test_sign_with_sig_ctx (byte-exact
+      bodies); asan 19/19 clean.
+- [x] Declares exact scope `keymgmt:use:<kid>`; after a `ehem_key_get` of
       the same kid, `ehem_sign` performs **no** second token acquisition
       (shared per-KID cache entry — unit test asserting request counts);
-      different kids acquire independent tokens.
-- [ ] Pre-validation failures (`kid` malformed, empty msg, msg > 2048,
+      different kids acquire independent tokens. —
+      test_sign_shares_get_token (get+sign = 4 requests total; second kid
+      → 7 with its own scope decoded from the eJWT).
+- [x] Pre-validation failures (`kid` malformed, empty msg, msg > 2048,
       sig_ctx > 255) → `EHEM_ERR_ARG` with zero transport calls; 403 →
-      `EHEM_ERR_SCOPE_DENIED`; 400/406 → `EHEM_ERR_DEVICE` (unit tests).
-- [ ] Live (M4 gate): an `EHEMTEST` SECP256R1 key created with mode
+      `EHEM_ERR_SCOPE_DENIED`; 400/406 → `EHEM_ERR_DEVICE` (unit tests). —
+      test_sign_arg_guards (11 cases, 0 requests), test_sign_device_errors.
+- [x] Live (M4 gate): an `EHEMTEST` SECP256R1 key created with mode
       `ExDSA` signs via `SHA256WithECDSA` and the DER signature verifies
       locally with wolfCrypt against the compressed-x963 pubkey from
       `ehem_key_get`; an `EHEMTEST` ED25519 key signs via `Ed25519` and
       the 64-byte signature verifies locally per RFC 8032; cleanup per
-      REQ-TEST-003 (integration test).
-- [ ] OPEN (live probe, closes §12 risk 3): sign with a broader-scope
-      token (`keymgmt:get`) → expect 403 per firmware exact-match; sign
-      with the per-KID token acquired by get → 200. Record the observation
-      here and mark §12 risk 3 resolved at the M4 gate.
+      REQ-TEST-003 (integration test). — test_sign_live GREEN on
+      my.ence.do fw v1.2.2-DIAG 2026-07-16: ED25519 64-byte sig verified
+      (truncated msg correctly rejected); SECP256R1 71-byte DER sig
+      verified against the 33-byte COMPRESSED pubkey; classifier sizes
+      cross-checked live (pubkey_len 32/33 match REQ-KEY-006).
+- [x] ~~OPEN~~ **RESOLVED** (live probe 2026-07-16, closes §12 risk 3):
+      sign with a broader-scope token (`keymgmt:get`) → **403 /
+      EHEM_ERR_SCOPE_DENIED** exactly as the firmware exact-strcmp
+      predicts (the same token class the get endpoint ACCEPTS — the
+      asymmetry is confirmed live); get→sign on ONE `keymgmt:use:<kid>`
+      token → 200 (test_sign_live scope probe). Crypto ops cannot share a
+      broader scope; one cached token per KID serves get+sign. §12 risk 3
+      text updated at the M4 gate.

@@ -28,6 +28,12 @@ struct ehem_checkin_info;
  * in later milestones; for M1 it covers the unauthenticated system endpoints. */
 ehem_rc ehem_proto_map_http_status(long status);
 
+/* A key id on the wire is exactly 32 hex chars (16 bytes). Shared by every
+ * binding that takes a kid (keymgmt, crypto). Stops at the first non-hex
+ * byte, so a short string is safe. */
+#define EHEM_PROTO_KID_HEX_LEN 32
+bool ehem_proto_is_kid_hex(const char *s);
+
 /*
  * Perform one JSON exchange: send `method` to `path` (relative to the device
  * base URL, or an absolute http(s):// URL for the check-in cloud leg) with an
