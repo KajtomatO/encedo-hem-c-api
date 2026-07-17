@@ -9,6 +9,7 @@ depends_on: ["STEP-M5-010", "STEP-M5-020", "STEP-M5-030", "STEP-M5-035"]
 evidence:
   commits:
     - "0f0d066 — M5 gate start"
+    - "ddab3ae — M5 gate: TEST-004/TOOL-009/NET-006 verified, TRACE regen"
   tests:
     - "gate run 2026-07-17: ./dev test it 11/11 GREEN (test_system/checkin/config/keymgmt(list/mutate/search/get)/sign/keygen_matrix/auth/keys_rm) with EHEM_TEST_PACE_MS=150 + ctest --repeat until-pass:3 — the exact full-suite scenario that hard-hung the device twice pre-mitigation; device alive throughout, 167s, no retries needed. The gate criterion (all 23 fw types generate→list→sign(ExDSA)→delete) is inside test_keygen_matrix_live (93s of that run)."
     - "unit 22/22 gcc+clang + asan clean; export/header gates green; src/proto_common.c cross-compiles for x86_64-w64-mingw32"
