@@ -40,6 +40,9 @@ target_compile_options(test_sign_live PRIVATE ${EHEM_WARNING_FLAGS})
 add_test(NAME test_sign_live COMMAND test_sign_live)
 set_tests_properties(test_sign_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
 
+# REQ-OPS-003: live sign → device-side verify + tamper negatives (public API).
+ehem_add_integration_test(test_verify_live SOURCES test_verify_live.c)
+
 # REQ-TEST-004: the M5 per-family generation matrix — create → list → get/
 # classify → sign(where ExDSA-capable)+local verify → delete, for every fw
 # create type. Internal-linking (crypto shim local verify), like test_sign_live.

@@ -1,12 +1,13 @@
 /*
  * crypto.h — Encedo HEM C SDK, cryptographic-operation protocol bindings.
  *
- * implements: REQ-OPS-001
+ * implements: REQ-OPS-001, REQ-OPS-003
  *
- * First of the `crypto` API group (ARCHITECTURE.md §6, §11 M4): single-shot
- * signing over POST /api/crypto/exdsa/sign. The device is a network signing
- * module — the private key never leaves it; the SDK sends the message and
- * receives the signature.
+ * The `crypto` API group (ARCHITECTURE.md §6, §11 M4/M6): single-shot
+ * operations against keys that never leave the device — the SDK sends the
+ * inputs and receives the result. Every endpoint here authenticates with the
+ * EXACT per-key scope "keymgmt:use:<kid>" (firmware strcmp; one cached token
+ * per key serves get + every crypto op on that key).
  */
 #ifndef EHEM_CRYPTO_H
 #define EHEM_CRYPTO_H
@@ -90,6 +91,35 @@ EHEM_API ehem_rc ehem_sign(ehem_ctx *ctx, const char *kid, const char *alg,
 
 /* Release a signature from ehem_sign(). NULL is a no-op. */
 EHEM_API void ehem_signature_free(ehem_signature *sig);
+
+/* Largest signature the verify endpoint accepts, decoded (fw v1.2.2:
+ * 2·66+16 — fits the DER-encoded P-521 ECDSA maximum and every EdDSA size). */
+#define EHEM_VERIFY_SIG_MAX 148
+
+/*
+ * Verify a signature with the device key `kid`: POST /api/crypto/exdsa/verify
+ * (REQ-OPS-003). Mirror of ehem_sign(): same scope ("keymgmt:use:<kid>",
+ * shared cached token), same `alg` vocabulary passed verbatim, same
+ * internal-hashing rule (`msg` is the full message, not a digest), same
+ * optional RFC 8032 `sig_ctx`. `sig`/`sig_len` is the signature exactly as
+ * ehem_sign() produced it (DER for ECDSA, raw for EdDSA).
+ *
+ * Returns EHEM_OK exactly when the device reports the signature VALID (an
+ * empty-body 200). There is no boolean output: any other outcome is "not
+ * verified", with detail in ehem_last_error(). The device's 406 covers
+ * invalid signature, wrong key type for `alg`, and kid-not-found
+ * indistinguishably (firmware CRYPTO_SignVerify: any failure → 406) →
+ * EHEM_ERR_DEVICE; 400 → EHEM_ERR_DEVICE; 403 → EHEM_ERR_SCOPE_DENIED.
+ *
+ * EHEM_ERR_ARG with no network I/O on: NULL ctx/kid/alg/msg/sig, kid not 32
+ * hex chars, empty alg, msg_len outside 1..EHEM_SIGN_MSG_MAX, sig_len outside
+ * 1..EHEM_VERIFY_SIG_MAX, sig_ctx_len > EHEM_SIGN_SIG_CTX_MAX, or a NULL
+ * sig_ctx with nonzero length.
+ */
+EHEM_API ehem_rc ehem_verify(ehem_ctx *ctx, const char *kid, const char *alg,
+                             const uint8_t *msg, size_t msg_len,
+                             const uint8_t *sig_ctx, size_t sig_ctx_len,
+                             const uint8_t *sig, size_t sig_len);
 
 #ifdef __cplusplus
 } /* extern "C" */

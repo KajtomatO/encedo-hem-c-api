@@ -58,6 +58,9 @@ ehem_add_unit_test(test_keytype SOURCES test_keytype.c)
 # REQ-OPS-001: exdsa sign binding — body/scope/decode/error mapping.
 ehem_add_unit_test(test_sign SOURCES test_sign.c)
 
+# REQ-OPS-003: exdsa verify binding — body/empty-200/scope-share/error mapping.
+ehem_add_unit_test(test_verify SOURCES test_verify.c)
+
 # REQ-AUTH-001: crypto shim (PBKDF2 / HMAC-SHA256 / X25519) against RFC vectors.
 ehem_add_unit_test(test_crypto SOURCES test_crypto.c)
 
