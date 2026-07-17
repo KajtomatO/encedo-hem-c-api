@@ -7,9 +7,17 @@ traces:
   architecture: ["ARCHITECTURE.md#7-transport", "ARCHITECTURE.md#9-testing-policy"]
 depends_on: []
 evidence:
-  commits: []
-  tests: []
-  notes: null
+  commits:
+    - "fcae25b — request pacing (REQ-NET-006) + ctest stall-retry"
+  tests:
+    - "test_context (verifies: REQ-NET-006): test_options_request_pace — default 0, value copied to ctx, old-ABI abi_size keeps default. gcc+clang + asan green; export/header gates green"
+    - "LIVE 2026-07-17: ./dev test it 11/11 GREEN with EHEM_TEST_PACE_MS=150, device alive throughout (167s, no retries needed); this is the exact full-suite scenario that hard-hung the device twice before the mitigation"
+  notes: >
+    src/proto_common.c cross-compiles clean for x86_64-w64-mingw32 (new
+    Windows Sleep() path). Pacing applied at the do_send chokepoint for every
+    dispatch incl. retries; SDK reads no env (harness passes the option).
+    dev: integration runs use ctest --repeat until-pass:${EHEM_TEST_REPEAT:-3}
+    + EHEM_TEST_PACE_MS default 150; bash -n clean. KNOWN-ISSUES.md updated.
 reopened: []
 cancelled: null
 ---
