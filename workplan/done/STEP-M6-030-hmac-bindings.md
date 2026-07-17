@@ -7,9 +7,17 @@ traces:
   architecture: ["ARCHITECTURE.md#6-protocol-bindings", "ARCHITECTURE.md#5-auth--session"]
 depends_on: ["STEP-M6-020"]
 evidence:
-  commits: []
-  tests: []
-  notes: null
+  commits: ["495162c"]
+  tests: ["verifies: REQ-OPS-005 (tests/unit/test_hmac.c — 5 cases; tests/integration/test_hmac_live.c — 3 cases live green 2026-07-17)"]
+  notes: >
+    Unit 25/25 gcc+clang + ASan clean; export/header gates green. Live
+    (my.ence.do fw v1.2.2-DIAG): SHA2-256 key hash→verify OK, flipped mac →
+    406; SHA3-384 key → 48-byte MAC (key type decides, request alg ignored
+    in direct mode). PROBE RESOLVED: derived-mode HMAC key = RAW ECDH secret
+    — device MAC byte-matched local HMAC-SHA256(raw X25519 secret); NO HKDF
+    (doc wrong; REQ-OPS-005 rev2 records the interop rule). SDK
+    pre-validates derived-without-alg as EHEM_ERR_ARG (fw would 406
+    opaquely).
 reopened: []
 cancelled: null
 ---
@@ -29,15 +37,15 @@ SDK-side rule worth a unit test: derived mode with alg NULL is the fw
 fall-through 406, so pre-validate it as EHEM_ERR_ARG (no I/O).
 
 **Definition of done**
-- [ ] `ehem_hmac` + `ehem_hmac_verify` (+ mac `_free`) exported, tagged
+- [x] `ehem_hmac` + `ehem_hmac_verify` (+ mac `_free`) exported, tagged
       `implements: REQ-OPS-005`
-- [ ] Unit tests green (gcc+clang+asan): body bytes for direct/derived ×
+- [x] Unit tests green (gcc+clang+asan): body bytes for direct/derived ×
       hash/verify, mac decode, empty-200 → OK, derived-without-alg →
       EHEM_ERR_ARG, mac > 64 → EHEM_ERR_ARG, 400/403/406 mapping, token
       sharing
-- [ ] Live: SHA2-256 HMAC key hash→verify OK, flipped mac bit → 406; one
+- [x] Live: SHA2-256 HMAC key hash→verify OK, flipped mac bit → 406; one
       SHA3 family key round-trip (mac length matches family); cleanup per
       REQ-TEST-003
-- [ ] HKDF-conflict probe run; raw-vs-HKDF result recorded in REQ-OPS-005
+- [x] HKDF-conflict probe run; raw-vs-HKDF result recorded in REQ-OPS-005
       (open criterion resolved) and the header doc
-- [ ] Export + public-header gates green
+- [x] Export + public-header gates green
