@@ -7,9 +7,19 @@ traces:
   architecture: ["ARCHITECTURE.md#6-protocol-bindings", "ARCHITECTURE.md#5-auth--session"]
 depends_on: []
 evidence:
-  commits: []
-  tests: []
-  notes: null
+  commits: ["6c8a835"]
+  tests: ["verifies: REQ-OPS-007, REQ-OPS-008 (tests/unit/test_pqc.c — 6 cases; tests/integration/test_pqc_live.c — 2 cases live green 2026-07-17)"]
+  notes: >
+    Unit 27/27 gcc+clang + ASan clean; export/header gates green. Live
+    (my.ence.do fw v1.2.2-DIAG): MLKEM768 encaps→decaps same ss (ct 1088),
+    truncated ct → 406, MLKEM512 ct 768; MLDSA65 sign→verify (sig 3309),
+    ctx round-trip + cross-ctx fail, MLDSA44 sig 2420. BOTH PROBES
+    RESOLVED: (1) decaps alg = "keymgmt:use:2cd…" — the handler echoes its
+    scope-check SCRATCH buffer (unwritten-param bug confirmed + minor
+    response-content leak; REQ-OPS-007 rev2); (2) invalid ML-DSA verify →
+    HTTP status 795 (raw fw error code, not doc's 406; REQ-OPS-008 rev2)
+    — SDK's defensive any-non-200→DEVICE mapping worked, unit tests pin
+    65307/−229/100 as DEVICE. Both = upstream filings at the gate.
 reopened: []
 cancelled: null
 ---
@@ -31,19 +41,20 @@ retrievable. ML-DSA keygen is slow — reuse the M5 matrix timeout support
 (ehem_test_ctx_timeout 120s) and MATRIX-style transient retry.
 
 **Definition of done**
-- [ ] Four functions (+ `_free`s, ss zeroized) exported, tagged
+- [x] Four functions (+ `_free`s, ss zeroized) exported, tagged
       `implements: REQ-OPS-007` / `REQ-OPS-008`
-- [ ] Unit tests green (gcc+clang+asan): body bytes ({kid} only for
+- [x] Unit tests green (gcc+clang+asan): body bytes ({kid} only for
       encaps; ct/msg/ctx/sign b64 fields exactly when given), ss/ct/sig
       decode, alg tolerated absent, out-of-range verify status →
       EHEM_ERR_DEVICE (no crash/PROTOCOL), EHEM_ERR_ARG guards (ct >
       1568, sig > 4627, ctx > 255, msg bounds) with zero I/O, 400/403/406
       mapping, token sharing
-- [ ] Live ML-KEM: 768 key encaps → 32B ss + 1088B ct + alg "MLKEM768",
-      decaps(ct) → same ss; truncated ct → 406; one more set (512 or
-      1024) round-tripped; decaps alg field value recorded in REQ-OPS-007
-- [ ] Live ML-DSA: 65 key sign → 3309B sig + alg "MLDSA65", device verify
-      OK; ctx round-trip + cross-ctx verify fails; one more set
-      round-tripped; invalid-sig HTTP status recorded in REQ-OPS-008
+- [x] Live ML-KEM: 768 key encaps → 32B ss + 1088B ct + alg "MLKEM768",
+      decaps(ct) → same ss; truncated ct → 406; MLKEM512 round-tripped
+      (ct 768); decaps alg value recorded in REQ-OPS-007 (scope-buffer
+      echo confirmed)
+- [x] Live ML-DSA: 65 key sign → 3309B sig + alg "MLDSA65", device verify
+      OK; ctx round-trip + cross-ctx verify fails; MLDSA44 round-tripped
+      (sig 2420); invalid-sig HTTP status 795 recorded in REQ-OPS-008
       (open criterion resolved); cleanup per REQ-TEST-003
-- [ ] Export + public-header gates green
+- [x] Export + public-header gates green
