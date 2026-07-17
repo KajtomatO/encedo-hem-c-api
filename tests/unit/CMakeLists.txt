@@ -103,3 +103,4 @@ add_test(NAME export_symbols
     -DEHEM_SHARED_LIB=$<TARGET_FILE:encedo-hem>
     -P ${CMAKE_CURRENT_SOURCE_DIR}/check_exports.cmake)
 set_tests_properties(export_symbols PROPERTIES LABELS unit)
+ehem_add_unit_test(test_logger_storage SOURCES test_logger_storage.c)

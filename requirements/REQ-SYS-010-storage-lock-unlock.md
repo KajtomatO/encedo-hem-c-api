@@ -3,7 +3,7 @@ id: REQ-SYS-010
 title: Bindings for /api/storage/unlock and /api/storage/lock — USB-MSC partition visibility
 status: approved
 priority: must
-revision: 1
+revision: 2
 source: ARCHITECTURE.md §11 (M7: storage group); encedo-hem-api-doc storage/unlock.md, storage/lock.md, discrepancies/DISCREPANCIES-HEM-TEST.md §5; encedo_firmware api_storage.c (fw v1.2.2 — including the uninitialized `sub` read in both handlers' scope checks, api_storage.c:44-46/132-134); encedo-hem-python-api storage.py (OQ-24 no-op observation); approved 2026-07-17
 depends_on: ["REQ-AUTH-002", "REQ-AUTH-003"]
 supersedes: null
@@ -59,14 +59,21 @@ consumer trips over it.
       `storage:disk1` (scope asserted via the recorded challenge/eJWT or
       the auth seam); plain paths; empty-200 → OK; 403/406/409/404
       mapping; disk 3 → `EHEM_ERR_ARG`, no I/O.
-- [ ] Live (attended, disruptive-gated first run): unlock disk 0
-      read-only → 200; lock disk 0 → 200; device remains responsive
-      (status green after) — resolves the uninitialized-`sub` behavior
-      on fw v1.2.2 and the python OQ-24 "no-op" observation; result
-      recorded here.
-- [ ] OPEN (live probe): rw scope variant (`storage:disk0:rw`) accepted
-      end-to-end; EPA/PPA routing recorded (shared data point with
-      REQ-SYS-009).
-- [ ] OPEN: after the attended run proves the endpoint safe, the live
-      test moves to the `integration` label (or stays disruptive with
-      the reason recorded).
+- [x] Live (attended, disruptive-gated, user-authorized 2026-07-18, TWO
+      clean runs): unlock disk 0 read-only → 200; status green
+      MID-UNLOCK; lock → 200. The uninitialized-`sub` read did not
+      fault or 403 in practice on this build (stack garbage happened
+      benign — still an upstream-filing bug, since UB can shift with any
+      firmware change). Python OQ-24's "no-op" impression explained: the
+      call only flips USB-MSC visibility, invisible from the API side.
+- [x] ~~OPEN~~ **RESOLVED (live 2026-07-18):** the rw scope variant
+      (`storage:disk0:rw`) is granted and accepted end-to-end (this auth
+      model self-selects scopes, so rw is available to any credential
+      holder); PPA routing confirmed (route present — consistent with
+      the REQ-SYS-007 se_state PPA determination).
+- [x] ~~OPEN~~ **DECIDED (2026-07-18):** the live test STAYS
+      `disruptive`-labeled, two reasons recorded: (1) the handler UB
+      remains UB — clean runs today do not make it safe against firmware
+      changes; (2) a successful unlock exposes the microSD to whatever
+      host holds the device's USB — not appropriate as an unattended
+      every-suite side effect.
