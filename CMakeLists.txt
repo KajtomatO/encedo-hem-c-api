@@ -165,6 +165,7 @@ if(EHEM_BUILD_TOOL)
   add_library(hem-tool-core STATIC
     src/tools/hem-tool/cert_install.c
     src/tools/hem-tool/keys.c
+    src/tools/hem-tool/random.c
     src/tools/hem-tool/sign.c)
   target_link_libraries(hem-tool-core PUBLIC encedo-hem::encedo-hem-static)
   target_include_directories(hem-tool-core PUBLIC

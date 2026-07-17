@@ -1,8 +1,8 @@
 /*
  * crypto.h — Encedo HEM C SDK, cryptographic-operation protocol bindings.
  *
- * implements: REQ-OPS-001, REQ-OPS-003, REQ-OPS-004, REQ-OPS-005,
- *             REQ-OPS-006, REQ-OPS-007, REQ-OPS-008
+ * implements: REQ-OPS-001, REQ-OPS-002, REQ-OPS-003, REQ-OPS-004,
+ *             REQ-OPS-005, REQ-OPS-006, REQ-OPS-007, REQ-OPS-008
  *
  * The `crypto` API group (ARCHITECTURE.md §6, §11 M4/M6): single-shot
  * operations against keys that never leave the device — the SDK sends the
@@ -462,6 +462,27 @@ EHEM_API ehem_rc ehem_mldsa_verify(ehem_ctx *ctx, const char *kid,
                                    const uint8_t *msg, size_t msg_len,
                                    const uint8_t *sig_ctx, size_t sig_ctx_len,
                                    const uint8_t *sig, size_t sig_len);
+
+/*
+ * Fill `buf` with `len` bytes of DEVICE hardware-RNG output (REQ-OPS-002).
+ *
+ * fw v1.2.2 has no random endpoint; the only reachable device-RNG source is
+ * the fresh 16-byte IV `cipher/encrypt` generates on every call. This
+ * routine performs ⌈len/16⌉ AES128-CBC encryptions of a throwaway
+ * single-zero-byte payload with the caller-designated AES key `kid`
+ * (AES128-* works with ANY stored AES key width) and concatenates the
+ * returned IVs; the ciphertexts are discarded. COST: one authenticated
+ * round-trip per 16 bytes — budget accordingly (REQ-NET-006 pacing applies
+ * between requests when configured).
+ *
+ * `kid` must name an existing AES key; the SDK never creates or deletes
+ * keys implicitly (hem-tool `random` orchestrates a transient key when the
+ * caller has none). Scope: exact "keymgmt:use:<kid>" (one cached token
+ * serves all round-trips). Errors map as ehem_encrypt; EHEM_ERR_ARG with
+ * no I/O on NULL ctx/kid/buf, malformed kid, or len 0.
+ */
+EHEM_API ehem_rc ehem_random(ehem_ctx *ctx, const char *kid,
+                             uint8_t *buf, size_t len);
 
 #ifdef __cplusplus
 } /* extern "C" */

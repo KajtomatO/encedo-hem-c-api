@@ -30,6 +30,7 @@
 
 #include "cert_install.h"
 #include "keys.h"
+#include "random.h"
 #include "sign.h"
 
 #define MAX_LABEL_PREFIXES 32
@@ -61,6 +62,9 @@ typedef struct {
     const char *label;        /* --label (required for keys gen) */
     const char *descr;        /* --descr (optional raw-bytes blob) */
     const char *mode;         /* --mode (ECDH|ExDSA|ECDH,ExDSA; NULL → auto) */
+
+    /* random inputs (REQ-TOOL-010). */
+    const char *kid;          /* --kid (existing AES key; NULL → transient) */
 } cli_opts;
 
 static void usage(FILE *f)
@@ -81,7 +85,9 @@ static void usage(FILE *f)
         "  --dry-run        keys rm: show what would be deleted, delete nothing\n"
         "  --yes            keys rm: skip the bulk prompt (never for protected keys)\n"
         "  --hex            keys pub / sign: print the output as lowercase hex\n"
-        "  --raw            keys pub / sign: write ONLY the raw bytes to stdout\n"
+        "  --raw            keys pub / sign / random: ONLY raw bytes on stdout\n"
+        "  --kid KID        random: use this existing AES key (else a transient\n"
+        "                   EHEMTEST key is created and removed)\n"
         "  --alg ALG        sign: algorithm selector (e.g. Ed25519,\n"
         "                   SHA256WithECDSA); omitted → derived from the key type\n"
         "  --in FILE        sign: read the message from FILE (default: stdin)\n"
@@ -109,7 +115,10 @@ static void usage(FILE *f)
         "                   protected keys need an exact label + per-key 'YES'\n"
         "  sign KID         sign a message (stdin or --in FILE, max 2048 bytes)\n"
         "                   with the device key KID; prints the signature as\n"
-        "                   base64 (--hex / --raw select the encoding)\n");
+        "                   base64 (--hex / --raw select the encoding)\n"
+        "  random N         print N bytes (1..4096) of device hardware RNG as\n"
+        "                   lowercase hex (--raw for binary); uses --kid KID's\n"
+        "                   AES key, else a transient EHEMTEST key\n");
 }
 
 /* REQ-TOOL-002: a security-relevant event (the device presented an invalid
@@ -416,6 +425,40 @@ static int cmd_sign(const cli_opts *o, const char *kid)
     return ret;
 }
 
+/* REQ-TOOL-010: device hardware-RNG bytes; the count parsing, transient-key
+ * orchestration, and formatting live in hem-tool-core. */
+static int cmd_random(const cli_opts *o, const char *count_arg)
+{
+    ehem_ctx *ctx = NULL;
+    hem_random_opts ro;
+    int ret;
+
+    if (o->hex && o->raw) {
+        fprintf(stderr, "error: --hex and --raw are mutually exclusive\n");
+        return 2;
+    }
+
+    ret = make_ctx(o, &ctx);
+    if (ret != 0) {
+        return ret;
+    }
+
+    memset(&ro, 0, sizeof ro);
+    ro.passphrase = o->passphrase;
+    ro.count_arg  = count_arg;
+    ro.kid        = o->kid;
+    ro.raw        = o->raw;
+    ro.out        = stdout;
+    ro.err        = stderr;
+
+    ret = hem_random_run(ctx, &ro);
+    if (!ro.raw) {
+        print_cert_notice(ctx);       /* raw mode keeps stdout bytes-only */
+    }
+    ehem_ctx_destroy(ctx);
+    return ret;
+}
+
 /* REQ-TOOL-009: generate a key on the device; the mode default and error
  * mapping live in hem-tool-core. `type` is the third positional (TYPE). */
 static int cmd_keys_gen(const cli_opts *o, const char *type)
@@ -548,6 +591,10 @@ int main(int argc, char **argv)
             o.mode = argv[++i];
         } else if (strncmp(a, "--mode=", 7) == 0) {
             o.mode = a + 7;
+        } else if (strcmp(a, "--kid") == 0 && i + 1 < argc) {
+            o.kid = argv[++i];
+        } else if (strncmp(a, "--kid=", 6) == 0) {
+            o.kid = a + 6;
         } else if (strcmp(a, "--insecure") == 0) {
             o.insecure = 1;
         } else if (strcmp(a, "--hex") == 0) {
@@ -598,6 +645,14 @@ int main(int argc, char **argv)
             ret = 2;
         } else {
             ret = cmd_sign(&o, subcmd);   /* subcmd is the KID */
+        }
+    } else if (strcmp(cmd, "random") == 0) {
+        if (arg != NULL) {
+            fprintf(stderr, "error: unexpected argument '%s'\n", arg);
+            usage(stderr);
+            ret = 2;
+        } else {
+            ret = cmd_random(&o, subcmd); /* subcmd is the byte count N */
         }
     } else {
         fprintf(stderr, "error: unknown command '%s'\n", cmd);

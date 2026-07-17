@@ -1434,3 +1434,57 @@ ehem_rc ehem_mldsa_verify(ehem_ctx *ctx, const char *kid,
     }
     return rc;
 }
+
+/*
+ * implements: REQ-OPS-002 — device hardware RNG via the encrypt-IV harvest.
+ * Rides the REQ-OPS-006 binding: AES128-CBC over one zero byte returns a
+ * fresh device-generated 16-byte IV per call; ciphertexts are discarded.
+ */
+ehem_rc ehem_random(ehem_ctx *ctx, const char *kid, uint8_t *buf, size_t len)
+{
+    static const uint8_t throwaway[1] = { 0x00 };
+    size_t filled = 0;
+    ehem_rc rc;
+
+    if (ctx == NULL || kid == NULL || buf == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    ehem_ctx_clear_error(ctx);
+
+    if (!ehem_proto_is_kid_hex(kid)) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                             "crypto/random: kid must be exactly 32 hex chars");
+    }
+    if (len < 1) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                             "crypto/random: len must be at least 1");
+    }
+
+    while (filled < len) {
+        ehem_ciphertext *ct = NULL;
+        size_t take;
+
+        rc = ehem_encrypt(ctx, kid, EHEM_CIPHER_ALG_AES128_CBC,
+                          throwaway, sizeof throwaway, NULL, 0,
+                          NULL, NULL, 0, NULL, 0, &ct);
+        if (rc != EHEM_OK) {
+            ehem_zeroize(buf, filled);   /* no partial entropy on failure */
+            return rc;
+        }
+        if (!ct->has_iv) {
+            ehem_ciphertext_free(ct);
+            ehem_zeroize(buf, filled);
+            return ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 200, NULL,
+                                 "crypto/random: encrypt response carried "
+                                 "no iv");
+        }
+        take = len - filled;
+        if (take > EHEM_CIPHER_IV_LEN) {
+            take = EHEM_CIPHER_IV_LEN;
+        }
+        memcpy(buf + filled, ct->iv, take);
+        filled += take;
+        ehem_ciphertext_free(ct);
+    }
+    return EHEM_OK;
+}

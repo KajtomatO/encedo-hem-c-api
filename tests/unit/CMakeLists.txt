@@ -44,6 +44,10 @@ if(TARGET hem-tool-core)
   # REQ-TOOL-009: `keys gen` — body bytes, NIST mode default, exit codes.
   ehem_add_unit_test(test_keys_gen SOURCES test_keys_gen.c)
   target_link_libraries(test_keys_gen PRIVATE hem-tool-core)
+
+  # REQ-TOOL-010: `random` — transient-key lifecycle, formats, exit codes.
+  ehem_add_unit_test(test_random_tool SOURCES test_random_tool.c)
+  target_link_libraries(test_random_tool PRIVATE hem-tool-core)
 endif()
 
 # REQ-SYS-004, REQ-SYS-005: config GET / cert install / reboot bindings.
@@ -72,6 +76,9 @@ ehem_add_unit_test(test_cipher SOURCES test_cipher.c)
 
 # REQ-OPS-007/008: ML-KEM + ML-DSA bindings incl. the raw-status quirk.
 ehem_add_unit_test(test_pqc SOURCES test_pqc.c)
+
+# REQ-OPS-002: ehem_random encrypt-IV harvest — request count, concat, tail.
+ehem_add_unit_test(test_random SOURCES test_random.c)
 
 # REQ-AUTH-001: crypto shim (PBKDF2 / HMAC-SHA256 / X25519) against RFC vectors.
 ehem_add_unit_test(test_crypto SOURCES test_crypto.c)
