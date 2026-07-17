@@ -3,7 +3,7 @@
  * driven offline through the fake transport.
  *
  * verifies: REQ-KEY-001, REQ-KEY-002, REQ-KEY-003, REQ-KEY-004, REQ-KEY-005,
- *           REQ-KEY-007, REQ-KEY-008
+ *           REQ-KEY-007, REQ-KEY-008, REQ-KEY-009
  *   - ehem_key_list / _list_all: entry parse (absent descr → NULL/0), missing
  *     required field → EHEM_ERR_PROTOCOL, unknown fields ignored, descr decode,
  *     scope + path, 401/403 per REQ-AUTH-003, 406/409 → device; the multi-page
@@ -1123,6 +1123,133 @@ static void test_import_arg_guards(void **state)
 }
 
 /* -------------------------------------------------------------------------- */
+/* derive (REQ-KEY-009)                                                       */
+/* -------------------------------------------------------------------------- */
+
+#define PEER_KID "aabbccddeeff00112233445566778899"
+
+/* ext_kid peer: body carries {kid,label,type,ext_kid}; response kid lands in
+ * kid_out; scope is keymgmt:gen (shared with create). */
+static void test_derive_ext_kid_body(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "kv");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"kid\":\"" TEST_KID "\"}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    char kid[EHEM_KID_HEX_SIZE] = {0};
+    assert_int_equal(ehem_key_derive(ctx, PEER_KID, "derived", "SHA2-256",
+                                     TEST_KID, NULL, 0, NULL, NULL, 0, kid),
+                     EHEM_OK);
+    assert_string_equal(kid, TEST_KID);
+
+    const fake_captured_request *post = fake_transport_request(fake, 2);
+    assert_int_equal(post->method, EHEM_HTTP_POST);
+    assert_string_equal(post->path, "/api/keymgmt/derive");
+    assert_string_equal((const char *)post->body,
+        "{\"kid\":\"" PEER_KID "\",\"label\":\"derived\","
+        "\"type\":\"SHA2-256\",\"ext_kid\":\"" TEST_KID "\"}");
+    assert_token_scope(fake, 1, "keymgmt:gen");
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* pubkey peer + mode + descr: pubkey and descr ride as std base64. */
+static void test_derive_pubkey_full_body(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "kvf");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"kid\":\"" TEST_KID "\"}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    const uint8_t pub[]   = {0x01, 0x02, 0x03};
+    const uint8_t descr[] = {0x01, 0x02, 0x03};
+    char kid[EHEM_KID_HEX_SIZE] = {0};
+    assert_int_equal(ehem_key_derive(ctx, PEER_KID, "d", "SECP256R1",
+                                     NULL, pub, sizeof pub, "ECDH,ExDSA",
+                                     descr, sizeof descr, kid), EHEM_OK);
+    assert_string_equal((const char *)fake_transport_request(fake, 2)->body,
+        "{\"kid\":\"" PEER_KID "\",\"label\":\"d\",\"type\":\"SECP256R1\","
+        "\"pubkey\":\"AQID\",\"mode\":\"ECDH,ExDSA\",\"descr\":\"AQID\"}");
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* 406 (ECDH/HKDF/repo failure) stays EHEM_ERR_DEVICE with the payload. */
+static void test_derive_406_device(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "kv6");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 406,
+        "{\"error\":\"not ecdh capable\"}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    char kid[EHEM_KID_HEX_SIZE];
+    assert_int_equal(ehem_key_derive(ctx, PEER_KID, "d", "AES256",
+                                     TEST_KID, NULL, 0, NULL, NULL, 0, kid),
+                     EHEM_ERR_DEVICE);
+    assert_int_equal(ehem_last_error(ctx)->http_status, 406);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* Pre-validation → EHEM_ERR_ARG with NO transport call. */
+static void test_derive_arg_guards(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    const uint8_t pub[] = {0x01};
+    uint8_t big[68] = {0};
+    char kid[EHEM_KID_HEX_SIZE];
+
+    /* Both peers / neither peer. */
+    assert_int_equal(ehem_key_derive(ctx, PEER_KID, "d", "AES128", TEST_KID,
+                                     pub, 1, NULL, NULL, 0, kid), EHEM_ERR_ARG);
+    assert_int_equal(ehem_key_derive(ctx, PEER_KID, "d", "AES128", NULL,
+                                     NULL, 0, NULL, NULL, 0, kid), EHEM_ERR_ARG);
+    /* Malformed kids. */
+    assert_int_equal(ehem_key_derive(ctx, "xyz", "d", "AES128", TEST_KID,
+                                     NULL, 0, NULL, NULL, 0, kid), EHEM_ERR_ARG);
+    assert_int_equal(ehem_key_derive(ctx, PEER_KID, "d", "AES128", "xyz",
+                                     NULL, 0, NULL, NULL, 0, kid), EHEM_ERR_ARG);
+    /* Type too long (17 chars) / empty. */
+    assert_int_equal(ehem_key_derive(ctx, PEER_KID, "d", "01234567890123456",
+                                     TEST_KID, NULL, 0, NULL, NULL, 0, kid),
+                     EHEM_ERR_ARG);
+    assert_int_equal(ehem_key_derive(ctx, PEER_KID, "d", "", TEST_KID,
+                                     NULL, 0, NULL, NULL, 0, kid), EHEM_ERR_ARG);
+    /* Oversized peer pubkey (68 > 67). */
+    assert_int_equal(ehem_key_derive(ctx, PEER_KID, "d", "AES128", NULL,
+                                     big, sizeof big, NULL, NULL, 0, kid),
+                     EHEM_ERR_ARG);
+    assert_int_equal((int)fake_transport_request_count(fake), 0);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* -------------------------------------------------------------------------- */
 /* search                                                                     */
 /* -------------------------------------------------------------------------- */
 
@@ -1697,6 +1824,11 @@ int main(void)
         cmocka_unit_test(test_import_full_body),
         cmocka_unit_test(test_import_406_device),
         cmocka_unit_test(test_import_arg_guards),
+        /* REQ-KEY-009: derive. */
+        cmocka_unit_test(test_derive_ext_kid_body),
+        cmocka_unit_test(test_derive_pubkey_full_body),
+        cmocka_unit_test(test_derive_406_device),
+        cmocka_unit_test(test_derive_arg_guards),
         cmocka_unit_test(test_search_prefix_body),
         cmocka_unit_test(test_search_suffix_body),
         cmocka_unit_test(test_search_substring_body),

@@ -5,7 +5,7 @@
  * envelope as list and shares parse_key_page().
  *
  * implements: REQ-KEY-001, REQ-KEY-002, REQ-KEY-003, REQ-KEY-004, REQ-KEY-005,
- *             REQ-KEY-007, REQ-KEY-008, REQ-API-005
+ *             REQ-KEY-007, REQ-KEY-008, REQ-KEY-009, REQ-API-005
  *
  * Follows the proto_system.c template: build the request → send it through the
  * shared request path (proto_common — scope-based bearer, REQ-NET-005 recovery,
@@ -682,6 +682,115 @@ ehem_rc ehem_key_import(ehem_ctx *ctx, const ehem_key_import_params *params,
                            "keymgmt/import: 'kid' is not 32 hex chars");
     } else {
         memcpy(kid_out, kid, KID_HEX_LEN);
+        kid_out[KID_HEX_LEN] = '\0';
+        rc = EHEM_OK;
+    }
+    ehem_json_free(root);
+    return rc;
+}
+
+/* -------------------------------------------------------------------------- */
+/* derive (REQ-KEY-009)                                                       */
+/* -------------------------------------------------------------------------- */
+
+/* Longest derive `type` literal the firmware matches is 16 chars
+ * (isvalid_label(str, 16), api_keymgmt.c) — pre-validate the length only; the
+ * literal itself stays device-validated (no SDK allowlist, as create). */
+#define KEYMGMT_TYPE_MAX 16
+
+/* Peer pubkey cap shared with the crypto peer-argument rule (REQ-OPS-004):
+ * 67 bytes fits a compressed P-521 point. */
+#define KEYMGMT_PEER_PUBKEY_MAX 67
+
+ehem_rc ehem_key_derive(ehem_ctx *ctx, const char *kid,
+                        const char *label, const char *type,
+                        const char *ext_kid,
+                        const uint8_t *pubkey, size_t pubkey_len,
+                        const char *mode,
+                        const uint8_t *descr, size_t descr_len,
+                        char *kid_out)
+{
+    ehem_json *body_obj;
+    ehem_json *root = NULL;
+    char *body;
+    const char *rkid;
+    bool have_ext = (ext_kid != NULL);
+    bool have_pub = (pubkey != NULL && pubkey_len > 0);
+    ehem_rc rc;
+
+    if (ctx == NULL || kid == NULL || label == NULL || type == NULL ||
+        kid_out == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    ehem_ctx_clear_error(ctx);
+    if (!ehem_proto_is_kid_hex(kid)) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                             "keymgmt/derive: kid must be exactly 32 hex chars");
+    }
+    if (!label_ok(label)) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                             "keymgmt/derive: label must be 1..32 printable bytes");
+    }
+    if (type[0] == '\0' || strlen(type) > KEYMGMT_TYPE_MAX) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                             "keymgmt/derive: type must be 1..16 chars");
+    }
+    /* Exactly one peer (the REQ-OPS-004 rule, mirrored). */
+    if (have_ext == have_pub) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                             "keymgmt/derive: exactly one of ext_kid / pubkey");
+    }
+    if (have_ext && !ehem_proto_is_kid_hex(ext_kid)) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                             "keymgmt/derive: ext_kid must be exactly 32 hex chars");
+    }
+    if (have_pub && pubkey_len > KEYMGMT_PEER_PUBKEY_MAX) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                             "keymgmt/derive: pubkey must be at most 67 bytes");
+    }
+    if (descr != NULL && descr_len > KEYMGMT_DESCR_MAX) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                             "keymgmt/derive: descr must be at most 64 bytes");
+    }
+
+    /* Body {kid,label,type,ext_kid|pubkey(b64)[,mode][,descr(b64)]}. */
+    body_obj = ehem_json_new_object();
+    if (body_obj == NULL) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    if (!ehem_json_add_string(body_obj, "kid", kid) ||
+        !ehem_json_add_string(body_obj, "label", label) ||
+        !ehem_json_add_string(body_obj, "type", type) ||
+        (have_ext && !ehem_json_add_string(body_obj, "ext_kid", ext_kid)) ||
+        (have_pub && !add_b64_field(body_obj, "pubkey", pubkey, pubkey_len)) ||
+        (mode != NULL && !ehem_json_add_string(body_obj, "mode", mode)) ||
+        (descr != NULL && descr_len > 0 &&
+         !add_b64_field(body_obj, "descr", descr, descr_len))) {
+        ehem_json_free(body_obj);
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    body = ehem_json_print(body_obj);
+    ehem_json_free(body_obj);
+    if (body == NULL) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+
+    rc = ehem_proto_request_json(ctx, EHEM_HTTP_POST, "/api/keymgmt/derive",
+                                 body, KEYMGMT_GEN_SCOPE, EHEM_TLS_REQ_DEFAULT,
+                                 &root);
+    ehem_json_string_free(body);
+    if (rc != EHEM_OK) {
+        return rc;   /* 400 parse / 406 ECDH-HKDF-repo failure, with payload */
+    }
+
+    if (!ehem_json_get_string(root, "kid", &rkid)) {
+        rc = ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 200, NULL,
+                           "keymgmt/derive: response missing 'kid'");
+    } else if (!ehem_proto_is_kid_hex(rkid)) {
+        rc = ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 200, NULL,
+                           "keymgmt/derive: 'kid' is not 32 hex chars");
+    } else {
+        memcpy(kid_out, rkid, KID_HEX_LEN);
         kid_out[KID_HEX_LEN] = '\0';
         rc = EHEM_OK;
     }

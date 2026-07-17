@@ -3,7 +3,7 @@ id: REQ-KEY-009
 title: Binding for /api/keymgmt/derive — ECDH+HKDF derived key stored on device
 status: approved
 priority: must
-revision: 1
+revision: 2
 source: ARCHITECTURE.md §11 (M7: keymgmt derive); encedo-hem-api-doc keymgmt/derive.md + discrepancies/DISCREPANCIES-OFFICIAL-DOCS.md §"derive vs ecdh"; encedo_firmware api_keymgmt.c:1285 api_post_keymgmt_derive (fw v1.2.2 — NOT prototyped in api.h; hem-api-tester test_10.php runs it green on real hardware); encedo-hem-python-api keymgmt.py derive (OQ-23: keymgmt:gen scope reuse); approved 2026-07-17
 depends_on: ["REQ-AUTH-002", "REQ-AUTH-003", "REQ-KEY-005", "REQ-OPS-004"]
 supersedes: null
@@ -61,20 +61,31 @@ doc's determinism claim false for those combos.
       one peer field + `mode`/`descr` only when given; `{"kid"}` parsed;
       error mapping; `EHEM_ERR_ARG` pre-validation (incl. both-peers)
       with zero transport calls.
-- [ ] Live (byte-exact cross-check): device X25519 key + local
-      shim-generated peer → derive `SHA2-256`; locally compute
-      HKDF-SHA256(shim ECDH secret, info="encedo-sha256") and HMAC a
-      message with it; device `/api/crypto/hmac/hash` on the derived KID
-      returns the identical MAC (proves the whole documented pipeline —
-      raw-secret input, info string, seed semantics). Cleanup per
-      REQ-TEST-003.
-- [ ] Live (determinism, equal-length combo): derive ED25519 twice from
-      identical inputs → `ehem_key_get` pubkeys are identical.
-- [ ] OPEN (live probe): determinism for secret < target — derive
-      SECP521R1 twice from an X25519 source with the same peer; equal
-      pubkeys ⇒ the stale-stack read is benign in practice, differing
-      pubkeys ⇒ non-deterministic (doc conflict recorded either way; SDK
-      header documents the safe combos).
-- [ ] OPEN (live probe): exact scope `keymgmt:derive` accepted or not on
-      fw v1.2.2 (the api.h prototype is missing — confirm routing and
-      the alternative scope both behave; SDK keeps `keymgmt:gen`).
+- [x] ~~byte-exact~~ **RESOLVED AS A CONFLICT (live 2026-07-18, rev2):**
+      the documented pipeline is NOT externally reproducible. The device's
+      derived SHA2-256 key produced a MAC matching NONE of 85 candidate
+      local reconstructions (incl. the doc-exact RFC 5869 HKDF over the
+      raw wolfCrypt X25519 secret that CRYPTO_DeriveKey provably outputs —
+      crypto.c:363 wc_curve25519_shared_secret_ex, source verified). The
+      repo's key-generation step (`REPO_GenKey_*`, source ABSENT from the
+      firmware checkout — repo.c defines no REPO_* functions) applies an
+      undisclosed extra transformation to the seed. Consequence recorded
+      in the header doc: derive is device-side key agreement only; the
+      doc's "two parties converge" holds at most between HEM devices, not
+      for external implementations. Pinned by assert_memory_not_equal in
+      test_derive_live (a doc-conformant firmware change would surface as
+      a test failure). Upstream doc filing candidate.
+- [x] Live (determinism, equal-length combo, 2026-07-18): derive ED25519
+      twice from identical inputs → the repo DEDUP-rejected the second
+      derive with 406 — identical material, determinism proven (and a new
+      fact: derived keys join the same dedup domain as imports).
+- [x] ~~OPEN~~ **RESOLVED (live probe 2026-07-18):** secret < target is
+      REJECTED device-side — SECP521R1 from an X25519 source → 406 on the
+      first derive; the stale-stack HKDF read is unreachable in practice
+      for cross-family derives. (Same-family long targets, e.g. P-521
+      source → P-521 derive, remain untested — the source secret is 66 B
+      there, so no stale read occurs anyway.)
+- [x] ~~OPEN~~ **RESOLVED (live probe 2026-07-18):** the exact scope
+      `keymgmt:derive` IS accepted (200) on fw v1.2.2-DIAG, matching
+      api_keymgmt.c:1329; the SDK keeps `keymgmt:gen` for token sharing
+      with create/import.

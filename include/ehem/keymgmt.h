@@ -346,6 +346,62 @@ EHEM_API ehem_rc ehem_key_import(ehem_ctx *ctx,
                                  char *kid_out);
 
 /* ==========================================================================
+ * Key derivation (authenticated, scope "keymgmt:gen").
+ * implements: REQ-KEY-009
+ * ========================================================================== */
+
+/*
+ * Derive a NEW stored key from an ECDH agreement:
+ * POST /api/keymgmt/derive. The device computes
+ *
+ *   secret = ECDH(kid's private key, peer public)
+ *   seed   = HKDF-SHA256(secret, salt=∅, info="encedo-<type lowercase>")
+ *
+ * and stores a fresh key of `type` generated from that seed, returning its
+ * kid. The derivation is DETERMINISTIC (same inputs → identical stored
+ * material; the repo even dedup-rejects an exact repeat with 406), so two
+ * HEM devices agreeing on inputs converge — but NOTE (live-proven
+ * 2026-07-18, REQ-KEY-009): the stored key is NOT the raw HKDF output; the
+ * repo applies an additional undisclosed transformation to the seed, so an
+ * EXTERNAL party implementing the documented pipeline does NOT arrive at
+ * the same key. Treat derive as device-side key agreement only. The derived
+ * private key never leaves the device.
+ *
+ * `kid` must reference an ECDH-capable asymmetric key held privately by the
+ * device. The peer is EXACTLY ONE of `ext_kid` (a repo key, e.g. imported via
+ * ehem_key_import) or `pubkey`/`pubkey_len` (raw algorithm-native public
+ * bytes, ≤ 67). `type` is the DERIVED key's family — the 17 non-PQC create
+ * literals (NIST curves, CURVE/ED 25519/448, the SHA2-/SHA3- HMAC names,
+ * AES128/192/256); ML-KEM/ML-DSA are not derivable. `mode` (NIST-P only)
+ * and `descr` are optional, as create.
+ *
+ * Scope: the SDK requests "keymgmt:gen" — accepted by the firmware alongside
+ * the never-observed-necessary exact "keymgmt:derive", and shared with the
+ * create/import token (hem-api-tester-proven; python OQ-23).
+ *
+ * DETERMINISM CAVEAT (REQ-KEY-009): the firmware feeds HKDF an input length
+ * equal to the TARGET key length, not the ECDH secret's length — deriving a
+ * key LONGER than the source secret (e.g. SECP521R1 or SHA2-512 from an
+ * X25519 agreement) reads past the secret into stale memory and must be
+ * treated as potentially non-deterministic. Safe combos keep the derived
+ * key's native length ≤ the ECDH secret length (32 for X25519/P-256 sources).
+ *
+ * On success writes the new kid (32 hex + NUL) into `kid_out`
+ * (≥ EHEM_KID_HEX_SIZE bytes). EHEM_ERR_ARG (no I/O) on missing required
+ * args, malformed kids, label policy, a type longer than 16 chars, both or
+ * neither peer, pubkey_len > 67, or descr_len > 64. 406 (source not
+ * ECDH-capable, wrong-curve peer, HKDF/repo failure) → EHEM_ERR_DEVICE with
+ * payload; 400 → EHEM_ERR_DEVICE; 401/403 map per REQ-AUTH-003.
+ */
+EHEM_API ehem_rc ehem_key_derive(ehem_ctx *ctx, const char *kid,
+                                 const char *label, const char *type,
+                                 const char *ext_kid,
+                                 const uint8_t *pubkey, size_t pubkey_len,
+                                 const char *mode,
+                                 const uint8_t *descr, size_t descr_len,
+                                 char *kid_out);
+
+/* ==========================================================================
  * Key-type classification (pure, client-side — no I/O, no allocation).
  * implements: REQ-KEY-006
  *

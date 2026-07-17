@@ -40,6 +40,16 @@ target_compile_options(test_update_import_live PRIVATE ${EHEM_WARNING_FLAGS})
 add_test(NAME test_update_import_live COMMAND test_update_import_live)
 set_tests_properties(test_update_import_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
 
+# REQ-KEY-009: live derive — byte-exact ECDH+HKDF pipeline proof vs the shim,
+# determinism probes (equal-length + the SECP521R1 stale-stack quirk), and the
+# exact-scope probe. Internal-linking (shim + internal request path).
+add_executable(test_derive_live test_derive_live.c)
+target_link_libraries(test_derive_live PRIVATE ehem_test_support cmocka::cmocka)
+target_include_directories(test_derive_live PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
+target_compile_options(test_derive_live PRIVATE ${EHEM_WARNING_FLAGS})
+add_test(NAME test_derive_live COMMAND test_derive_live)
+set_tests_properties(test_derive_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
+
 # REQ-OPS-001 (+ REQ-KEY-006 live cross-check): live sign → local wolfCrypt
 # verify (the M4 gate criterion) + the sign scope probe closing §12 risk 3.
 # Internal-linking like test_keymgmt_get_live (probe + crypto shim).
