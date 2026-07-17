@@ -7,9 +7,20 @@ traces:
   architecture: ["ARCHITECTURE.md#6-protocol-bindings", "ARCHITECTURE.md#5-auth--session"]
 depends_on: []
 evidence:
-  commits: []
-  tests: []
-  notes: null
+  commits: ["b367236"]
+  tests: ["verifies: REQ-OPS-003 (tests/unit/test_verify.c — 5 cases; tests/integration/test_verify_live.c — live green 2026-07-17)"]
+  notes: >
+    Unit 23/23 gcc+clang + ASan clean; export + public-header gates green.
+    Live (my.ence.do fw v1.2.2-DIAG): EHEMTEST ED25519 create → sign →
+    ehem_verify EHEM_OK; flipped sig bit → EHEM_ERR_DEVICE http 406;
+    truncated msg → 406; cleanup clean. SESSION FINDING (device, not SDK):
+    after the device's power-cycle its clock ran ~77 min AHEAD → every login
+    401'd (requested exp = local now+3600 was already past for the device;
+    REQ-NET-005 auto-recovery does not trigger on this mode — it keys on
+    expired-cert TLS failures and challenge-GET 403, not token-POST 401).
+    `hem-tool checkin` RESYNCS the device clock — recorded for the M6 gate /
+    KNOWN-ISSUES; consider a REQ amendment (login-401 → single checkin+retry)
+    as a follow-up decision.
 reopened: []
 cancelled: null
 ---
@@ -28,12 +39,12 @@ verify shares the sign step's `keymgmt:use:<kid>` cached token (assert
 request counts like test_sign_shares_get_token).
 
 **Definition of done**
-- [ ] `ehem_verify` exported, tagged `implements: REQ-OPS-003`; header docs
+- [x] `ehem_verify` exported, tagged `implements: REQ-OPS-003`; header docs
       state 406 = invalid-sig/wrong-type/not-found (indistinguishable)
-- [ ] Unit tests green (gcc+clang+asan): byte-exact bodies with/without
+- [x] Unit tests green (gcc+clang+asan): byte-exact bodies with/without
       ctx, empty-200 → OK, 400/403/406 mapping, EHEM_ERR_ARG guards with
       zero I/O, no second token acquisition after sign
-- [ ] Live: sign→verify OK; flipped-bit sig and truncated msg → 406 /
+- [x] Live: sign→verify OK; flipped-bit sig and truncated msg → 406 /
       EHEM_ERR_DEVICE (http_status recorded); EHEMTEST cleanup per
       REQ-TEST-003
-- [ ] Export + public-header gates green
+- [x] Export + public-header gates green
