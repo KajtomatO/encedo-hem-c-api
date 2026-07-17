@@ -47,6 +47,11 @@ struct ehem_ctx {
     bool  cert_refreshed;  /* sticky: an automatic recovery refreshed the cert */
     bool  in_checkin;      /* recursion guard: check-in legs never auto-recover */
 
+    /* Proactive session-start check-in (REQ-AUTH-005). `done` latches after the
+     * one attempt so the check-in runs at most once per context. */
+    bool  checkin_on_login;
+    bool  checkin_on_login_done;
+
     /* Auth / session (REQ-AUTH-001, REQ-AUTH-002). `auth` is lazily allocated
      * by ehem_login() and torn down (zeroizing credentials) by ehem_logout() /
      * ehem_ctx_destroy(). no_credential_retention mirrors the option. */

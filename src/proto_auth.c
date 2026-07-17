@@ -2,7 +2,7 @@
  * proto_auth.c — the session engine: passphrase login, the eJWT challenge
  * exchange, and a scope-keyed bearer-token cache with silent refresh.
  *
- * implements: REQ-AUTH-001, REQ-AUTH-002
+ * implements: REQ-AUTH-001, REQ-AUTH-002, REQ-AUTH-004, REQ-AUTH-005
  *
  * Mirrors the reference python client's Auth (encedo-hem-python-api auth.py):
  * ehem_login() records the credential (lazily, no network); the first
@@ -239,10 +239,14 @@ static char *build_auth_body(const char *ejwt)
  * GET the login challenge. A 403 means the device RTC is unset — it cannot
  * issue time-bounded tokens yet. Reuse the check-in machinery (REQ-SYS-003) to
  * set the clock, then retry the challenge once, unless auto check-in is
- * disabled or we are already inside a check-in (recursion guard) — mirrors the
- * REQ-NET-005 expired-cert recovery, keyed on 403 instead of a TLS failure.
+ * disabled, we are already inside a check-in (recursion guard), or this
+ * ensure-token call has already spent its one recovery check-in
+ * (*recovery_spent — shared with the REQ-AUTH-004 drift recovery so the two
+ * paths compose instead of multiplying) — mirrors the REQ-NET-005 expired-cert
+ * recovery, keyed on 403 instead of a TLS failure.
  */
-static ehem_rc fetch_challenge(ehem_ctx *ctx, ehem_json **out)
+static ehem_rc fetch_challenge(ehem_ctx *ctx, bool *recovery_spent,
+                               ehem_json **out)
 {
     /* The login exchange is itself unauthenticated (scope NULL) — it is how a
      * bearer is obtained in the first place. */
@@ -252,7 +256,8 @@ static ehem_rc fetch_challenge(ehem_ctx *ctx, ehem_json **out)
         return EHEM_OK;
     }
     if (ehem_last_error(ctx)->http_status == 403 &&
-        !ctx->no_auto_checkin && !ctx->in_checkin) {
+        !*recovery_spent && !ctx->no_auto_checkin && !ctx->in_checkin) {
+        *recovery_spent = true;
         /* Device legs run relaxed: an RTC-broken device's own view of its
          * certificate validity is unreliable, and the check-in payloads are
          * cloud-signed (same posture as the explicit ehem_system_checkin). */
@@ -274,12 +279,34 @@ static ehem_rc fetch_challenge(ehem_ctx *ctx, ehem_json **out)
     return rc;
 }
 
+/*
+ * Clock-drift evidence (REQ-AUTH-004). The challenge `exp` is the device-side
+ * submit deadline, device_now + 60 s (firmware gen_auth_token) — the one place
+ * the device's clock shows through the login flow. When |device_now − local
+ * now| exceeds the eJWT skew margin, a 401 on the token POST is treated as
+ * drift-induced (the device RTC runs ~8% fast; past the requested TTL every
+ * login 401s because the requested exp is already past device-side) rather
+ * than as a bad credential. A missing/unreadable exp yields no evidence.
+ */
+#define AUTH_CHALLENGE_DEADLINE 60   /* challenge exp = device_now + this */
+
+static bool challenge_drift_evident(const ehem_json *challenge, int64_t now)
+{
+    int64_t exp, drift;
+    if (!ehem_json_get_int64(challenge, "exp", &exp)) {
+        return false;
+    }
+    drift = (exp - AUTH_CHALLENGE_DEADLINE) - now;
+    return drift > AUTH_TOKEN_SKEW || drift < -AUTH_TOKEN_SKEW;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Token acquisition (the REQ-AUTH-001 flow)                                  */
 /* -------------------------------------------------------------------------- */
 
 static ehem_rc acquire_token(ehem_ctx *ctx, struct ehem_auth *a,
                              const char *scope, int64_t now,
+                             bool *recovery_spent, bool *drift_evident,
                              const char **token_out)
 {
     ehem_json *challenge = NULL;
@@ -306,14 +333,17 @@ static ehem_rc acquire_token(ehem_ctx *ctx, struct ehem_auth *a,
                              AUTH_TOKEN_PATH ": process-global init failed");
     }
 
-    rc = fetch_challenge(ctx, &challenge);
+    rc = fetch_challenge(ctx, recovery_spent, &challenge);
     if (rc != EHEM_OK) {
         return rc;   /* last-error already recorded by the request path */
     }
 
-    /* Required challenge fields. The challenge `exp` is deliberately NOT read:
-     * it is the response deadline (enforced server-side by the `jti` nonce), not
-     * a token-lifetime input (STEP-M2-045). */
+    /* The challenge `exp` is read ONLY as drift evidence for the REQ-AUTH-004
+     * recovery decision — it is the response deadline (enforced server-side by
+     * the `jti` nonce), never a token-lifetime input (STEP-M2-045). */
+    *drift_evident = challenge_drift_evident(challenge, now);
+
+    /* Required challenge fields. */
     if (!ehem_json_get_string(challenge, "eid", &eid) ||
         !ehem_json_get_string(challenge, "spk", &spk) ||
         !ehem_json_get_string(challenge, "jti", &jti)) {
@@ -420,6 +450,10 @@ ehem_rc ehem_auth_ensure_token(ehem_ctx *ctx, const char *scope,
     struct ehem_auth *a;
     struct token_entry *e;
     int64_t now;
+    bool recovery_spent = false;   /* one recovery check-in per call, total */
+    bool drift_evident  = false;
+    bool proactive_failed = false;
+    ehem_rc rc;
 
     if (ctx == NULL || scope == NULL || token_out == NULL) {
         return EHEM_ERR_ARG;
@@ -443,7 +477,59 @@ ehem_rc ehem_auth_ensure_token(ehem_ctx *ctx, const char *scope,
                              "no credential retained for scope '%s' — call "
                              "ehem_login()", scope);
     }
-    return acquire_token(ctx, a, scope, now, token_out);
+
+    /* Proactive session-start check-in (REQ-AUTH-005): once per context,
+     * before the first acquisition, best-effort — a failure never blocks the
+     * login (and the REQ-AUTH-004 recovery below stays the backstop). The
+     * `done` latch is set before the attempt so even a failing check-in is
+     * never repeated. */
+    if (ctx->checkin_on_login && !ctx->checkin_on_login_done &&
+        !ctx->in_checkin) {
+        ctx->checkin_on_login_done = true;
+        proactive_failed = (ehem_checkin_run(ctx, /*relax_device_tls=*/1, NULL)
+                            != EHEM_OK);
+    }
+
+    rc = acquire_token(ctx, a, scope, now, &recovery_spent, &drift_evident,
+                       token_out);
+
+    /* Clock-drift login recovery (REQ-AUTH-004): a 401 on the token POST with
+     * measured drift in the challenge is the device rejecting our requested
+     * exp as already past, not a bad credential — run ONE check-in (the
+     * firmware resynchronizes its RTC as a side effect) and retry the whole
+     * flow once (the jti nonce is single-use, so the retry re-fetches a fresh
+     * challenge). Without drift evidence a 401 stays AUTH_FAILED immediately:
+     * a wrong passphrase must not cost a check-in round-trip. Shares the
+     * one-recovery budget with the challenge-403 path via recovery_spent. */
+    if (rc == EHEM_ERR_AUTH_FAILED && drift_evident &&
+        ehem_last_error(ctx)->http_status == 401 &&
+        !recovery_spent && !ctx->no_auto_checkin && !ctx->in_checkin) {
+        recovery_spent = true;
+        if (ehem_checkin_run(ctx, /*relax_device_tls=*/1, NULL) == EHEM_OK) {
+            now = auth_now();
+            rc = acquire_token(ctx, a, scope, now, &recovery_spent,
+                               &drift_evident, token_out);
+        } else {
+            /* Keep the login failure as the outcome; note the failed rescue. */
+            char checkin_detail[EHEM_ERR_MSG_MAX];
+            snprintf(checkin_detail, sizeof checkin_detail, "%s",
+                     ehem_last_error(ctx)->message);
+            return ehem_ctx_fail(ctx, EHEM_ERR_AUTH_FAILED, 401, NULL,
+                                 AUTH_TOKEN_PATH ": HTTP 401 with device clock "
+                                 "drift; recovery check-in failed: %s",
+                                 checkin_detail);
+        }
+    }
+
+    /* A successful login after a failed proactive check-in: leave a breadcrumb
+     * in the (otherwise idle) last-error message so the failure is observable
+     * without failing anything. rc/http_status stay untouched. */
+    if (rc == EHEM_OK && proactive_failed) {
+        snprintf(ctx->err_message, sizeof ctx->err_message,
+                 "checkin_on_login: best-effort check-in failed; "
+                 "login proceeded");
+    }
+    return rc;
 }
 
 void ehem_auth_invalidate(ehem_ctx *ctx, const char *scope)

@@ -8,6 +8,12 @@
  *           requested; records the `sub` claim for the REQ-AUTH-001 M2-gate
  *           criterion. Gated on EHEM_TEST_URL + EHEM_TEST_PASSPHRASE
  *           (REQ-TEST-002): skipped (exit 77) when either is unset.
+ *           REQ-AUTH-005: a checkin_on_login context runs the proactive
+ *           check-in (device clock resync) and the login still lands.
+ *           (REQ-AUTH-004's drift recovery is unit-proven; live it fires
+ *           opportunistically inside these logins whenever the device has
+ *           actually drifted past the TTL — no way to fabricate drift
+ *           remotely.)
  *
  * EXCEPTION to the "integration tests use only the public API" rule: there is
  * no public authenticated binding until M2-050, so this test drives the
@@ -105,6 +111,54 @@ static void test_live_token_scope_claim(void **state)
     ehem_ctx_destroy(ctx);
 }
 
+/* Like ehem_test_ctx(), plus checkin_on_login (REQ-AUTH-005). */
+static ehem_rc test_ctx_checkin_on_login(ehem_ctx **out)
+{
+    ehem_options opts;
+    const char *cacert   = getenv("EHEM_TEST_CACERT");
+    const char *insecure = getenv("EHEM_TEST_INSECURE");
+
+    ehem_options_init(&opts);
+    if (insecure != NULL && insecure[0] == '1') {
+        opts.tls_mode = EHEM_TLS_INSECURE;
+    } else if (cacert != NULL) {
+        opts.tls_mode = EHEM_TLS_CA_FILE;
+        opts.ca_file  = cacert;
+    }
+    ehem_test_apply_pace(&opts);
+    opts.checkin_on_login = 1;
+    return ehem_ctx_create(ehem_test_url(), &opts, out);
+}
+
+/* checkin_on_login: the proactive check-in runs (3-leg handshake against the
+ * real device + cloud relay, resyncing the device RTC) and the first token
+ * acquisition on the context still succeeds. */
+static void test_live_checkin_on_login(void **state)
+{
+    (void)state;
+    ehem_ctx *ctx = NULL;
+    const char *token = NULL;
+    ehem_rc rc;
+
+    assert_int_equal(test_ctx_checkin_on_login(&ctx), EHEM_OK);
+    assert_int_equal(ehem_login(ctx, ehem_test_passphrase()), EHEM_OK);
+
+    rc = ehem_auth_ensure_token(ctx, LIVE_SCOPE, &token);
+    if (rc != EHEM_OK) {
+        fail_msg("checkin_on_login ensure_token failed: %s (%s)",
+                 ehem_rc_str(rc), ehem_last_error(ctx)->message);
+    }
+    assert_non_null(token);
+    /* A successful proactive check-in leaves no breadcrumb; a best-effort
+     * failure would (and must not have failed the login). Either way we log
+     * what happened for the evidence record. */
+    printf("[test_auth_live] checkin_on_login: login OK; note='%s'\n",
+           ehem_last_error(ctx)->message);
+
+    assert_int_equal(ehem_logout(ctx), EHEM_OK);
+    ehem_ctx_destroy(ctx);
+}
+
 int main(void)
 {
     /* No device or no passphrase → skip (reported skipped, not failed). */
@@ -115,6 +169,12 @@ int main(void)
     }
 
     const struct CMUnitTest tests[] = {
+        /* checkin_on_login runs FIRST deliberately: its check-in resyncs the
+         * ~8%-fast device RTC, so the TTL assertion in the scope-claim test is
+         * immune to accumulated drift (observed live: 24 min of drift shrank
+         * the device-stamped TTL to 2164 s — the exact pathology REQ-AUTH-005
+         * exists to heal). */
+        cmocka_unit_test(test_live_checkin_on_login),
         cmocka_unit_test(test_live_token_scope_claim),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);

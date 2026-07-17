@@ -11,7 +11,13 @@
  *           retention-off → AUTH_EXPIRED without network, logout drops the
  *           cache and zeroizes credentials),
  *           REQ-AUTH-003 (authenticated request path: bearer injection, 401
- *           re-acquire+retry, 403 → SCOPE_DENIED, auth×check-in composition)
+ *           re-acquire+retry, 403 → SCOPE_DENIED, auth×check-in composition),
+ *           REQ-AUTH-004 (clock-drift login recovery: drifted 401 → one
+ *           check-in → one full retry; un-drifted 401 stays AUTH_FAILED with
+ *           zero check-ins; opt-out; shared one-recovery budget with the
+ *           challenge-403 path),
+ *           REQ-AUTH-005 (checkin_on_login: one proactive check-in before the
+ *           first acquisition only; failure non-fatal with breadcrumb)
  */
 #include <stdarg.h>
 #include <stddef.h>
@@ -39,10 +45,18 @@
 
 /* The challenge the fake device serves: the fixture inputs, so the eJWT the
  * login POSTs is byte-identical to EJWT_FX_EXPECT_EJWT when the clock is
- * pinned to EJWT_FX_NOW (challenge.exp = EJWT_FX_CHALLENGE_EXP = 2000000000). */
+ * pinned to EJWT_FX_NOW (challenge.exp = EJWT_FX_CHALLENGE_EXP = 2000000000).
+ * NB: that far-future exp doubles as massive device-clock-drift evidence for
+ * the REQ-AUTH-004 tests — a 401 after THIS challenge is drift-classified. */
 #define CHALLENGE_JSON \
     "{\"eid\":\"" EJWT_FX_EID "\",\"spk\":\"" EJWT_FX_SPK "\"," \
     "\"jti\":\"" EJWT_FX_JTI "\",\"exp\":2000000000,\"lbl\":\"alice\"}"
+
+/* The same challenge with a HEALTHY device clock: exp = now + 60 exactly, so
+ * there is no drift evidence and a 401 must stay a plain credential failure. */
+#define CHALLENGE_JSON_SYNCED \
+    "{\"eid\":\"" EJWT_FX_EID "\",\"spk\":\"" EJWT_FX_SPK "\"," \
+    "\"jti\":\"" EJWT_FX_JTI "\",\"exp\":1700000060,\"lbl\":\"alice\"}"
 
 /* What the login POST body must serialize to (compact, key order from the
  * builder): the single "auth" field carrying the fixture eJWT. */
@@ -238,6 +252,8 @@ static void test_login_exp_is_requested_lifetime(void **state)
     fake_transport_free(fake);
 }
 
+/* A 401 with an UN-DRIFTED challenge clock (wrong passphrase) fails straight
+ * through — REQ-AUTH-004's gate must not spend a check-in on it. */
 static void test_login_post_401_auth_failed(void **state)
 {
     (void)state;
@@ -246,7 +262,7 @@ static void test_login_post_401_auth_failed(void **state)
     ehem_transport *fake = fake_transport_new();
     assert_non_null(fake);
     assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
-                                                  CHALLENGE_JSON), 0);
+                                                  CHALLENGE_JSON_SYNCED), 0);
     assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 401,
                      "{\"error\":\"bad passphrase\"}"), 0);
 
@@ -257,6 +273,7 @@ static void test_login_post_401_auth_failed(void **state)
     assert_int_equal(ehem_auth_ensure_token(ctx, EJWT_FX_SCOPE, &tok),
                      EHEM_ERR_AUTH_FAILED);
     assert_null(tok);
+    /* challenge + POST only: no check-in legs without drift evidence. */
     assert_int_equal((int)fake_transport_request_count(fake), 2);
 
     const ehem_error *err = ehem_last_error(ctx);
@@ -329,6 +346,230 @@ static void test_rtc_unset_optout(void **state)
     assert_null(tok);
     assert_int_equal((int)fake_transport_request_count(fake), 1);
     assert_int_equal(ehem_last_error(ctx)->http_status, 403);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* -------------------------------------------------------------------------- */
+/* REQ-AUTH-004: clock-drift login recovery                                   */
+/* -------------------------------------------------------------------------- */
+
+/* Drifted challenge (CHALLENGE_JSON's far-future exp) + POST 401 → one
+ * check-in → one full re-login (fresh challenge, fresh POST) → success. */
+static void test_drift_401_recovery_success(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+                                                  CHALLENGE_JSON), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 401,
+                     "{\"error\":\"exp in the past\"}"), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200, CI_CHALLENGE), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200, CI_VERIFIED), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200, CI_OK), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+                                                  CHALLENGE_JSON), 0);
+    push_token(fake, EJWT_FX_NOW + 100000, "drift");
+
+    ehem_ctx *ctx = ctx_with(fake, NULL);
+    assert_int_equal(ehem_login(ctx, EJWT_FX_PASSPHRASE), EHEM_OK);
+    const char *tok = NULL;
+    assert_int_equal(ehem_auth_ensure_token(ctx, EJWT_FX_SCOPE, &tok), EHEM_OK);
+    assert_non_null(tok);
+
+    /* challenge + 401 POST + 3 check-in legs + fresh challenge + POST = 7. */
+    assert_int_equal((int)fake_transport_request_count(fake), 7);
+    assert_string_equal(fake_transport_request(fake, 1)->path, "/api/auth/token");
+    assert_int_equal(fake_transport_request(fake, 1)->method, EHEM_HTTP_POST);
+    assert_string_equal(fake_transport_request(fake, 2)->path, "/api/system/checkin");
+    assert_string_equal(fake_transport_request(fake, 4)->path, "/api/system/checkin");
+    assert_string_equal(fake_transport_request(fake, 5)->path, "/api/auth/token");
+    assert_int_equal(fake_transport_request(fake, 5)->method, EHEM_HTTP_GET);
+    assert_string_equal(fake_transport_request(fake, 6)->path, "/api/auth/token");
+    assert_int_equal(fake_transport_request(fake, 6)->method, EHEM_HTTP_POST);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* Drifted 401, recovery runs, the retry 401s again → AUTH_FAILED, and no
+ * second check-in is attempted. */
+static void test_drift_401_recovery_still_401(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+                                                  CHALLENGE_JSON), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 401,
+                     "{\"error\":\"exp in the past\"}"), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200, CI_CHALLENGE), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200, CI_VERIFIED), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200, CI_OK), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+                                                  CHALLENGE_JSON), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 401,
+                     "{\"error\":\"still bad\"}"), 0);
+
+    ehem_ctx *ctx = ctx_with(fake, NULL);
+    assert_int_equal(ehem_login(ctx, EJWT_FX_PASSPHRASE), EHEM_OK);
+    const char *tok = NULL;
+    assert_int_equal(ehem_auth_ensure_token(ctx, EJWT_FX_SCOPE, &tok),
+                     EHEM_ERR_AUTH_FAILED);
+    assert_null(tok);
+    assert_int_equal((int)fake_transport_request_count(fake), 7);
+    assert_int_equal(ehem_last_error(ctx)->http_status, 401);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* Drift recovery honors no_auto_checkin: drifted 401 fails straight through. */
+static void test_drift_401_optout(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+                                                  CHALLENGE_JSON), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 401,
+                     "{\"error\":\"exp in the past\"}"), 0);
+
+    ehem_options opts;
+    ehem_options_init(&opts);
+    opts.no_auto_checkin = 1;
+    ehem_ctx *ctx = ctx_with(fake, &opts);
+    assert_int_equal(ehem_login(ctx, EJWT_FX_PASSPHRASE), EHEM_OK);
+    const char *tok = NULL;
+    assert_int_equal(ehem_auth_ensure_token(ctx, EJWT_FX_SCOPE, &tok),
+                     EHEM_ERR_AUTH_FAILED);
+    assert_int_equal((int)fake_transport_request_count(fake), 2);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* One recovery check-in per ensure-token call, TOTAL: after the drift
+ * recovery's check-in, a 403 on the retry's challenge must NOT trigger the
+ * RTC-unset recovery a second time. */
+static void test_drift_recovery_budget_composes(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+                                                  CHALLENGE_JSON), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 401,
+                     "{\"error\":\"exp in the past\"}"), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200, CI_CHALLENGE), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200, CI_VERIFIED), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200, CI_OK), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 403,
+                     "{\"error\":\"rtc not set\"}"), 0);   /* retry challenge */
+
+    ehem_ctx *ctx = ctx_with(fake, NULL);
+    assert_int_equal(ehem_login(ctx, EJWT_FX_PASSPHRASE), EHEM_OK);
+    const char *tok = NULL;
+    assert_int_equal(ehem_auth_ensure_token(ctx, EJWT_FX_SCOPE, &tok),
+                     EHEM_ERR_SCOPE_DENIED);   /* the 403 maps straight out */
+    assert_null(tok);
+    /* challenge + POST + 3 legs + retry challenge = 6; budget spent, no more. */
+    assert_int_equal((int)fake_transport_request_count(fake), 6);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* -------------------------------------------------------------------------- */
+/* REQ-AUTH-005: checkin_on_login                                             */
+/* -------------------------------------------------------------------------- */
+
+/* The proactive check-in runs exactly once — before the FIRST acquisition,
+ * and not again when a later expiry forces a re-acquisition. */
+static void test_checkin_on_login_once(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    /* First ensure: check-in legs, then the login exchange. */
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200, CI_CHALLENGE), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200, CI_VERIFIED), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200, CI_OK), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+                                                  CHALLENGE_JSON), 0);
+    push_token(fake, EJWT_FX_NOW + 200, "first");   /* short-lived */
+    /* Second ensure (after expiry): login exchange ONLY — no more check-ins. */
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+                                                  CHALLENGE_JSON), 0);
+    push_token(fake, EJWT_FX_NOW + 100000, "second");
+
+    ehem_options opts;
+    ehem_options_init(&opts);
+    opts.checkin_on_login = 1;
+    ehem_ctx *ctx = ctx_with(fake, &opts);
+    assert_int_equal(ehem_login(ctx, EJWT_FX_PASSPHRASE), EHEM_OK);
+
+    const char *tok = NULL;
+    assert_int_equal(ehem_auth_ensure_token(ctx, EJWT_FX_SCOPE, &tok), EHEM_OK);
+    assert_non_null(tok);
+    assert_int_equal((int)fake_transport_request_count(fake), 5);
+    assert_string_equal(fake_transport_request(fake, 0)->path, "/api/system/checkin");
+    assert_string_equal(fake_transport_request(fake, 2)->path, "/api/system/checkin");
+    assert_string_equal(fake_transport_request(fake, 3)->path, "/api/auth/token");
+
+    /* Expire the cached token (cache exp = token exp − 60s skew). */
+    g_now = EJWT_FX_NOW + 150;
+    tok = NULL;
+    assert_int_equal(ehem_auth_ensure_token(ctx, EJWT_FX_SCOPE, &tok), EHEM_OK);
+    assert_non_null(tok);
+    /* Exactly two more requests (challenge + POST), zero check-in legs. */
+    assert_int_equal((int)fake_transport_request_count(fake), 7);
+    assert_string_equal(fake_transport_request(fake, 5)->path, "/api/auth/token");
+    assert_string_equal(fake_transport_request(fake, 6)->path, "/api/auth/token");
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* A failing proactive check-in never blocks the login; the failure leaves a
+ * breadcrumb in the last-error message while rc stays EHEM_OK. */
+static void test_checkin_on_login_failure_nonfatal(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    /* Check-in leg 1 fails hard; the login exchange then succeeds. */
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 500,
+                     "{\"error\":\"boom\"}"), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+                                                  CHALLENGE_JSON), 0);
+    push_token(fake, EJWT_FX_NOW + 100000, "rescueless");
+
+    ehem_options opts;
+    ehem_options_init(&opts);
+    opts.checkin_on_login = 1;
+    ehem_ctx *ctx = ctx_with(fake, &opts);
+    assert_int_equal(ehem_login(ctx, EJWT_FX_PASSPHRASE), EHEM_OK);
+
+    const char *tok = NULL;
+    assert_int_equal(ehem_auth_ensure_token(ctx, EJWT_FX_SCOPE, &tok), EHEM_OK);
+    assert_non_null(tok);
+    assert_int_equal((int)fake_transport_request_count(fake), 3);
+    assert_non_null(strstr(ehem_last_error(ctx)->message, "checkin_on_login"));
 
     ehem_ctx_destroy(ctx);
     fake_transport_free(fake);
@@ -843,6 +1084,14 @@ int main(void)
         cmocka_unit_test(test_login_post_401_auth_failed),
         cmocka_unit_test(test_rtc_unset_recovery),
         cmocka_unit_test(test_rtc_unset_optout),
+        /* REQ-AUTH-004: clock-drift login recovery. */
+        cmocka_unit_test(test_drift_401_recovery_success),
+        cmocka_unit_test(test_drift_401_recovery_still_401),
+        cmocka_unit_test(test_drift_401_optout),
+        cmocka_unit_test(test_drift_recovery_budget_composes),
+        /* REQ-AUTH-005: checkin_on_login. */
+        cmocka_unit_test(test_checkin_on_login_once),
+        cmocka_unit_test(test_checkin_on_login_failure_nonfatal),
         cmocka_unit_test(test_cache_same_scope_reuse),
         cmocka_unit_test(test_cache_per_scope_isolation),
         cmocka_unit_test(test_cache_skew_window_reacquire),

@@ -32,10 +32,13 @@
 #include "fixtures/ejwt_login_vector.h"
 #include "fixtures/cert_fixture.h"
 
-/* Auth challenge the fake device serves (fixture inputs; matches test_auth). */
+/* Auth challenge the fake device serves (fixture inputs; matches test_auth's
+ * SYNCED variant — exp = pinned now + 60, i.e. a healthy device clock, so the
+ * 401 case stays a plain credential failure and never triggers the
+ * REQ-AUTH-004 drift recovery). */
 #define CHALLENGE_JSON \
     "{\"eid\":\"" EJWT_FX_EID "\",\"spk\":\"" EJWT_FX_SPK "\"," \
-    "\"jti\":\"" EJWT_FX_JTI "\",\"exp\":2000000000,\"lbl\":\"alice\"}"
+    "\"jti\":\"" EJWT_FX_JTI "\",\"exp\":1700000060,\"lbl\":\"alice\"}"
 
 /* Leg-3 device check-in reply and a minimal post-reboot status. */
 static const char CI_OK[]      = "{\"status\":\"ok\",\"newcrt\":\"cert refreshed\"}";

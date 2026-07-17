@@ -163,6 +163,23 @@ typedef struct ehem_options {
      * retry policy (retries remain the caller's job, §7).
      */
     long           request_pace_ms;     /* 0 = no pacing (default) */
+
+    /*
+     * Proactive check-in at session start (REQ-AUTH-005). When nonzero, the
+     * session engine runs one best-effort check-in handshake (see
+     * <ehem/system.h>) immediately before the FIRST bearer-token acquisition
+     * on this context, and never again for the context's lifetime. The
+     * check-in resynchronizes the device clock and refreshes an expired TLS
+     * certificate as firmware side effects — one unauthenticated round-trip
+     * that heals both known device pathologies at a predictable moment
+     * (intended for session-oriented consumers such as a PKCS#11 module).
+     * A failed check-in never fails the login: the token acquisition
+     * proceeds regardless (the drift recovery below remains the backstop).
+     * Independent of no_auto_checkin, which governs only the automatic
+     * RECOVERY check-ins (expired-cert, RTC-unset, clock-drift); this option
+     * is an explicit request. 0 (the default) disables it.
+     */
+    int            checkin_on_login;    /* 0 = no proactive check-in (default) */
 } ehem_options;
 
 /*
