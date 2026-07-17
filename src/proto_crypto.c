@@ -1,8 +1,8 @@
 /*
  * proto_crypto.c — bindings for the `crypto` API group: exdsa signing (M4),
- * exdsa verification, ECDH (M6).
+ * exdsa verification, ECDH, HMAC (M6).
  *
- * implements: REQ-OPS-001, REQ-OPS-003, REQ-OPS-004
+ * implements: REQ-OPS-001, REQ-OPS-003, REQ-OPS-004, REQ-OPS-005
  *
  * Follows the proto_keymgmt.c template: pre-validate → build the JSON body →
  * send through the shared request path (proto_common — per-KID bearer,
@@ -440,4 +440,220 @@ void ehem_ecdh_secret_free(ehem_ecdh_secret *s)
         free(s->secret);
     }
     free(s);
+}
+
+/*
+ * Shared pre-validation + body construction for the two hmac endpoints.
+ * `mac` NULL → hash body {kid,msg[,alg][,peer]}; non-NULL → verify body
+ * {kid,msg,mac[,alg][,peer]}. On failure the context error is recorded and
+ * NULL is returned.
+ */
+static char *hmac_build(ehem_ctx *ctx, const char *what,
+                        const char *kid, const char *alg,
+                        const uint8_t *msg, size_t msg_len,
+                        const uint8_t *mac, size_t mac_len,
+                        const char *ext_kid,
+                        const uint8_t *pubkey, size_t pubkey_len,
+                        ehem_rc *rc_out)
+{
+    char *field = NULL;
+    char *body;
+    ehem_json *body_obj;
+    int derived = (ext_kid != NULL || pubkey != NULL || pubkey_len != 0);
+
+    *rc_out = EHEM_ERR_ARG;
+
+    if (!ehem_proto_is_kid_hex(kid)) {
+        ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                      "%s: kid must be exactly 32 hex chars", what);
+        return NULL;
+    }
+    if (msg_len < 1 || msg_len > EHEM_SIGN_MSG_MAX) {
+        ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                      "%s: msg must be 1..%d bytes", what, EHEM_SIGN_MSG_MAX);
+        return NULL;
+    }
+    if (mac != NULL && (mac_len < 1 || mac_len > EHEM_HMAC_MAC_MAX)) {
+        ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                      "%s: mac must be 1..%d bytes", what, EHEM_HMAC_MAC_MAX);
+        return NULL;
+    }
+    if (check_peer_args(ctx, what, ext_kid, pubkey, pubkey_len, 1) != EHEM_OK) {
+        return NULL;
+    }
+    if (alg == NULL && derived) {
+        /* Firmware falls through to a bare 406 without an alg in the
+         * ECDH-derived flow — catch it client-side (REQ-OPS-005). */
+        ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                      "%s: alg is required in the ECDH-derived flow", what);
+        return NULL;
+    }
+    if (alg != NULL && alg[0] == '\0') {
+        ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                      "%s: alg must be non-empty when given", what);
+        return NULL;
+    }
+
+    *rc_out = EHEM_ERR_NOMEM;
+    body_obj = ehem_json_new_object();
+    if (body_obj == NULL) {
+        ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+        return NULL;
+    }
+    if (!ehem_json_add_string(body_obj, "kid", kid)) {
+        goto oom;
+    }
+    if ((field = b64_dup(msg, msg_len)) == NULL ||
+        !ehem_json_add_string(body_obj, "msg", field)) {
+        goto oom;
+    }
+    free(field);
+    field = NULL;
+    if (mac != NULL) {
+        if ((field = b64_dup(mac, mac_len)) == NULL ||
+            !ehem_json_add_string(body_obj, "mac", field)) {
+            goto oom;
+        }
+        free(field);
+        field = NULL;
+    }
+    if (alg != NULL && !ehem_json_add_string(body_obj, "alg", alg)) {
+        goto oom;
+    }
+    if (!add_peer_fields(body_obj, ext_kid, pubkey, pubkey_len)) {
+        goto oom;
+    }
+
+    body = ehem_json_print(body_obj);
+    ehem_json_free(body_obj);
+    if (body == NULL) {
+        ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+        return NULL;
+    }
+    *rc_out = EHEM_OK;
+    return body;
+
+oom:
+    free(field);
+    ehem_json_free(body_obj);
+    ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    return NULL;
+}
+
+ehem_rc ehem_hmac(ehem_ctx *ctx, const char *kid, const char *alg,
+                  const uint8_t *msg, size_t msg_len,
+                  const char *ext_kid,
+                  const uint8_t *pubkey, size_t pubkey_len,
+                  ehem_mac **out)
+{
+    char scope[64];
+    char *body;
+    ehem_json *root = NULL;
+    ehem_mac *result;
+    const char *mac_b64;
+    size_t b64_len;
+    size_t n;
+    ehem_rc rc;
+
+    if (ctx == NULL || kid == NULL || msg == NULL || out == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    *out = NULL;
+    ehem_ctx_clear_error(ctx);
+
+    body = hmac_build(ctx, "crypto/hmac/hash", kid, alg, msg, msg_len,
+                      NULL, 0, ext_kid, pubkey, pubkey_len, &rc);
+    if (body == NULL) {
+        return rc;
+    }
+
+    snprintf(scope, sizeof scope, "keymgmt:use:%s", kid);
+
+    rc = ehem_proto_request_json(ctx, EHEM_HTTP_POST, "/api/crypto/hmac/hash",
+                                 body, scope, EHEM_TLS_REQ_DEFAULT, &root);
+    ehem_json_string_free(body);
+    if (rc != EHEM_OK) {
+        return rc;
+    }
+
+    if (!ehem_json_get_string(root, "mac", &mac_b64) || mac_b64[0] == '\0') {
+        ehem_json_free(root);
+        return ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 200, NULL,
+                             "crypto/hmac/hash: response missing 'mac'");
+    }
+
+    result = calloc(1, sizeof *result);
+    b64_len = strlen(mac_b64);
+    if (result != NULL) {
+        result->mac = malloc(b64_len);   /* decoded ≤ encoded */
+    }
+    if (result == NULL || result->mac == NULL) {
+        ehem_mac_free(result);
+        ehem_json_free(root);
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    n = ehem_b64_std_decode(mac_b64, b64_len, result->mac, b64_len);
+    ehem_json_free(root);
+    if (n == (size_t)-1 || n == 0) {
+        ehem_mac_free(result);
+        return ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 200, NULL,
+                             "crypto/hmac/hash: 'mac' is not valid base64");
+    }
+    result->mac_len = n;
+
+    *out = result;
+    return EHEM_OK;
+}
+
+void ehem_mac_free(ehem_mac *m)
+{
+    if (m == NULL) {
+        return;
+    }
+    free(m->mac);
+    free(m);
+}
+
+ehem_rc ehem_hmac_verify(ehem_ctx *ctx, const char *kid, const char *alg,
+                         const uint8_t *msg, size_t msg_len,
+                         const uint8_t *mac, size_t mac_len,
+                         const char *ext_kid,
+                         const uint8_t *pubkey, size_t pubkey_len)
+{
+    char scope[64];
+    char *body;
+    char *resp = NULL;
+    long status;
+    ehem_rc rc;
+
+    if (ctx == NULL || kid == NULL || msg == NULL || mac == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    ehem_ctx_clear_error(ctx);
+
+    body = hmac_build(ctx, "crypto/hmac/verify", kid, alg, msg, msg_len,
+                      mac, mac_len, ext_kid, pubkey, pubkey_len, &rc);
+    if (body == NULL) {
+        return rc;
+    }
+
+    snprintf(scope, sizeof scope, "keymgmt:use:%s", kid);
+
+    rc = ehem_proto_request_raw(ctx, EHEM_HTTP_POST, "/api/crypto/hmac/verify",
+                                body, scope, EHEM_TLS_REQ_DEFAULT, &resp);
+    ehem_json_string_free(body);
+    if (rc == EHEM_OK) {
+        free(resp);             /* valid: empty 200; tolerate a body anyway */
+        ehem_ctx_clear_error(ctx);
+        return EHEM_OK;
+    }
+
+    /* Valid MAC = EMPTY 200 (same success shape as exdsa/verify). 406 = MAC
+     * mismatch / wrong key type / ECDH failure, indistinguishable. */
+    status = ehem_last_error(ctx)->http_status;
+    if (rc == EHEM_ERR_PROTOCOL && status == 200) {
+        ehem_ctx_clear_error(ctx);
+        return EHEM_OK;
+    }
+    return rc;
 }

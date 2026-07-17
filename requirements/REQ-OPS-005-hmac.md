@@ -3,7 +3,7 @@ id: REQ-OPS-005
 title: Bindings for /api/crypto/hmac/hash and /api/crypto/hmac/verify — MAC by KID
 status: approved
 priority: must
-revision: 1
+revision: 2
 source: ARCHITECTURE.md §6, §11 (M6); encedo-hem-api-doc crypto/hmac-hash.md, crypto/hmac-verify.md; encedo_firmware api_crypto.c api_post_crypto_hmac_hash/_verify + crypto.c CRYPTO_Hash/CRYPTO_HashVerify (fw v1.2.2); HEM-SDK-7 (HMAC), HEM-OP-1; approved 2026-07-17
 depends_on: ["REQ-AUTH-002", "REQ-AUTH-003", "REQ-OPS-004"]
 supersedes: null
@@ -61,13 +61,16 @@ device's ECDH+MAC composition is observable with a locally-known secret
       (unit tests asserting body bytes).
 - [ ] After a get/sign on the same kid, hmac ops perform no second token
       acquisition (unit test asserting request counts).
-- [ ] Live direct mode: an `EHEMTEST` HMAC key (SHA2-256 family) —
-      `ehem_hmac` returns a 32-byte MAC, `ehem_hmac_verify` of it →
-      `EHEM_OK`, one flipped mac bit → 406/`EHEM_ERR_DEVICE`; repeated on
-      one SHA3 family key (MAC length matches the family); cleanup per
-      REQ-TEST-003.
-- [ ] OPEN (live probe, closes the HKDF conflict): derived mode via
-      `pubkey` with a local shim X25519 keypair against an `EHEMTEST`
-      X25519 device key — compare the device MAC against local
-      HMAC-SHA256(key = raw ECDH secret) vs HMAC-SHA256(key =
-      HKDF(secret)); record which matches here and in the binding doc.
+- [x] Live direct mode (test_hmac_live, my.ence.do fw v1.2.2-DIAG,
+      2026-07-17): an `EHEMTEST` SHA2-256 HMAC key — `ehem_hmac` returned a
+      32-byte MAC, `ehem_hmac_verify` of it → `EHEM_OK`, one flipped mac
+      bit → 406/`EHEM_ERR_DEVICE`; a SHA3-384 key round-tripped with a
+      48-byte MAC (key type decides); cleanup clean.
+- [x] ~~OPEN~~ **RESOLVED (live probe 2026-07-17, test_hmac_live):** the
+      device MAC in the derived flow byte-matches local **HMAC-SHA256
+      keyed with the RAW ECDH secret** — the firmware applies NO HKDF
+      (crypto.c:541-559 confirmed on-device); the doc's "ECDH + HKDF"
+      claim is wrong (device > doc). Interop rule for off-device
+      reproduction: key = raw shared secret. Recorded in the ehem_hmac()
+      header doc; the probe asserts byte-equality so a firmware change
+      surfaces as a failure.

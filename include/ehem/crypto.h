@@ -1,7 +1,7 @@
 /*
  * crypto.h — Encedo HEM C SDK, cryptographic-operation protocol bindings.
  *
- * implements: REQ-OPS-001, REQ-OPS-003, REQ-OPS-004
+ * implements: REQ-OPS-001, REQ-OPS-003, REQ-OPS-004, REQ-OPS-005
  *
  * The `crypto` API group (ARCHITECTURE.md §6, §11 M4/M6): single-shot
  * operations against keys that never leave the device — the SDK sends the
@@ -191,6 +191,64 @@ EHEM_API ehem_rc ehem_ecdh(ehem_ctx *ctx, const char *kid,
 
 /* Release (and zeroize) a secret from ehem_ecdh(). NULL is a no-op. */
 EHEM_API void ehem_ecdh_secret_free(ehem_ecdh_secret *s);
+
+/* Largest MAC the hmac endpoints handle (SHA-512/SHA3-512: 64 bytes). */
+#define EHEM_HMAC_MAC_MAX 64
+
+/* A MAC from ehem_hmac(). Caller-owned; release with ehem_mac_free(). */
+typedef struct ehem_mac {
+    uint8_t *mac;
+    size_t   mac_len;
+} ehem_mac;
+
+/*
+ * MAC a message with a device key: POST /api/crypto/hmac/hash (REQ-OPS-005).
+ * Two key flows, selected by the peer arguments:
+ *
+ *   - DIRECT (ext_kid NULL, pubkey NULL/0): `kid` names an HMAC key. The
+ *     hash is IMPLIED BY THE KEY'S TYPE and the firmware IGNORES a request
+ *     `alg` in this flow (fw v1.2.2 crypto.c:526 overwrites it) — pass
+ *     alg=NULL; a given alg is still sent verbatim but has no effect.
+ *
+ *   - ECDH-DERIVED (exactly one of ext_kid / pubkey, same peer rules and
+ *     formats as ehem_ecdh()): `kid` is an ECDH-capable private key; the
+ *     RAW ECDH shared secret becomes the HMAC key (fw v1.2.2 applies NO
+ *     HKDF here, unlike the cipher endpoints — the API doc's "ECDH + HKDF"
+ *     is wrong; see REQ-OPS-005). `alg` (an EHEM_HASH_ALG_* literal) is
+ *     REQUIRED in this flow — the SDK pre-validates that (EHEM_ERR_ARG).
+ *
+ * The MAC length follows the effective hash (32/48/64). Scope: exact
+ * "keymgmt:use:<kid>" (shared cached token). Errors: 403 →
+ * EHEM_ERR_SCOPE_DENIED; 400/406 (wrong key type, ECDH failure, ...) →
+ * EHEM_ERR_DEVICE with detail. EHEM_ERR_ARG with no I/O on: NULL
+ * ctx/kid/msg/out, malformed kid/peer args (see ehem_ecdh), msg_len outside
+ * 1..EHEM_SIGN_MSG_MAX, an empty alg string, or a derived flow without alg.
+ *
+ * On success writes *out (caller frees with ehem_mac_free()).
+ */
+EHEM_API ehem_rc ehem_hmac(ehem_ctx *ctx, const char *kid, const char *alg,
+                           const uint8_t *msg, size_t msg_len,
+                           const char *ext_kid,
+                           const uint8_t *pubkey, size_t pubkey_len,
+                           ehem_mac **out);
+
+/* Release a MAC from ehem_hmac(). NULL is a no-op. */
+EHEM_API void ehem_mac_free(ehem_mac *m);
+
+/*
+ * Verify a MAC: POST /api/crypto/hmac/verify (REQ-OPS-005). Mirror of
+ * ehem_hmac() — same key flows, same alg rules — plus the MAC to check
+ * (`mac`/`mac_len`, 1..EHEM_HMAC_MAC_MAX bytes). Returns EHEM_OK exactly
+ * when the device reports the MAC valid (empty-body 200); a mismatch is the
+ * device's 406 → EHEM_ERR_DEVICE (indistinguishable from wrong-key-type and
+ * ECDH failure, like the other crypto endpoints).
+ */
+EHEM_API ehem_rc ehem_hmac_verify(ehem_ctx *ctx, const char *kid,
+                                  const char *alg,
+                                  const uint8_t *msg, size_t msg_len,
+                                  const uint8_t *mac, size_t mac_len,
+                                  const char *ext_kid,
+                                  const uint8_t *pubkey, size_t pubkey_len);
 
 #ifdef __cplusplus
 } /* extern "C" */

@@ -52,6 +52,15 @@ target_compile_options(test_ecdh_live PRIVATE ${EHEM_WARNING_FLAGS})
 add_test(NAME test_ecdh_live COMMAND test_ecdh_live)
 set_tests_properties(test_ecdh_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
 
+# REQ-OPS-005: live HMAC round-trips + the derived-key HKDF-conflict probe.
+# Internal-linking (crypto shim X25519/HMAC), like test_ecdh_live.
+add_executable(test_hmac_live test_hmac_live.c)
+target_link_libraries(test_hmac_live PRIVATE ehem_test_support cmocka::cmocka)
+target_include_directories(test_hmac_live PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
+target_compile_options(test_hmac_live PRIVATE ${EHEM_WARNING_FLAGS})
+add_test(NAME test_hmac_live COMMAND test_hmac_live)
+set_tests_properties(test_hmac_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
+
 # REQ-TEST-004: the M5 per-family generation matrix — create → list → get/
 # classify → sign(where ExDSA-capable)+local verify → delete, for every fw
 # create type. Internal-linking (crypto shim local verify), like test_sign_live.
