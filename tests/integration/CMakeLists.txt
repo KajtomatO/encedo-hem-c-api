@@ -61,6 +61,15 @@ target_compile_options(test_hmac_live PRIVATE ${EHEM_WARNING_FLAGS})
 add_test(NAME test_hmac_live COMMAND test_hmac_live)
 set_tests_properties(test_hmac_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
 
+# REQ-OPS-006: live cipher matrix + HKDF-info probe. Internal-linking (shim
+# X25519 + wolfCrypt HKDF/AES-GCM), like test_ecdh_live.
+add_executable(test_cipher_live test_cipher_live.c)
+target_link_libraries(test_cipher_live PRIVATE ehem_test_support cmocka::cmocka)
+target_include_directories(test_cipher_live PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
+target_compile_options(test_cipher_live PRIVATE ${EHEM_WARNING_FLAGS})
+add_test(NAME test_cipher_live COMMAND test_cipher_live)
+set_tests_properties(test_cipher_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
+
 # REQ-TEST-004: the M5 per-family generation matrix — create → list → get/
 # classify → sign(where ExDSA-capable)+local verify → delete, for every fw
 # create type. Internal-linking (crypto shim local verify), like test_sign_live.

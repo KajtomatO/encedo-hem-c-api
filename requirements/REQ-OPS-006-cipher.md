@@ -3,7 +3,7 @@ id: REQ-OPS-006
 title: Bindings for /api/crypto/cipher/encrypt and /api/crypto/cipher/decrypt — AES by KID
 status: approved
 priority: must
-revision: 1
+revision: 2
 source: ARCHITECTURE.md §6, §11 (M6: GCM IV/tag handling); encedo-hem-api-doc crypto/cipher-encrypt.md, crypto/cipher-decrypt.md, FIRMWARE_NOTES.md:49; encedo_firmware api_crypto.c api_post_crypto_cipher_encrypt/_decrypt + crypto.c CRYPTO_Encrypt/CRYPTO_Decrypt (fw v1.2.2); HEM-SDK-7 (AES), HEM-OP-1; approved 2026-07-17
 depends_on: ["REQ-AUTH-002", "REQ-AUTH-003", "REQ-OPS-004"]
 supersedes: null
@@ -67,18 +67,20 @@ why encrypt must expose the returned IV verbatim.
       plaintext zeroized on free; error mapping and `EHEM_ERR_ARG`
       pre-validation with zero transport calls (unit tests asserting body
       bytes).
-- [ ] Live GCM round-trip on an `EHEMTEST` AES-256 key: encrypt (with and
-      without aad) → 16-byte iv + 16-byte tag + msg-length ciphertext →
-      decrypt returns the original plaintext; decrypt with one flipped tag
-      bit (and separately wrong aad) → 406/`EHEM_ERR_DEVICE`.
-- [ ] Live CBC/ECB on the same key: CBC round-trips a non-block-aligned
-      msg (device pads/strips PKCS#7); ECB round-trips a 32-byte msg and
-      returns no iv; two encrypts of the same msg → different iv (feeds
-      REQ-OPS-002); AES128-GCM with the AES-256 key succeeds
-      (width-truncation quirk recorded), AES256-GCM with an `EHEMTEST`
-      AES-128 key → 406; cleanup per REQ-TEST-003.
-- [ ] OPEN (live probe, closes the HKDF-info conflict): derived mode via
-      `pubkey` with a local shim X25519 keypair — locally compute
-      HKDF-SHA256(ECDH secret, info=`"encedo-aes"`[+ctx]) vs
-      info=`"encedo"` and decrypt the device's GCM output with each
-      candidate key; record which matches here and in the binding doc.
+- [x] Live GCM round-trip (test_cipher_live, my.ence.do fw v1.2.2-DIAG,
+      2026-07-17) on an `EHEMTEST` AES-256 key: encrypt ±aad → 16-byte iv +
+      16-byte tag + msg-length ciphertext → decrypt returned the original;
+      flipped tag bit → 406; wrong aad → 406.
+- [x] Live CBC/ECB (same run): CBC round-tripped a 40-byte msg (device
+      padded to 48/stripped); ECB round-tripped 32 bytes with NO iv in the
+      response; two encrypts → different iv (REQ-OPS-002's source
+      confirmed); AES128-GCM on the AES-256 key succeeded (width
+      truncation) while AES256-GCM on an AES-128 key → 406; cleanup clean.
+- [x] ~~OPEN~~ **RESOLVED (live probe 2026-07-17, test_cipher_live):** the
+      derived-mode AES key is **HKDF-SHA256(raw ECDH secret, salt=none,
+      info = `"encedo-aes"` ‖ ctx-bytes)** — reproduced locally
+      byte-for-byte (ciphertext AND tag, with and without a ctx suffix);
+      the doc's `"encedo"` default does NOT match (device > doc; the
+      prefix is fixed, ctx only appends). Interop rule recorded in the
+      ehem_encrypt() header doc; the probe asserts both candidates so a
+      firmware change surfaces as a failure.

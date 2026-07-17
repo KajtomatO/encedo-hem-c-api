@@ -1,7 +1,8 @@
 /*
  * crypto.h — Encedo HEM C SDK, cryptographic-operation protocol bindings.
  *
- * implements: REQ-OPS-001, REQ-OPS-003, REQ-OPS-004, REQ-OPS-005
+ * implements: REQ-OPS-001, REQ-OPS-003, REQ-OPS-004, REQ-OPS-005,
+ *             REQ-OPS-006
  *
  * The `crypto` API group (ARCHITECTURE.md §6, §11 M4/M6): single-shot
  * operations against keys that never leave the device — the SDK sends the
@@ -249,6 +250,114 @@ EHEM_API ehem_rc ehem_hmac_verify(ehem_ctx *ctx, const char *kid,
                                   const uint8_t *mac, size_t mac_len,
                                   const char *ext_kid,
                                   const uint8_t *pubkey, size_t pubkey_len);
+
+/*
+ * AES cipher selectors — the device's literal vocabulary, EXACTLY 10 chars
+ * (any other length is the device's 400; the SDK pre-validates only the
+ * length and passes the string verbatim, REQ-OPS-006).
+ */
+#define EHEM_CIPHER_ALG_AES128_ECB "AES128-ECB"
+#define EHEM_CIPHER_ALG_AES192_ECB "AES192-ECB"
+#define EHEM_CIPHER_ALG_AES256_ECB "AES256-ECB"
+#define EHEM_CIPHER_ALG_AES128_CBC "AES128-CBC"
+#define EHEM_CIPHER_ALG_AES192_CBC "AES192-CBC"
+#define EHEM_CIPHER_ALG_AES256_CBC "AES256-CBC"
+#define EHEM_CIPHER_ALG_AES128_GCM "AES128-GCM"
+#define EHEM_CIPHER_ALG_AES192_GCM "AES192-GCM"
+#define EHEM_CIPHER_ALG_AES256_GCM "AES256-GCM"
+
+/* Device cipher limits (fw v1.2.2). The IV is 16 bytes even for GCM (the
+ * usual GCM default is 12 — the firmware uses a full AES block). */
+#define EHEM_CIPHER_MSG_MAX      2048  /* encrypt plaintext, decoded */
+#define EHEM_CIPHER_CT_MAX       2064  /* decrypt ciphertext (+1 CBC pad block) */
+#define EHEM_CIPHER_AAD_MAX      16    /* GCM additional authenticated data */
+#define EHEM_CIPHER_IV_LEN       16
+#define EHEM_CIPHER_TAG_LEN      16
+#define EHEM_CIPHER_HKDF_CTX_MAX 64    /* ECDH-derived flow HKDF info suffix */
+
+/*
+ * Encrypt output. `iv` is present (has_iv) for CBC and GCM — the device
+ * ALWAYS generates it, callers cannot supply one — and absent for ECB;
+ * `tag` (has_tag) is GCM-only. Caller-owned; ehem_ciphertext_free().
+ */
+typedef struct ehem_ciphertext {
+    uint8_t *ciphertext;
+    size_t   ciphertext_len;
+    int      has_iv;
+    uint8_t  iv[EHEM_CIPHER_IV_LEN];
+    int      has_tag;
+    uint8_t  tag[EHEM_CIPHER_TAG_LEN];
+} ehem_ciphertext;
+
+/* Decrypt output; the bytes are ZEROIZED on free. */
+typedef struct ehem_plaintext {
+    uint8_t *plaintext;
+    size_t   plaintext_len;
+} ehem_plaintext;
+
+/*
+ * Encrypt with a device key: POST /api/crypto/cipher/encrypt (REQ-OPS-006).
+ *
+ * Key flows (as ehem_hmac): DIRECT — `kid` names an AES key; the alg's
+ * width must be ≤ the stored key's width (fw v1.2.2 truncates: an AES-256
+ * key serves AES128-*; an AES-128 key with AES256-* is the device's 406).
+ * ECDH-DERIVED — exactly one of ext_kid/pubkey (formats as ehem_ecdh); the
+ * AES key is HKDF-SHA256(ECDH secret, info = "encedo-aes" ‖ hkdf_ctx) —
+ * the info PREFIX is fixed firmware-side (crypto.c:58; the API doc's
+ * `"encedo"` default is wrong, REQ-OPS-006); `hkdf_ctx` (≤ 64 bytes)
+ * appends to it, NULL appends nothing.
+ *
+ * Mode mechanics (device-side): ECB — msg must be a 16-multiple (else 400),
+ * no IV, no integrity; CBC — PKCS#7 added by the device, any msg length;
+ * GCM — no padding, optional `aad` (≤ 16 bytes), 16-byte tag returned.
+ * The IV is always device-generated (hardware RNG) and returned for
+ * CBC/GCM; requests never carry one.
+ *
+ * Scope: exact "keymgmt:use:<kid>". Errors: 403 → EHEM_ERR_SCOPE_DENIED;
+ * 400/406 → EHEM_ERR_DEVICE with detail. EHEM_ERR_ARG with no I/O on:
+ * NULL ctx/kid/alg/msg/out, malformed kid/peer args, strlen(alg) != 10,
+ * msg_len outside 1..EHEM_CIPHER_MSG_MAX, aad_len > EHEM_CIPHER_AAD_MAX
+ * (or NULL aad with nonzero length), hkdf_ctx_len > EHEM_CIPHER_HKDF_CTX_MAX
+ * (or NULL hkdf_ctx with nonzero length).
+ *
+ * On success writes *out (caller frees with ehem_ciphertext_free()).
+ */
+EHEM_API ehem_rc ehem_encrypt(ehem_ctx *ctx, const char *kid, const char *alg,
+                              const uint8_t *msg, size_t msg_len,
+                              const uint8_t *aad, size_t aad_len,
+                              const char *ext_kid,
+                              const uint8_t *pubkey, size_t pubkey_len,
+                              const uint8_t *hkdf_ctx, size_t hkdf_ctx_len,
+                              ehem_ciphertext **out);
+
+/* Release ciphertext from ehem_encrypt(). NULL is a no-op. */
+EHEM_API void ehem_ciphertext_free(ehem_ciphertext *c);
+
+/*
+ * Decrypt with a device key: POST /api/crypto/cipher/decrypt (REQ-OPS-006).
+ * Mirror of ehem_encrypt(): same flows, same alg vocabulary. `iv` (CBC/GCM)
+ * and `tag` (GCM) must be exactly EHEM_CIPHER_IV_LEN/EHEM_CIPHER_TAG_LEN
+ * bytes when given (iv_len/tag_len; NULL/0 omits — the SDK rejects any
+ * other length, EHEM_ERR_ARG). `msg` is the ciphertext, 1..
+ * EHEM_CIPHER_CT_MAX bytes. The device strips CBC PKCS#7 padding; a GCM
+ * tag/aad mismatch is the device's 406 → EHEM_ERR_DEVICE.
+ *
+ * On success writes *out (caller frees with ehem_plaintext_free(), which
+ * zeroizes). A zero-length plaintext (external all-padding CBC input) is
+ * legal: plaintext_len 0.
+ */
+EHEM_API ehem_rc ehem_decrypt(ehem_ctx *ctx, const char *kid, const char *alg,
+                              const uint8_t *msg, size_t msg_len,
+                              const uint8_t *iv, size_t iv_len,
+                              const uint8_t *tag, size_t tag_len,
+                              const uint8_t *aad, size_t aad_len,
+                              const char *ext_kid,
+                              const uint8_t *pubkey, size_t pubkey_len,
+                              const uint8_t *hkdf_ctx, size_t hkdf_ctx_len,
+                              ehem_plaintext **out);
+
+/* Release (and zeroize) plaintext from ehem_decrypt(). NULL is a no-op. */
+EHEM_API void ehem_plaintext_free(ehem_plaintext *p);
 
 #ifdef __cplusplus
 } /* extern "C" */

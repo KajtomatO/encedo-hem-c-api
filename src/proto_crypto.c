@@ -1,8 +1,9 @@
 /*
  * proto_crypto.c — bindings for the `crypto` API group: exdsa signing (M4),
- * exdsa verification, ECDH, HMAC (M6).
+ * exdsa verification, ECDH, HMAC, AES cipher (M6).
  *
- * implements: REQ-OPS-001, REQ-OPS-003, REQ-OPS-004, REQ-OPS-005
+ * implements: REQ-OPS-001, REQ-OPS-003, REQ-OPS-004, REQ-OPS-005,
+ *             REQ-OPS-006
  *
  * Follows the proto_keymgmt.c template: pre-validate → build the JSON body →
  * send through the shared request path (proto_common — per-KID bearer,
@@ -656,4 +657,355 @@ ehem_rc ehem_hmac_verify(ehem_ctx *ctx, const char *kid, const char *alg,
         return EHEM_OK;
     }
     return rc;
+}
+
+/*
+ * Shared pre-validation + body construction for the two cipher endpoints.
+ * `iv`/`tag` non-NULL → decrypt body fields. On failure the context error
+ * is recorded and NULL returned (rc in *rc_out).
+ */
+static char *cipher_build(ehem_ctx *ctx, const char *what,
+                          const char *kid, const char *alg,
+                          const uint8_t *msg, size_t msg_len, size_t msg_max,
+                          const uint8_t *iv, size_t iv_len,
+                          const uint8_t *tag, size_t tag_len,
+                          const uint8_t *aad, size_t aad_len,
+                          const char *ext_kid,
+                          const uint8_t *pubkey, size_t pubkey_len,
+                          const uint8_t *hkdf_ctx, size_t hkdf_ctx_len,
+                          ehem_rc *rc_out)
+{
+    char *field = NULL;
+    char *body;
+    ehem_json *body_obj;
+
+    *rc_out = EHEM_ERR_ARG;
+
+    if (!ehem_proto_is_kid_hex(kid)) {
+        ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                      "%s: kid must be exactly 32 hex chars", what);
+        return NULL;
+    }
+    if (strlen(alg) != 10) {
+        /* The device hard-rejects any other length; literals themselves are
+         * the device's to validate (REQ-OPS-006). */
+        ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                      "%s: alg must be one of the 10-char AES selectors",
+                      what);
+        return NULL;
+    }
+    if (msg_len < 1 || msg_len > msg_max) {
+        ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                      "%s: msg must be 1..%zu bytes", what, msg_max);
+        return NULL;
+    }
+    if ((iv != NULL || iv_len != 0) &&
+        (iv == NULL || iv_len != EHEM_CIPHER_IV_LEN)) {
+        ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                      "%s: iv must be exactly %d bytes when given", what,
+                      EHEM_CIPHER_IV_LEN);
+        return NULL;
+    }
+    if ((tag != NULL || tag_len != 0) &&
+        (tag == NULL || tag_len != EHEM_CIPHER_TAG_LEN)) {
+        ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                      "%s: tag must be exactly %d bytes when given", what,
+                      EHEM_CIPHER_TAG_LEN);
+        return NULL;
+    }
+    if ((aad == NULL && aad_len != 0) || aad_len > EHEM_CIPHER_AAD_MAX) {
+        ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                      "%s: aad must be at most %d bytes", what,
+                      EHEM_CIPHER_AAD_MAX);
+        return NULL;
+    }
+    if (check_peer_args(ctx, what, ext_kid, pubkey, pubkey_len, 1) != EHEM_OK) {
+        return NULL;
+    }
+    if ((hkdf_ctx == NULL && hkdf_ctx_len != 0) ||
+        hkdf_ctx_len > EHEM_CIPHER_HKDF_CTX_MAX) {
+        ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                      "%s: hkdf_ctx must be at most %d bytes", what,
+                      EHEM_CIPHER_HKDF_CTX_MAX);
+        return NULL;
+    }
+
+    *rc_out = EHEM_ERR_NOMEM;
+    body_obj = ehem_json_new_object();
+    if (body_obj == NULL) {
+        ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+        return NULL;
+    }
+    if (!ehem_json_add_string(body_obj, "kid", kid)) {
+        goto oom;
+    }
+    if ((field = b64_dup(msg, msg_len)) == NULL ||
+        !ehem_json_add_string(body_obj, "msg", field)) {
+        goto oom;
+    }
+    free(field);
+    field = NULL;
+    if (!ehem_json_add_string(body_obj, "alg", alg)) {
+        goto oom;
+    }
+    if (iv != NULL) {
+        if ((field = b64_dup(iv, iv_len)) == NULL ||
+            !ehem_json_add_string(body_obj, "iv", field)) {
+            goto oom;
+        }
+        free(field);
+        field = NULL;
+    }
+    if (tag != NULL) {
+        if ((field = b64_dup(tag, tag_len)) == NULL ||
+            !ehem_json_add_string(body_obj, "tag", field)) {
+            goto oom;
+        }
+        free(field);
+        field = NULL;
+    }
+    if (aad != NULL && aad_len > 0) {
+        if ((field = b64_dup(aad, aad_len)) == NULL ||
+            !ehem_json_add_string(body_obj, "aad", field)) {
+            goto oom;
+        }
+        free(field);
+        field = NULL;
+    }
+    if (!add_peer_fields(body_obj, ext_kid, pubkey, pubkey_len)) {
+        goto oom;
+    }
+    if (hkdf_ctx != NULL && hkdf_ctx_len > 0) {
+        if ((field = b64_dup(hkdf_ctx, hkdf_ctx_len)) == NULL ||
+            !ehem_json_add_string(body_obj, "ctx", field)) {
+            goto oom;
+        }
+        free(field);
+        field = NULL;
+    }
+
+    body = ehem_json_print(body_obj);
+    ehem_json_free(body_obj);
+    if (body == NULL) {
+        ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+        return NULL;
+    }
+    *rc_out = EHEM_OK;
+    return body;
+
+oom:
+    free(field);
+    ehem_json_free(body_obj);
+    ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    return NULL;
+}
+
+/* Decode an optional fixed-size base64 response field (iv/tag) in place;
+ * returns false on a malformed value (wrong size / bad base64). */
+static bool decode_fixed_field(ehem_json *root, const char *name,
+                               uint8_t *out, size_t want_len, int *has)
+{
+    const char *b64;
+    uint8_t buf[32];
+    size_t n;
+
+    *has = 0;
+    if (!ehem_json_get_string(root, name, &b64) || b64[0] == '\0') {
+        return true;   /* absent — the mode decides whether that is OK */
+    }
+    n = ehem_b64_std_decode(b64, strlen(b64), buf, sizeof buf);
+    if (n != want_len) {
+        return false;
+    }
+    memcpy(out, buf, want_len);
+    *has = 1;
+    return true;
+}
+
+ehem_rc ehem_encrypt(ehem_ctx *ctx, const char *kid, const char *alg,
+                     const uint8_t *msg, size_t msg_len,
+                     const uint8_t *aad, size_t aad_len,
+                     const char *ext_kid,
+                     const uint8_t *pubkey, size_t pubkey_len,
+                     const uint8_t *hkdf_ctx, size_t hkdf_ctx_len,
+                     ehem_ciphertext **out)
+{
+    char scope[64];
+    char *body;
+    ehem_json *root = NULL;
+    ehem_ciphertext *result;
+    const char *ct_b64;
+    size_t b64_len;
+    size_t n;
+    ehem_rc rc;
+
+    if (ctx == NULL || kid == NULL || alg == NULL || msg == NULL ||
+        out == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    *out = NULL;
+    ehem_ctx_clear_error(ctx);
+
+    body = cipher_build(ctx, "crypto/cipher/encrypt", kid, alg,
+                        msg, msg_len, EHEM_CIPHER_MSG_MAX,
+                        NULL, 0, NULL, 0,               /* no iv/tag fields */
+                        aad, aad_len, ext_kid, pubkey, pubkey_len,
+                        hkdf_ctx, hkdf_ctx_len, &rc);
+    if (body == NULL) {
+        return rc;
+    }
+
+    snprintf(scope, sizeof scope, "keymgmt:use:%s", kid);
+
+    rc = ehem_proto_request_json(ctx, EHEM_HTTP_POST,
+                                 "/api/crypto/cipher/encrypt",
+                                 body, scope, EHEM_TLS_REQ_DEFAULT, &root);
+    ehem_json_string_free(body);
+    if (rc != EHEM_OK) {
+        return rc;
+    }
+
+    if (!ehem_json_get_string(root, "ciphertext", &ct_b64) ||
+        ct_b64[0] == '\0') {
+        ehem_json_free(root);
+        return ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 200, NULL,
+                             "crypto/cipher/encrypt: response missing "
+                             "'ciphertext'");
+    }
+
+    result = calloc(1, sizeof *result);
+    b64_len = strlen(ct_b64);
+    if (result != NULL) {
+        result->ciphertext = malloc(b64_len);   /* decoded ≤ encoded */
+    }
+    if (result == NULL || result->ciphertext == NULL) {
+        ehem_ciphertext_free(result);
+        ehem_json_free(root);
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    n = ehem_b64_std_decode(ct_b64, b64_len, result->ciphertext, b64_len);
+    if (n == (size_t)-1 || n == 0) {
+        goto bad_field;
+    }
+    result->ciphertext_len = n;
+
+    if (!decode_fixed_field(root, "iv", result->iv, EHEM_CIPHER_IV_LEN,
+                            &result->has_iv) ||
+        !decode_fixed_field(root, "tag", result->tag, EHEM_CIPHER_TAG_LEN,
+                            &result->has_tag)) {
+        goto bad_field;
+    }
+    ehem_json_free(root);
+
+    *out = result;
+    return EHEM_OK;
+
+bad_field:
+    ehem_ciphertext_free(result);
+    ehem_json_free(root);
+    return ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 200, NULL,
+                         "crypto/cipher/encrypt: malformed response field");
+}
+
+void ehem_ciphertext_free(ehem_ciphertext *c)
+{
+    if (c == NULL) {
+        return;
+    }
+    free(c->ciphertext);
+    free(c);
+}
+
+ehem_rc ehem_decrypt(ehem_ctx *ctx, const char *kid, const char *alg,
+                     const uint8_t *msg, size_t msg_len,
+                     const uint8_t *iv, size_t iv_len,
+                     const uint8_t *tag, size_t tag_len,
+                     const uint8_t *aad, size_t aad_len,
+                     const char *ext_kid,
+                     const uint8_t *pubkey, size_t pubkey_len,
+                     const uint8_t *hkdf_ctx, size_t hkdf_ctx_len,
+                     ehem_plaintext **out)
+{
+    char scope[64];
+    char *body;
+    ehem_json *root = NULL;
+    ehem_plaintext *result;
+    const char *pt_b64;
+    size_t b64_len;
+    size_t n;
+    ehem_rc rc;
+
+    if (ctx == NULL || kid == NULL || alg == NULL || msg == NULL ||
+        out == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    *out = NULL;
+    ehem_ctx_clear_error(ctx);
+
+    body = cipher_build(ctx, "crypto/cipher/decrypt", kid, alg,
+                        msg, msg_len, EHEM_CIPHER_CT_MAX,
+                        iv, iv_len, tag, tag_len,
+                        aad, aad_len, ext_kid, pubkey, pubkey_len,
+                        hkdf_ctx, hkdf_ctx_len, &rc);
+    if (body == NULL) {
+        return rc;
+    }
+
+    snprintf(scope, sizeof scope, "keymgmt:use:%s", kid);
+
+    rc = ehem_proto_request_json(ctx, EHEM_HTTP_POST,
+                                 "/api/crypto/cipher/decrypt",
+                                 body, scope, EHEM_TLS_REQ_DEFAULT, &root);
+    ehem_json_string_free(body);
+    if (rc != EHEM_OK) {
+        return rc;
+    }
+
+    if (!ehem_json_get_string(root, "plaintext", &pt_b64)) {
+        ehem_json_free(root);
+        return ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 200, NULL,
+                             "crypto/cipher/decrypt: response missing "
+                             "'plaintext'");
+    }
+
+    /* A zero-length plaintext is legal (an external all-padding CBC block),
+     * so an empty string decodes to len 0 rather than erroring. */
+    result = calloc(1, sizeof *result);
+    b64_len = strlen(pt_b64);
+    if (result != NULL) {
+        result->plaintext = malloc(b64_len > 0 ? b64_len : 1);
+    }
+    if (result == NULL || result->plaintext == NULL) {
+        ehem_plaintext_free(result);
+        ehem_json_free(root);
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    if (b64_len > 0) {
+        n = ehem_b64_std_decode(pt_b64, b64_len, result->plaintext, b64_len);
+        if (n == (size_t)-1) {
+            ehem_zeroize(result->plaintext, b64_len);
+            ehem_plaintext_free(result);
+            ehem_json_free(root);
+            return ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 200, NULL,
+                                 "crypto/cipher/decrypt: 'plaintext' is not "
+                                 "valid base64");
+        }
+        result->plaintext_len = n;
+    }
+    ehem_json_free(root);
+
+    *out = result;
+    return EHEM_OK;
+}
+
+void ehem_plaintext_free(ehem_plaintext *p)
+{
+    if (p == NULL) {
+        return;
+    }
+    if (p->plaintext != NULL) {
+        ehem_zeroize(p->plaintext, p->plaintext_len);
+        free(p->plaintext);
+    }
+    free(p);
 }

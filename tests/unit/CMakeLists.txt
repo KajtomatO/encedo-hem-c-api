@@ -67,6 +67,9 @@ ehem_add_unit_test(test_ecdh SOURCES test_ecdh.c)
 # REQ-OPS-005: hmac hash/verify bindings — flows, bodies, bounds, errors.
 ehem_add_unit_test(test_hmac SOURCES test_hmac.c)
 
+# REQ-OPS-006: cipher encrypt/decrypt bindings — bodies, shapes, bounds.
+ehem_add_unit_test(test_cipher SOURCES test_cipher.c)
+
 # REQ-AUTH-001: crypto shim (PBKDF2 / HMAC-SHA256 / X25519) against RFC vectors.
 ehem_add_unit_test(test_crypto SOURCES test_crypto.c)
 
