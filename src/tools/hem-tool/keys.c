@@ -658,3 +658,121 @@ cleanup:
     ehem_key_page_free(page);
     return exit_code;
 }
+
+/* -------------------------------------------------------------------------- */
+/* keys update (REQ-TOOL-011)                                                 */
+/* -------------------------------------------------------------------------- */
+
+/* Per-key protected prompt for UPDATE: only the literal "YES" proceeds. */
+static bool confirm_protected_update(FILE *in, FILE *out,
+                                     const ehem_key_entry *e,
+                                     const char *new_label)
+{
+    char line[64];
+    fprintf(out,
+            "\nABOUT TO RENAME PROTECTED DEVICE KEY:\n"
+            "  kid:       %s\n  label:     '%s'\n  new label: '%s'\n"
+            "Renaming can remove the protection this key's label provides.\n"
+            "type 'YES' (uppercase) to confirm, anything else skips: ",
+            e->kid, (e->label != NULL) ? e->label : "", new_label);
+    fflush(out);
+    if (!read_line(in, line, sizeof line)) {
+        return false;                    /* EOF → skip */
+    }
+    return strcmp(line, "YES") == 0;
+}
+
+int hem_keys_update_run(ehem_ctx *ctx, const hem_keys_update_opts *o)
+{
+    FILE *out = (o->out != NULL) ? o->out : stdout;
+    FILE *err = (o->err != NULL) ? o->err : stderr;
+    FILE *in  = (o->in  != NULL) ? o->in  : stdin;
+    ehem_key_page *page = NULL;
+    const ehem_key_entry *e = NULL;
+    const uint8_t *descr = NULL;
+    size_t descr_len = 0;
+    size_t i;
+    ehem_rc rc;
+
+    if (o->passphrase == NULL || o->passphrase[0] == '\0') {
+        fprintf(err, "error: no passphrase — pass --passphrase or set "
+                     "EHEM_PASSPHRASE\n");
+        return HEM_KEYS_USAGE;
+    }
+    if (o->kid == NULL || !hem_tool_kid_ok(o->kid)) {
+        fprintf(err, "error: keys update needs a 32-hex-char KID\n");
+        return HEM_KEYS_USAGE;
+    }
+    if (o->label == NULL || o->label[0] == '\0') {
+        fprintf(err, "error: keys update needs --label (the firmware rejects "
+                     "a label-less update)\n");
+        return HEM_KEYS_USAGE;
+    }
+
+    rc = ehem_login(ctx, o->passphrase);
+    if (rc != EHEM_OK) {
+        report(err, ctx, rc, "login");
+        return HEM_KEYS_RUNTIME;
+    }
+
+    /* The CURRENT label decides the protected classification, and carries the
+     * stored descr the tool preserves when --descr is omitted. */
+    rc = ehem_key_list_all(ctx, &page);
+    if (rc != EHEM_OK) {
+        report(err, ctx, rc, "keys list");
+        return HEM_KEYS_RUNTIME;
+    }
+    for (i = 0; i < page->listed; i++) {
+        if (strcmp(page->entries[i].kid, o->kid) == 0) {
+            e = &page->entries[i];
+            break;
+        }
+    }
+    if (e == NULL) {
+        fprintf(err, "error: no key with kid %s on the device\n", o->kid);
+        ehem_key_page_free(page);
+        return HEM_KEYS_RUNTIME;
+    }
+
+    if (hem_key_is_protected(e->label)) {
+        /* --yes deliberately ignored: same ritual as keys rm. */
+        if (!confirm_protected_update(in, out, e, o->label)) {
+            fprintf(out, "skipped protected key %s ('%s')\n", e->kid,
+                    (e->label != NULL) ? e->label : "");
+            ehem_key_page_free(page);
+            return HEM_KEYS_OK;
+        }
+    } else if (hem_key_is_protected(o->label)) {
+        fprintf(err, "warning: the new label classifies this key as "
+                     "PROTECTED for later bulk operations (REQ-TOOL-005)\n");
+    }
+
+    if (o->descr != NULL) {
+        /* --descr "" explicitly clears (sends no descr → firmware wipes). */
+        if (o->descr[0] != '\0') {
+            descr = (const uint8_t *)o->descr;
+            descr_len = strlen(o->descr);
+        }
+    } else if (e->descr != NULL && e->descr_len > 0) {
+        /* Preserve: the firmware rewrites the whole record, so an omitted
+         * descr would CLEAR the stored one (REQ-KEY-007) — re-send it. */
+        descr = e->descr;
+        descr_len = e->descr_len;
+        fprintf(err, "note: preserving the stored descr (%lu bytes); pass "
+                     "--descr \"\" to clear it\n", (unsigned long)descr_len);
+    }
+
+    rc = ehem_key_update(ctx, o->kid, o->label, descr, descr_len);
+    ehem_key_page_free(page);
+    e = NULL;
+    if (rc == EHEM_ERR_ARG) {
+        report(err, ctx, rc, "keys update");
+        return HEM_KEYS_USAGE;
+    }
+    if (rc != EHEM_OK) {
+        report(err, ctx, rc, "keys update");
+        return HEM_KEYS_RUNTIME;
+    }
+    fprintf(out, "updated %s: label '%s'\n", o->kid, o->label);
+    return HEM_KEYS_OK;
+}

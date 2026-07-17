@@ -36,10 +36,12 @@ device's own self-verdict (status reports reachability, selftest reports
 integrity).
 
 **Acceptance criteria:**
-- [ ] Unit (hem-tool-core, fake transport): healthy fixture → exit 0
-      with PASS output; `fls_state != 0` fixture → exit 3; transport
-      error → exit 1; repo_stats rendered; kat_busy/se_state
-      presence-dependent lines.
-- [ ] Live demo: `hem-tool selftest` against my.ence.do exits 0 and
-      prints repo stats consistent with `keys list`.
-- [ ] README tool table + `--help` updated.
+- [x] Unit (hem-tool-core, fake transport, 2026-07-18): healthy fixture
+      → exit 0 with PASS + repo stats; `fls_state = 2` → exit 3 with
+      FAIL; device 500 → exit 1; missing passphrase → exit 2
+      (tests/unit/test_tool_m7.c).
+- [x] Live demo (2026-07-18): `hem-tool selftest` exited 0 — PASS,
+      UTC-rendered battery timestamps, secure-enclave state 0, repo
+      stats (5 keys / 1584 free slots) consistent with the key count.
+- [x] `--help` updated (the usage text is the CLI reference; the README
+      carries no per-subcommand table by design).

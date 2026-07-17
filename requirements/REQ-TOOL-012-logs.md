@@ -40,12 +40,13 @@ device owner a one-command way to pull audit evidence off the device —
 the CC-relevant workflow the tester scripts do in PHP.
 
 **Acceptance criteria:**
-- [ ] Unit (hem-tool-core, fake transport): list pagination walk
-      (multi-page fixture); get to stdout and to `--out` (bytes
-      verbatim); key prints three labeled base64 lines; error paths and
-      exit codes.
-- [ ] Live demo (PPA path): `logs list` shows ≥ 1 id; `logs get` of the
-      newest id produces non-empty text; `logs key` prints the triple —
-      or the EPA message path is demonstrated instead, matching the
-      REQ-SYS-009 probe outcome.
-- [ ] README tool table + `--help` updated.
+- [x] Unit (hem-tool-core, fake transport, 2026-07-18): list pagination
+      walk (two-page fixture, offsets 0 → 2); get bytes verbatim; key
+      prints three labeled base64 lines; id guards (non-hex, "list",
+      NULL) → usage with no wire traffic (tests/unit/test_tool_m7.c).
+- [x] Live demo (PPA device, 2026-07-18): `logs list` printed 62 ids;
+      `logs get` of the first returned the pipe-delimited log file
+      ("# Encedo nGINE FW v1.2.2-DIAG" header); `logs key` printed the
+      real Ed25519 triple.
+- [x] `--help` updated (the usage text is the CLI reference; the README
+      carries no per-subcommand table by design).

@@ -48,6 +48,10 @@ if(TARGET hem-tool-core)
   # REQ-TOOL-010: `random` — transient-key lifecycle, formats, exit codes.
   ehem_add_unit_test(test_random_tool SOURCES test_random_tool.c)
   target_link_libraries(test_random_tool PRIVATE hem-tool-core)
+
+  # REQ-TOOL-011/012/013: `keys update` / `logs` / `selftest` (M7).
+  ehem_add_unit_test(test_tool_m7 SOURCES test_tool_m7.c)
+  target_link_libraries(test_tool_m7 PRIVATE hem-tool-core)
 endif()
 
 # REQ-SYS-004, REQ-SYS-005: config GET / cert install / reboot bindings.

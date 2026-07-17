@@ -141,4 +141,36 @@ int hem_keys_gen_run(ehem_ctx *ctx, const hem_keys_gen_opts *o);
  */
 int hem_keys_rm_run(ehem_ctx *ctx, const hem_keys_rm_opts *o);
 
+/* Options for `keys update` (REQ-TOOL-011). `kid` and `label` are required
+ * (the firmware rejects a label-less update — REQ-KEY-007). */
+typedef struct {
+    const char *passphrase;   /* login passphrase; NULL → HEM_KEYS_USAGE */
+    const char *kid;          /* 32 hex chars; NULL/malformed → USAGE, no I/O */
+    const char *label;        /* new label; NULL → USAGE */
+    const char *descr;        /* new descr (these string bytes); NULL = keep the
+                                 stored descr (the tool re-sends it — the
+                                 firmware CLEARS an omitted descr, REQ-KEY-007) */
+    int         assume_yes;   /* --yes; deliberately IGNORED for protected keys */
+    FILE       *out;          /* progress (NULL → stdout) */
+    FILE       *err;          /* diagnostics + warnings (NULL → stderr) */
+    FILE       *in;           /* confirmation input (NULL → stdin) */
+} hem_keys_update_opts;
+
+/*
+ * `hem-tool keys update <kid> --label L [--descr D]` (REQ-TOOL-011): log in,
+ * locate the key (its CURRENT label decides the protected classification),
+ * and rewrite its metadata via ehem_key_update.
+ *
+ * Protected-key guard (REQ-TOOL-005 semantics, as keys rm): when the CURRENT
+ * label classifies the key as protected, the update — which could strip the
+ * very label that protects it — requires the interactive literal "YES" on
+ * o->in; --yes is deliberately ignored. Renaming an unprotected key TO a
+ * protected-looking label proceeds but warns on o->err. When --descr is
+ * omitted the tool RE-SENDS the stored descr so it survives the firmware's
+ * whole-record rewrite (noted on o->err when it happens); pass --descr ""
+ * to clear it explicitly. Unknown kid → HEM_KEYS_RUNTIME; a refusal at the
+ * prompt exits HEM_KEYS_OK with "skipped" (nothing failed).
+ */
+int hem_keys_update_run(ehem_ctx *ctx, const hem_keys_update_opts *o);
+
 #endif /* HEM_KEYS_H */

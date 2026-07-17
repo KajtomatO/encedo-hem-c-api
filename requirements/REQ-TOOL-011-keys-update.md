@@ -3,7 +3,7 @@ id: REQ-TOOL-011
 title: hem-tool keys update — rename LABEL / set DESCR with protected-key guard
 status: approved
 priority: should
-revision: 1
+revision: 2
 source: user decision 2026-07-17 (M7 decomposition tool set); REQ-KEY-007; REQ-TOOL-005 (protected-key policy); approved 2026-07-17
 depends_on: ["REQ-KEY-007", "REQ-TOOL-005"]
 supersedes: null
@@ -21,6 +21,11 @@ touch protected keys without the per-key confirmation ritual.
 - `--label` required (mirrors the firmware/REQ-KEY-007 rule); `--descr`
   optional UTF-8 text (the tool encodes; binary DESCR stays an SDK-level
   capability).
+- **Preserve-descr behavior (rev2, from the REQ-KEY-007 whole-record
+  finding):** the firmware CLEARS an omitted descr, so when `--descr` is
+  not given the tool re-sends the stored descr (read from the same list
+  walk that classifies the key) and notes it on stderr; `--descr ""`
+  clears explicitly. Least-surprise for a metadata-rename tool.
 - **Protected-key guard (REQ-TOOL-005 classifier):** if the CURRENT
   label classifies the key as protected (`TLS PrivateKey`,
   `TLS Certificate`, `(Android)`/`(iPhone)` substrings), the update — 
@@ -41,10 +46,15 @@ metadata-mutating tool path; without the guard, a one-line rename could
 silently disarm the protected-set convention that keys rm relies on.
 
 **Acceptance criteria:**
-- [ ] Unit (hem-tool-core, fake transport): update flows for label-only
-      and label+descr; protected current-label → prompt required, `YES`
-      proceeds, anything else skips, `--yes` ignored; warn-on-rename-to-
-      protected emitted; exit codes 0/1/2 covered.
-- [ ] Live demo: EHEMTEST key created → `keys update` renames it (list
-      shows new label) → descr set → `keys rm` cleans up.
-- [ ] `--help` documents the guard; README tool table updated.
+- [x] Unit (hem-tool-core, fake transport, 2026-07-18): label-only
+      (descr preserved + note), `--descr ""` (cleared), protected
+      current-label → prompt required, `YES` proceeds, refusal skips
+      with exit 0, `--yes` ignored; warn-on-rename-to-protected
+      emitted; exit codes 0/1/2 covered (tests/unit/test_tool_m7.c).
+- [x] Live demo (2026-07-18): EHEMTEST key created → renamed twice
+      (once with --descr, once omitted → "preserving the stored descr
+      (7 bytes)" note fired) → list showed the new label → `keys rm`
+      cleaned up.
+- [x] `--help` documents the guard and the preserve/clear semantics
+      (the tool's usage text is the CLI reference; the README carries
+      no per-subcommand table by design).

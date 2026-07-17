@@ -8,7 +8,10 @@
  *             REQ-TOOL-006 (the `keys rm` subcommand),
  *             REQ-TOOL-007 (the `keys pub` subcommand),
  *             REQ-TOOL-008 (the `sign` subcommand),
- *             REQ-TOOL-009 (the `keys gen` subcommand)
+ *             REQ-TOOL-009 (the `keys gen` subcommand),
+ *             REQ-TOOL-011 (the `keys update` subcommand),
+ *             REQ-TOOL-012 (the `logs` subcommands),
+ *             REQ-TOOL-013 (the `selftest` subcommand)
  *
  * Consumes ONLY the public headers in include/ehem/ — it doubles as living
  * documentation of the API and as the manual driver for the M1/M2 gates.
@@ -30,7 +33,9 @@
 
 #include "cert_install.h"
 #include "keys.h"
+#include "logs.h"
 #include "random.h"
+#include "selftest.h"
 #include "sign.h"
 
 #define MAX_LABEL_PREFIXES 32
@@ -65,6 +70,9 @@ typedef struct {
 
     /* random inputs (REQ-TOOL-010). */
     const char *kid;          /* --kid (existing AES key; NULL → transient) */
+
+    /* logs get output (REQ-TOOL-012). */
+    const char *out_path;     /* --out (write the log file here; NULL → stdout) */
 } cli_opts;
 
 static void usage(FILE *f)
@@ -92,10 +100,12 @@ static void usage(FILE *f)
         "                   SHA256WithECDSA); omitted → derived from the key type\n"
         "  --in FILE        sign: read the message from FILE (default: stdin)\n"
         "  --sigctx STR     sign: RFC 8032 context for the Ed*ctx/Ed*ph selectors\n"
-        "  --label LABEL    keys gen: label for the new key (required)\n"
-        "  --descr STR      keys gen: optional opaque description blob\n"
+        "  --label LABEL    keys gen/update: the key label (required)\n"
+        "  --descr STR      keys gen/update: opaque description blob (update:\n"
+        "                   omitted keeps the stored one, \"\" clears it)\n"
         "  --mode MODE      keys gen: ECDH | ExDSA | ECDH,ExDSA (NIST-P/K only;\n"
         "                   default ECDH,ExDSA so the key can sign)\n"
+        "  --out FILE       logs get: write the log file here (default: stdout)\n"
         "  -h, --help       show this help\n"
         "\n"
         "commands:\n"
@@ -113,6 +123,14 @@ static void usage(FILE *f)
         "                   AES256); needs --label; prints the new key id\n"
         "  keys rm          delete keys: --all (non-protected) or --label-prefix P;\n"
         "                   protected keys need an exact label + per-key 'YES'\n"
+        "  keys update KID  rewrite a key's label (--label, required) and descr\n"
+        "                   (--descr); renaming a PROTECTED key needs a per-key\n"
+        "                   'YES' (--yes is ignored for them)\n"
+        "  logs list        list audit-log file ids (one per line)\n"
+        "  logs get ID      download one audit-log file (--out FILE or stdout)\n"
+        "  logs key         print the Ed25519 log-signing key + signed nonce\n"
+        "  selftest         run the device self-test battery; exit 0 = healthy,\n"
+        "                   3 = device reports a fail state\n"
         "  sign KID         sign a message (stdin or --in FILE, max 2048 bytes)\n"
         "                   with the device key KID; prints the signature as\n"
         "                   base64 (--hex / --raw select the encoding)\n"
@@ -487,16 +505,45 @@ static int cmd_keys_gen(const cli_opts *o, const char *type)
     return ret;
 }
 
-/* Dispatch the `keys` command group (list / pub / gen / rm). */
+static int cmd_keys_update(const cli_opts *o, const char *kid)
+{
+    ehem_ctx *ctx = NULL;
+    hem_keys_update_opts uo;
+    int ret;
+
+    ret = make_ctx(o, &ctx);
+    if (ret != 0) {
+        return ret;
+    }
+
+    memset(&uo, 0, sizeof uo);
+    uo.passphrase = o->passphrase;
+    uo.kid        = kid;
+    uo.label      = o->label;
+    uo.descr      = o->descr;
+    uo.assume_yes = o->assume_yes;
+    uo.out        = stdout;
+    uo.err        = stderr;
+    uo.in         = stdin;
+
+    ret = hem_keys_update_run(ctx, &uo);
+    print_cert_notice(ctx);
+    ehem_ctx_destroy(ctx);
+    return ret;
+}
+
+/* Dispatch the `keys` command group (list / pub / gen / rm / update). */
 static int cmd_keys(const cli_opts *o, const char *subcmd, const char *arg)
 {
     if (subcmd == NULL) {
-        fprintf(stderr, "error: 'keys' needs a subcommand (list, pub, gen, rm)\n");
+        fprintf(stderr,
+                "error: 'keys' needs a subcommand (list, pub, gen, rm, update)\n");
         usage(stderr);
         return 2;
     }
-    /* Only `pub` (KID) and `gen` (TYPE) take a third positional. */
-    if (arg != NULL && strcmp(subcmd, "pub") != 0 && strcmp(subcmd, "gen") != 0) {
+    /* Only `pub` (KID), `gen` (TYPE) and `update` (KID) take a positional. */
+    if (arg != NULL && strcmp(subcmd, "pub") != 0 &&
+        strcmp(subcmd, "gen") != 0 && strcmp(subcmd, "update") != 0) {
         fprintf(stderr, "error: unexpected argument '%s'\n", arg);
         usage(stderr);
         return 2;
@@ -513,9 +560,77 @@ static int cmd_keys(const cli_opts *o, const char *subcmd, const char *arg)
     if (strcmp(subcmd, "rm") == 0) {
         return cmd_keys_rm(o);
     }
+    if (strcmp(subcmd, "update") == 0) {
+        return cmd_keys_update(o, arg);
+    }
     fprintf(stderr, "error: unknown keys subcommand '%s'\n", subcmd);
     usage(stderr);
     return 2;
+}
+
+/* Dispatch the `logs` command group (list / get / key) — REQ-TOOL-012. */
+static int cmd_logs(const cli_opts *o, const char *subcmd, const char *arg)
+{
+    ehem_ctx *ctx = NULL;
+    hem_logs_opts lo;
+    int ret;
+
+    if (subcmd == NULL) {
+        fprintf(stderr, "error: 'logs' needs a subcommand (list, get, key)\n");
+        usage(stderr);
+        return 2;
+    }
+    if (arg != NULL && strcmp(subcmd, "get") != 0) {
+        fprintf(stderr, "error: unexpected argument '%s'\n", arg);
+        usage(stderr);
+        return 2;
+    }
+
+    ret = make_ctx(o, &ctx);
+    if (ret != 0) {
+        return ret;
+    }
+    memset(&lo, 0, sizeof lo);
+    lo.passphrase = o->passphrase;
+    lo.out        = stdout;
+    lo.err        = stderr;
+
+    if (strcmp(subcmd, "list") == 0) {
+        ret = hem_logs_list_run(ctx, &lo);
+    } else if (strcmp(subcmd, "get") == 0) {
+        ret = hem_logs_get_run(ctx, &lo, arg, o->out_path);
+    } else if (strcmp(subcmd, "key") == 0) {
+        ret = hem_logs_key_run(ctx, &lo);
+    } else {
+        fprintf(stderr, "error: unknown logs subcommand '%s'\n", subcmd);
+        usage(stderr);
+        ret = 2;
+    }
+    print_cert_notice(ctx);
+    ehem_ctx_destroy(ctx);
+    return ret;
+}
+
+/* `selftest` — REQ-TOOL-013. */
+static int cmd_selftest(const cli_opts *o)
+{
+    ehem_ctx *ctx = NULL;
+    hem_selftest_opts so;
+    int ret;
+
+    ret = make_ctx(o, &ctx);
+    if (ret != 0) {
+        return ret;
+    }
+    memset(&so, 0, sizeof so);
+    so.passphrase = o->passphrase;
+    so.out        = stdout;
+    so.err        = stderr;
+
+    ret = hem_selftest_run(ctx, &so);
+    print_cert_notice(ctx);
+    ehem_ctx_destroy(ctx);
+    return ret;
 }
 
 int main(int argc, char **argv)
@@ -575,6 +690,10 @@ int main(int argc, char **argv)
             o.in_path = argv[++i];
         } else if (strncmp(a, "--in=", 5) == 0) {
             o.in_path = a + 5;
+        } else if (strcmp(a, "--out") == 0 && i + 1 < argc) {
+            o.out_path = argv[++i];
+        } else if (strncmp(a, "--out=", 6) == 0) {
+            o.out_path = a + 6;
         } else if (strcmp(a, "--sigctx") == 0 && i + 1 < argc) {
             o.sigctx = argv[++i];
         } else if (strncmp(a, "--sigctx=", 9) == 0) {
@@ -638,6 +757,16 @@ int main(int argc, char **argv)
         ret = cmd_cert_install(&o);
     } else if (strcmp(cmd, "keys") == 0) {
         ret = cmd_keys(&o, subcmd, arg);
+    } else if (strcmp(cmd, "logs") == 0) {
+        ret = cmd_logs(&o, subcmd, arg);
+    } else if (strcmp(cmd, "selftest") == 0) {
+        if (subcmd != NULL) {
+            fprintf(stderr, "error: unexpected argument '%s'\n", subcmd);
+            usage(stderr);
+            ret = 2;
+        } else {
+            ret = cmd_selftest(&o);
+        }
     } else if (strcmp(cmd, "sign") == 0) {
         if (arg != NULL) {
             fprintf(stderr, "error: unexpected argument '%s'\n", arg);
