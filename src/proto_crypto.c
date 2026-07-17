@@ -695,8 +695,10 @@ static char *cipher_build(ehem_ctx *ctx, const char *what,
         return NULL;
     }
     if (msg_len < 1 || msg_len > msg_max) {
+        /* %d, not %zu: MinGW's ms_printf attribute check rejects 'z'
+         * (KNOWN gotcha; both caps fit an int comfortably). */
         ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
-                      "%s: msg must be 1..%zu bytes", what, msg_max);
+                      "%s: msg must be 1..%d bytes", what, (int)msg_max);
         return NULL;
     }
     if ((iv != NULL || iv_len != 0) &&
