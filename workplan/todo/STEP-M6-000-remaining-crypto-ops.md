@@ -11,7 +11,7 @@ evidence:
   tests: []
   notes: null
 reopened: []
-cancelled: null
+cancelled: "M6 decomposed 2026-07-17 — replaced by STEP-M6-010..070 (rolling wave, §5.3 step 5)"
 ---
 
 **Goal:** Milestone M6 per ARCHITECTURE.md §11: `verify`, ECDH derive, AES

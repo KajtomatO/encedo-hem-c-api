@@ -336,8 +336,10 @@ sequenceDiagram
 - Subcommands (grow with milestones): `hem-tool status` (MVP connection
   test), `hem-tool checkin`, `hem-tool cert-install` (M2), `hem-tool
   keys list` / `hem-tool keys rm` (M3), `hem-tool keys pub` /
-  `hem-tool sign` (M4, user decision 2026-07-16), and `hem-tool keys
-  gen` (M5, user decision 2026-07-16).
+  `hem-tool sign` (M4, user decision 2026-07-16), `hem-tool keys
+  gen` (M5, user decision 2026-07-16), and `hem-tool random` (M6, user
+  decision 2026-07-17 — REQ-TOOL-010; transient `EHEMTEST` AES key when
+  `--kid` is not given).
 - **`cert-install`** (REQ-TOOL-003): harvests the cloud certificate
   (REQ-SYS-006), skips if the device already serves it (leg-1 `csn` vs the
   harvested leaf serial, or the broker suppressing the chain), else
@@ -452,9 +454,18 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   delete cycle per family on the real device.
 - **M6 — remaining crypto ops:** `verify`, ECDH derive, AES
   encrypt/decrypt (GCM IV/tag handling), HMAC ops, ML-KEM
-  encapsulate/decapsulate, remaining ML-DSA parameter sets; hardware
+  encapsulate/decapsulate, ML-DSA sign/verify; hardware
   random emulation (`ehem_random` via encrypt-IV harvest, REQ-OPS-002 —
-  moved from M5, user decision 2026-07-16).
+  moved from M5, user decision 2026-07-16). *Decomposition notes
+  (user-approved 2026-07-17):* ML-DSA is all-new here — M4's ExDSA sign
+  never touched it (own `pqc` endpoints, REQ-OPS-008; the earlier
+  "remaining parameter sets" wording was off); `hem-tool random` added
+  (REQ-TOOL-010); `cipher/wrap`/`unwrap` and `stream/*` endpoints stay
+  outside M6 (M7/M9 sweep). **Gate:** every new op green live against
+  the real device; the five doc/firmware conflict probes (ECDH raw-mode
+  truncation, HMAC derived-key raw-vs-HKDF, cipher HKDF info string,
+  decaps `alg` field, mldsa-verify failure status) recorded in their
+  REQs.
 - **M7 — system, logger, storage, key import/update:** remaining endpoint
   groups including firmware upgrade and reboot (disruptive-gated tests);
   `keymgmt` import and update (LABEL/DESCR).

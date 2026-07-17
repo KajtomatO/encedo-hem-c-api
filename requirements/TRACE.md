@@ -2,9 +2,9 @@
 
 # Traceability matrix
 
-Generated: 2026-07-17 (M5 gate — the per-family generation matrix (REQ-TEST-004), `hem-tool keys gen` (REQ-TOOL-009), and the request-pacing option (REQ-NET-006) all verified; STEP-M5-010..040 in `workplan/done/`. The M5 gate criterion was met live: generate → list → sign(where ExDSA-capable) → delete for all 23 fw v1.2.2 key types green on the dev device (test_keygen_matrix_live). Also this session: the dev HEM's intermittent stall/hang under sustained load was diagnosed (NOT PQC / not any single op — see KNOWN-ISSUES.md) and mitigated with request pacing + `ctest --repeat` stall-retry (REQ-NET-006, STEP-M5-035), letting the full suite pass reliably [11/11]. Hardware `random` stays deferred to M6 as REQ-OPS-002 (draft, encrypt-IV harvest).
+Generated: 2026-07-17 (M6 decomposition — user approved 8 REQs: REQ-OPS-002 rev2 (draft → approved; encrypt-IV harvest design resolved: AES128-CBC, single-zero-byte payload, caller-designated AES key) and the new REQ-OPS-003..008 + REQ-TOOL-010. Steps STEP-M6-010..070 created in `workplan/todo/`; placeholder STEP-M6-000 cancelled. Firmware ground truth for all ten M6 endpoints pinned from fw v1.2.2 source; five doc/firmware conflicts recorded as open acceptance criteria for live probing (ECDH raw-mode 32-byte truncation, derived-HMAC raw-secret-vs-HKDF key, cipher HKDF info `"encedo-aes"` vs doc `"encedo"`, ML-KEM decaps `alg` echoes an unwritten buffer, mldsa-verify failure returns a raw wolfSSL code as HTTP status). ARCHITECTURE §8 (+`hem-tool random`) and §11 (M6 notes + gate) amended.)
 
-Scan inputs: 46 REQ files (`requirements/`), 46 step files (38 in `workplan/done/`, 8 in `workplan/todo/`, of which 4 are cancelled placeholders — STEP-M2-000, STEP-M3-000, STEP-M4-000, STEP-M5-000 — excluded from coverage). Code tags (`implements: REQ-`) scanned across `src/`, `CMakeLists.txt`, `dev`, `tests/CMakeLists.txt`, and `.github/workflows/` (build/tool REQs are realized there, per §4.2 SETUP). Test tags (`verifies:`/`supports: REQ-`) scanned across `tests/`. Multi-line tag blocks are read to the end of the tag comment paragraph; `,` and `/` both separate IDs.
+Scan inputs: 53 REQ files (`requirements/`), 53 step files (38 in `workplan/done/`, 15 in `workplan/todo/`, of which 5 are cancelled placeholders — STEP-M2-000, STEP-M3-000, STEP-M4-000, STEP-M5-000, STEP-M6-000 — excluded from coverage; `workplan/doing/` empty). Code tags (`implements: REQ-`) scanned across `src/`, `CMakeLists.txt`, `dev`, `tests/CMakeLists.txt`, and `.github/workflows/` (build/tool REQs are realized there, per §4.2 SETUP). Test tags (`verifies:`/`supports: REQ-`) scanned across `tests/`. Multi-line tag blocks are read to the end of the tag comment paragraph; `,` and `/` both separate IDs.
 
 | REQ | Title | Status | Priority | Architecture | Steps | Code | Tests |
 |---|---|---|---|---|---|---|---|
@@ -34,7 +34,13 @@ Scan inputs: 46 REQ files (`requirements/`), 46 step files (38 in `workplan/done
 | REQ-NET-005 | Automatic certificate recovery via check-in on expired-cert failure | verified | must | §7, §12 | M1-110 (done) | src/proto_common.h:4 | tests/unit/test_checkin.c:5 |
 | REQ-NET-006 | Optional client-side request pacing | verified | should | §7 | M5-035 (done) | src/proto_common.c:21 | tests/unit/test_context.c:5 |
 | REQ-OPS-001 | Binding for /api/crypto/exdsa/sign — ECDSA and EdDSA signatures by KID | verified | must | §6, §5 | M4-020 (done), M4-030 (done) | src/proto_crypto.c:4, src/crypto_shim.c:250 | tests/unit/test_sign.c:5, tests/unit/test_crypto.c:4, tests/integration/test_sign_live.c:5 |
-| REQ-OPS-002 | ehem_random — device hardware RNG via encrypt-IV harvest | draft | must | §11 | — | — | — |
+| REQ-OPS-002 | ehem_random — device hardware RNG via encrypt-IV harvest | approved | must | §11 | M6-060 (todo) | — | — |
+| REQ-OPS-003 | Binding for /api/crypto/exdsa/verify — ECDSA and EdDSA signature verification by KID | approved | must | §6, §5 | M6-010 (todo) | — | — |
+| REQ-OPS-004 | Binding for /api/crypto/ecdh — raw ECDH shared secret by KID | approved | must | §6, §5 | M6-020 (todo) | — | — |
+| REQ-OPS-005 | Bindings for /api/crypto/hmac/hash and /api/crypto/hmac/verify — MAC by KID | approved | must | §6, §5 | M6-030 (todo) | — | — |
+| REQ-OPS-006 | Bindings for /api/crypto/cipher/encrypt and /api/crypto/cipher/decrypt — AES by KID | approved | must | §6, §5 | M6-040 (todo) | — | — |
+| REQ-OPS-007 | Bindings for /api/crypto/pqc/mlkem/encaps and /decaps — ML-KEM by KID | approved | must | §6, §5 | M6-050 (todo) | — | — |
+| REQ-OPS-008 | Bindings for /api/crypto/pqc/mldsa/sign and /verify — ML-DSA by KID | approved | must | §6, §5 | M6-050 (todo) | — | — |
 | REQ-SYS-001 | Binding for GET /api/system/status | verified | must | §6, §11 | M1-070 (done) | src/proto_system.c:5 | tests/integration/test_system_live.c:5, tests/unit/test_system.c:5 |
 | REQ-SYS-002 | Binding for GET /api/system/version | verified | must | §6, §11 | M1-070 (done) | src/proto_system.c:5 | tests/integration/test_system_live.c:5, tests/unit/test_system.c:5 |
 | REQ-SYS-003 | Binding for the /api/system/checkin handshake (device + cloud relay) | verified | must | §6, §7 | M1-110 (done) | src/proto_system.c:5 | tests/integration/test_checkin_live.c:5, tests/unit/test_checkin.c:5 |
@@ -54,16 +60,17 @@ Scan inputs: 46 REQ files (`requirements/`), 46 step files (38 in `workplan/done
 | REQ-TOOL-007 | hem-tool keys pub — print a key's public material and typed metadata | verified | should | §8 | M4-040 (done) | src/tools/hem-tool/keys.c:138, src/tools/hem-tool/keys.h:4, src/tools/hem-tool/main.c:4 | tests/unit/test_keys_pub.c:5 |
 | REQ-TOOL-008 | hem-tool sign — produce a signature with a device key | verified | should | §8 | M4-050 (done) | src/tools/hem-tool/sign.c:5, src/tools/hem-tool/sign.h:4, src/tools/hem-tool/main.c:4 | tests/unit/test_sign_tool.c:5 |
 | REQ-TOOL-009 | hem-tool keys gen — generate a key on the device | verified | should | §8 | M5-030 (done) | src/tools/hem-tool/keys.c:4, src/tools/hem-tool/keys.h:4, src/tools/hem-tool/main.c:4 | tests/unit/test_keys_gen.c:5 |
+| REQ-TOOL-010 | hem-tool random — read device hardware RNG bytes | approved | should | §8 | M6-060 (todo) | — | — |
 
 ## Coverage report
 
-Totals: 46 REQs — 41 verified, 4 implemented, 0 approved, 1 draft. M5 gate closed: REQ-TEST-004, REQ-TOOL-009, and REQ-NET-006 transitioned approved → verified at this gate (their implementing steps M5-020/M5-030/M5-035 are in `done/`; tagged tests green on GCC + Clang + ASan; live full integration suite 11/11 green with pacing). REQ-KEY-005 (rev 2) and REQ-KEY-006 had their remaining open criteria closed during M5 (label/descr bounds; per-family flag-set vocabulary). REQ-OPS-002 stays draft — deferred to M6 (hardware `random` via encrypt-IV harvest).
+Totals: 53 REQs — 41 verified, 4 implemented, 8 approved, 0 draft. M6 decomposed (user-approved 2026-07-17): REQ-OPS-002 rev2 draft → approved (harvest design resolved) and 7 new approved REQs (OPS-003..008, TOOL-010); no status transitions for M1–M5 REQs. Steps STEP-M6-010..070 in `todo/` (M6-010/020/050 dependency-free); placeholder STEP-M6-000 cancelled.
 
-- **Approved REQs with no code tag (unimplemented):** none. (REQ-OPS-002 is draft, not yet approved — deferred to M6; M6–M9 otherwise have no REQs yet.)
+- **Approved REQs with no code tag (unimplemented):** REQ-OPS-002/003/004/005/006/007/008, REQ-TOOL-010 — the entire M6 set, freshly decomposed and not started; expected, not a gap. M7–M9 have no REQs yet (placeholders only).
 - **Code without a tagged passing test (unverified):** REQ-BUILD-002, REQ-BUILD-004, REQ-TOOL-001, REQ-TOOL-002. These are the tool/build REQs exercised manually or by running CI rather than by a `verifies:` unit test — TOOL-001/002 (status/checkin subcommands, driven live), BUILD-002 (CI, self-verifying on each run), BUILD-004 (`./dev`, a developer convenience). Their behavior is covered by the M1–M4 live gates.
-- **Orphan tags (naming a nonexistent REQ):** none.
-- **Broken architecture anchors:** none.
+- **Orphan tags (naming a nonexistent REQ):** none (no code/test tags name the M6 REQs yet — checked).
+- **Broken architecture anchors:** none (new REQs anchor to §5/§6/§8/§11, all present).
 - **`done/` steps with empty `evidence.commits` (hygiene):** the M1 steps (STEP-M1-030..110, squashed `M1 complete` history) and STEP-M2-040/045/050 (commits f3f125f / 374ab55 / f99bb72, known from the M2 gate but not yet backfilled into the step files). All M3, M4, and M5 steps carry their SHAs. Non-blocking — code/test evidence is present and green.
-- **Deliberately open acceptance criteria:** none outstanding for M1–M5. REQ-KEY-005 (label/descr bounds) and REQ-KEY-006 (per-family flag-set vocabulary) were closed during M5; REQ-TEST-004's live criteria closed at the gate. The only open criteria belong to REQ-OPS-002, which is a **draft** deferred to M6 (its M6-design criteria are open by construction, not counted here).
+- **Deliberately open acceptance criteria (M6, by construction):** five doc/firmware conflicts pinned from fw v1.2.2 source, each an open criterion resolved by a live probe in its implementing step — REQ-OPS-004 (raw-mode ECDH length: fw truncates to 32, doc says curve-length), REQ-OPS-005 (derived-HMAC key: fw uses raw ECDH secret, doc says HKDF), REQ-OPS-006 (HKDF info: fw `"encedo-aes"`+ctx, doc `"encedo"`), REQ-OPS-007 (decaps `alg` echoes an unwritten buffer — informational), REQ-OPS-008 (mldsa-verify failure emits a raw wolfSSL code as HTTP status, doc says 406). M1–M5 REQs have none outstanding.
 - **Test-infra REQs realized without a `src/` code tag:** REQ-TEST-001/002/003/004 — verified via their test files / support (the test *is* the implementation), the established convention for the TEST area. Not a coverage gap.
 - **REQs in needs-reverify:** none.
