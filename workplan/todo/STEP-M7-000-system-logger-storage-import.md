@@ -11,7 +11,7 @@ evidence:
   tests: []
   notes: null
 reopened: []
-cancelled: null
+cancelled: "Replaced by detailed steps STEP-M7-010..080 at the M7 decomposition (user-approved 2026-07-17); firmware-upgrade family deferred to M9 by the same decision."
 ---
 
 **Goal:** Milestone M7 per ARCHITECTURE.md §11: remaining endpoint groups

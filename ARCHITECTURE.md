@@ -337,9 +337,12 @@ sequenceDiagram
   test), `hem-tool checkin`, `hem-tool cert-install` (M2), `hem-tool
   keys list` / `hem-tool keys rm` (M3), `hem-tool keys pub` /
   `hem-tool sign` (M4, user decision 2026-07-16), `hem-tool keys
-  gen` (M5, user decision 2026-07-16), and `hem-tool random` (M6, user
+  gen` (M5, user decision 2026-07-16), `hem-tool random` (M6, user
   decision 2026-07-17 — REQ-TOOL-010; transient `EHEMTEST` AES key when
-  `--kid` is not given).
+  `--kid` is not given), and `hem-tool keys update` / `hem-tool logs` /
+  `hem-tool selftest` (M7, user decision 2026-07-17 — REQ-TOOL-011/012/
+  013; a `hem-tool fw-upgrade` orchestrator is deferred to M9 with the
+  upgrade endpoints).
 - **`cert-install`** (REQ-TOOL-003): harvests the cloud certificate
   (REQ-SYS-006), skips if the device already serves it (leg-1 `csn` vs the
   harvested leaf serial, or the broker suppressing the chain), else
@@ -466,15 +469,36 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   truncation, HMAC derived-key raw-vs-HKDF, cipher HKDF info string,
   decaps `alg` field, mldsa-verify failure status) recorded in their
   REQs.
-- **M7 — system, logger, storage, key import/update:** remaining endpoint
-  groups including firmware upgrade and reboot (disruptive-gated tests);
-  `keymgmt` import and update (LABEL/DESCR).
+- **M7 — system, logger, storage, key import/update/derive:** the
+  remaining non-deferred endpoint groups: system `selftest`,
+  `config/attestation`, `shutdown` (API-complete; live test
+  attended-manual only — recovery needs a physical power-cycle); the
+  `logger` read family (`key`/`list`/`get`); `storage`
+  `unlock`/`lock` (scope carries disk+mode); `keymgmt`
+  `update`/`import`/`derive`; plus `cipher/wrap`/`unwrap` (pulled in
+  from the M6 note, user decision 2026-07-17) and auth resilience for
+  the ~8%-fast RTC (login-401 check-in recovery + `checkin_on_login`
+  option — the KNOWN-ISSUES clock-drift healer). *Deferred to M9 (user
+  decision 2026-07-17):* the whole `system/upgrade` family
+  (fw/ui/bootloader upload-check-install, usbmode) and a
+  `hem-tool fw-upgrade` orchestrator. *Recorded absent in fw v1.2.2:*
+  `system/health` (declared, never implemented), `DELETE /api/logger`
+  (dispatch commented out), `config/provisioning` (factory-only —
+  deliberately unbound, REQ-SYS-011). **Gate:** every new binding green
+  live; the decomposition's firmware-conflict probes (import type
+  support vs the dead 70-byte cap, derive determinism for short-secret
+  combos, wrap HKDF info string, storage uninitialized-`sub` behavior,
+  PPA/EPA determination) resolved and recorded in their REQs.
 - **M8 — mobile-app authentication:** push-confirm auth flow (`ext-*`
   endpoints), blocking wait with timeout + pollable variant; distinct
   rejected/timeout results.
 - **M9 — full-spec conformance (1.0):** sweep of encedo-hem-api-doc for
-  uncovered endpoints/fields; DISCREPANCIES reconciliation recorded in
-  REQs; API reference docs; ABI freeze and 1.0 release.
+  uncovered endpoints/fields; the `system/upgrade` family deferred from
+  M7 (fw upload/check/install triad, ui triad, bootloader upload,
+  usbmode) plus `hem-tool fw-upgrade` (user decision 2026-07-17);
+  `stream/*` (commented out of fw v1.2.2 — re-check); DISCREPANCIES
+  reconciliation recorded in REQs; API reference docs; ABI freeze and
+  1.0 release.
 
 ## 12. Risks & open questions
 
