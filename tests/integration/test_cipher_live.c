@@ -86,8 +86,8 @@ static void create_key(cipher_state *s, const char *type, const char *mode,
     ehem_test_track(&s->reg, kid);
 }
 
-static const uint8_t MSG[] = "ciphered by test_cipher_live on the HEM!";
-#define MSG_LEN (sizeof MSG - 1)   /* 40 bytes — deliberately not a multiple */
+static const uint8_t PT[] = "ciphered by test_cipher_live on the HEM!";
+#define PT_LEN (sizeof PT - 1)   /* 40 bytes — deliberately not a multiple */
 static const uint8_t AAD[4] = { 'a', 'a', 'd', '!' };
 
 /* -------------------------------------------------------------------------- */
@@ -105,18 +105,18 @@ static void test_gcm_roundtrip_tamper_iv(void **state)
 
     /* Round-trip with aad. */
     assert_int_equal(ehem_encrypt(s->ctx, kid, EHEM_CIPHER_ALG_AES256_GCM,
-                                  MSG, MSG_LEN, AAD, sizeof AAD,
+                                  PT, PT_LEN, AAD, sizeof AAD,
                                   NULL, NULL, 0, NULL, 0, &c1), EHEM_OK);
     assert_true(c1->has_iv);
     assert_true(c1->has_tag);
-    assert_int_equal((int)c1->ciphertext_len, (int)MSG_LEN);  /* GCM: no pad */
+    assert_int_equal((int)c1->ciphertext_len, (int)PT_LEN);  /* GCM: no pad */
 
     assert_int_equal(ehem_decrypt(s->ctx, kid, EHEM_CIPHER_ALG_AES256_GCM,
                                   c1->ciphertext, c1->ciphertext_len,
                                   c1->iv, 16, c1->tag, 16, AAD, sizeof AAD,
                                   NULL, NULL, 0, NULL, 0, &pt), EHEM_OK);
-    assert_int_equal((int)pt->plaintext_len, (int)MSG_LEN);
-    assert_memory_equal(pt->plaintext, MSG, MSG_LEN);
+    assert_int_equal((int)pt->plaintext_len, (int)PT_LEN);
+    assert_memory_equal(pt->plaintext, PT, PT_LEN);
     ehem_plaintext_free(pt);
     pt = NULL;
 
@@ -142,14 +142,14 @@ static void test_gcm_roundtrip_tamper_iv(void **state)
 
     /* Round-trip without aad + IV freshness across two encrypts. */
     assert_int_equal(ehem_encrypt(s->ctx, kid, EHEM_CIPHER_ALG_AES256_GCM,
-                                  MSG, MSG_LEN, NULL, 0,
+                                  PT, PT_LEN, NULL, 0,
                                   NULL, NULL, 0, NULL, 0, &c2), EHEM_OK);
     assert_memory_not_equal(c1->iv, c2->iv, 16);   /* fresh IV every call */
     assert_int_equal(ehem_decrypt(s->ctx, kid, EHEM_CIPHER_ALG_AES256_GCM,
                                   c2->ciphertext, c2->ciphertext_len,
                                   c2->iv, 16, c2->tag, 16, NULL, 0,
                                   NULL, NULL, 0, NULL, 0, &pt), EHEM_OK);
-    assert_memory_equal(pt->plaintext, MSG, MSG_LEN);
+    assert_memory_equal(pt->plaintext, PT, PT_LEN);
 
     ehem_plaintext_free(pt);
     ehem_ciphertext_free(c1);
@@ -171,7 +171,7 @@ static void test_cbc_ecb_and_width_quirk(void **state)
 
     /* CBC: 40-byte msg → padded to 48 by the device; strips on decrypt. */
     assert_int_equal(ehem_encrypt(s->ctx, kid256, EHEM_CIPHER_ALG_AES256_CBC,
-                                  MSG, MSG_LEN, NULL, 0,
+                                  PT, PT_LEN, NULL, 0,
                                   NULL, NULL, 0, NULL, 0, &ct), EHEM_OK);
     assert_true(ct->has_iv);
     assert_false(ct->has_tag);
@@ -180,8 +180,8 @@ static void test_cbc_ecb_and_width_quirk(void **state)
                                   ct->ciphertext, ct->ciphertext_len,
                                   ct->iv, 16, NULL, 0, NULL, 0,
                                   NULL, NULL, 0, NULL, 0, &pt), EHEM_OK);
-    assert_int_equal((int)pt->plaintext_len, (int)MSG_LEN);
-    assert_memory_equal(pt->plaintext, MSG, MSG_LEN);
+    assert_int_equal((int)pt->plaintext_len, (int)PT_LEN);
+    assert_memory_equal(pt->plaintext, PT, PT_LEN);
     ehem_plaintext_free(pt);
     pt = NULL;
     ehem_ciphertext_free(ct);
@@ -189,7 +189,7 @@ static void test_cbc_ecb_and_width_quirk(void **state)
 
     /* ECB: block-aligned input, NO iv in the response. */
     assert_int_equal(ehem_encrypt(s->ctx, kid256, EHEM_CIPHER_ALG_AES256_ECB,
-                                  MSG, 32, NULL, 0,
+                                  PT, 32, NULL, 0,
                                   NULL, NULL, 0, NULL, 0, &ct), EHEM_OK);
     assert_false(ct->has_iv);
     assert_false(ct->has_tag);
@@ -198,7 +198,7 @@ static void test_cbc_ecb_and_width_quirk(void **state)
                                   ct->ciphertext, ct->ciphertext_len,
                                   NULL, 0, NULL, 0, NULL, 0,
                                   NULL, NULL, 0, NULL, 0, &pt), EHEM_OK);
-    assert_memory_equal(pt->plaintext, MSG, 32);
+    assert_memory_equal(pt->plaintext, PT, 32);
     ehem_plaintext_free(pt);
     pt = NULL;
     ehem_ciphertext_free(ct);
@@ -206,14 +206,14 @@ static void test_cbc_ecb_and_width_quirk(void **state)
 
     /* Width quirk (REQ-OPS-006): requested width ≤ stored width. */
     assert_int_equal(ehem_encrypt(s->ctx, kid256, EHEM_CIPHER_ALG_AES128_GCM,
-                                  MSG, MSG_LEN, NULL, 0,
+                                  PT, PT_LEN, NULL, 0,
                                   NULL, NULL, 0, NULL, 0, &ct), EHEM_OK);
     ehem_ciphertext_free(ct);
     ct = NULL;
 
     create_key(s, "AES128", NULL, kid128);
     assert_int_equal(ehem_encrypt(s->ctx, kid128, EHEM_CIPHER_ALG_AES256_GCM,
-                                  MSG, MSG_LEN, NULL, 0,
+                                  PT, PT_LEN, NULL, 0,
                                   NULL, NULL, 0, NULL, 0, &ct),
                      EHEM_ERR_DEVICE);
     assert_null(ct);
@@ -233,7 +233,7 @@ static bool candidate_matches(const uint8_t secret[EHEM_X25519_KEYSIZE],
     uint8_t info[80];
     size_t info_len = strlen(info_prefix);
     uint8_t key[32];
-    uint8_t ct[MSG_LEN];
+    uint8_t ct[PT_LEN];
     uint8_t tag[16];
     Aes aes;
     int ret;
@@ -252,15 +252,15 @@ static bool candidate_matches(const uint8_t secret[EHEM_X25519_KEYSIZE],
     }
     ret = wc_AesGcmSetKey(&aes, key, sizeof key);
     if (ret == 0) {
-        ret = wc_AesGcmEncrypt(&aes, ct, MSG, MSG_LEN, dev->iv, 16,
+        ret = wc_AesGcmEncrypt(&aes, ct, PT, PT_LEN, dev->iv, 16,
                                tag, 16, NULL, 0);
     }
     wc_AesFree(&aes);
     if (ret != 0) {
         return false;
     }
-    return dev->ciphertext_len == MSG_LEN &&
-           memcmp(ct, dev->ciphertext, MSG_LEN) == 0 &&
+    return dev->ciphertext_len == PT_LEN &&
+           memcmp(ct, dev->ciphertext, PT_LEN) == 0 &&
            memcmp(tag, dev->tag, 16) == 0;
 }
 
@@ -291,7 +291,7 @@ static void test_derived_hkdf_info_probe(void **state)
 
     /* No ctx suffix: info should be exactly the firmware prefix. */
     assert_int_equal(ehem_encrypt(s->ctx, kid, EHEM_CIPHER_ALG_AES256_GCM,
-                                  MSG, MSG_LEN, NULL, 0,
+                                  PT, PT_LEN, NULL, 0,
                                   NULL, local_pub, sizeof local_pub,
                                   NULL, 0, &dev), EHEM_OK);
     assert_true(dev->has_iv && dev->has_tag);
@@ -307,7 +307,7 @@ static void test_derived_hkdf_info_probe(void **state)
 
     /* With a ctx suffix: info = "encedo-aes" ‖ ctx bytes. */
     assert_int_equal(ehem_encrypt(s->ctx, kid, EHEM_CIPHER_ALG_AES256_GCM,
-                                  MSG, MSG_LEN, NULL, 0,
+                                  PT, PT_LEN, NULL, 0,
                                   NULL, local_pub, sizeof local_pub,
                                   ctx_sfx, sizeof ctx_sfx, &dev), EHEM_OK);
     assert_true(candidate_matches(secret, "encedo-aes", ctx_sfx,
@@ -320,7 +320,7 @@ static void test_derived_hkdf_info_probe(void **state)
                                   dev->iv, 16, dev->tag, 16, NULL, 0,
                                   NULL, local_pub, sizeof local_pub,
                                   ctx_sfx, sizeof ctx_sfx, &pt), EHEM_OK);
-    assert_memory_equal(pt->plaintext, MSG, MSG_LEN);
+    assert_memory_equal(pt->plaintext, PT, PT_LEN);
 
     ehem_plaintext_free(pt);
     ehem_ciphertext_free(dev);
