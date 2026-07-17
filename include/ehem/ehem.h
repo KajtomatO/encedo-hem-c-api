@@ -152,6 +152,17 @@ typedef struct ehem_options {
      * keeps the default retaining behavior, per the abi_size discipline).
      */
     int            no_credential_retention; /* 0 = retain passphrase (default) */
+
+    /*
+     * Client-side request pacing (REQ-NET-006). Minimum delay, in milliseconds,
+     * the SDK waits before dispatching each HTTP request — a throttle for
+     * rate-sensitive or resource-constrained devices that misbehave when
+     * requests arrive back-to-back. 0 (the default, per the abi_size discipline)
+     * disables pacing; the SDK never delays on its own. Applied per request,
+     * including retries. This is a timing knob like the timeouts above, not a
+     * retry policy (retries remain the caller's job, §7).
+     */
+    long           request_pace_ms;     /* 0 = no pacing (default) */
 } ehem_options;
 
 /*

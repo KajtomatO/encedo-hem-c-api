@@ -1,14 +1,40 @@
 /*
  * proto_common.c — shared request path for protocol bindings: bearer injection
- * (REQ-AUTH-003), the automatic expired-certificate recovery (REQ-NET-005), and
- * the HTTP→rc mapping (REQ-API-003).
+ * (REQ-AUTH-003), the automatic expired-certificate recovery (REQ-NET-005), the
+ * HTTP→rc mapping (REQ-API-003), and the optional client-side request pace
+ * (REQ-NET-006).
  */
+#define _POSIX_C_SOURCE 199309L   /* nanosleep / struct timespec under -std=c99 */
+
 #include "proto_common.h"
 #include "proto_auth.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef _WIN32
+#  include <windows.h>            /* Sleep() — MinGW has no POSIX nanosleep */
+#else
+#  include <time.h>               /* nanosleep / struct timespec */
+#endif
+
+/* implements: REQ-NET-006 (client-side request pacing) */
+static void pace_sleep_ms(long ms)
+{
+    if (ms <= 0) {
+        return;
+    }
+#ifdef _WIN32
+    Sleep((DWORD)ms);
+#else
+    {
+        struct timespec ts;
+        ts.tv_sec  = (time_t)(ms / 1000);
+        ts.tv_nsec = (long)(ms % 1000) * 1000000L;
+        (void)nanosleep(&ts, NULL);
+    }
+#endif
+}
 
 ehem_rc ehem_proto_map_http_status(long status)
 {
@@ -88,6 +114,9 @@ static ehem_rc do_send(ehem_ctx *ctx, const ehem_transport *t,
     req.fresh_connection   = fresh_connection;
 
     memset(resp, 0, sizeof *resp);
+    /* Client-side pacing (REQ-NET-006): throttle back-to-back requests for
+     * rate-sensitive devices. Applies to every dispatch, retries included. */
+    pace_sleep_ms(ctx->request_pace_ms);
     return ehem_transport_send(t, &req, resp);
 }
 

@@ -1,5 +1,70 @@
 # Known issues
 
+## OPEN — Device stalls/hangs under sustained load (dev HEM, fw v1.2.2)
+
+**Status:** open (device/firmware issue; client-side mitigation shipped
+2026-07-17). **Affected:** all `integration`-labeled tests; surfaced running
+the M5 suite.
+
+### Symptom
+
+The development HEM (my.ence.do, fw v1.2.2-DIAG) intermittently stops
+responding. Two grades were observed: **transient stalls** — an operation
+freezes for tens of seconds (one `SECP521R1` sign froze ~45 s) then recovers on
+its own — and **hard hangs** — the device stops answering entirely and only a
+physical power-cycle brings it back. The hard hang appeared after the full
+integration suite; a single test rarely triggers it.
+
+### What it is NOT (ruled out by reproduction, 2026-07-17)
+
+Per-operation probes (create → list → get → sign → delete for all 23 firmware
+key types, run twice; plus 60 back-to-back signs ≈ 240 TLS connections) all
+completed with the device alive after every operation. So it is **not** PQC key
+generation, **not** any single crypto operation, **not** SECP521R1 signing, and
+**not** raw connection volume. It is an **intermittent stall under sustained
+load** whose probability rises with total operation count / run length — which
+is why it looked like "the matrix test" (the longest test = the most chances to
+hit a non-recovering stall).
+
+### Why a hang needs a physical reboot
+
+- The **watchdog is disabled** in firmware (`user_board.c:342`,
+  `WDT->WDT_MR = WDT_MR_WDDIS`), so nothing on-device recovers a hang.
+- A real crash would self-recover: the fault handlers software-reset
+  (`exceptions_sam.c`, HardFault → `rstc_start_software_reset(RSTC)`). Since the
+  device instead stays dead, these are **hangs (spin/deadlock), not crashes** —
+  the fault path is never reached.
+- `configUSE_MALLOC_FAILED_HOOK`/`configCHECK_FOR_STACK_OVERFLOW` are enabled
+  and `configASSERT` is active, but the application defines no
+  `vApplicationMallocFailedHook` / `vApplicationStackOverflowHook` /
+  `vAssertCalled` — so a malloc failure, stack overflow, or failed assert under
+  load resolves to a spin instead of the self-resetting fault path.
+
+The exact exhausted resource (heap fragmentation, a blocking flash/audit-log
+write, a task stall) could not be pinned from the client — it needs the
+device's debug UART captured during a hang.
+
+### Mitigation (client-side, shipped)
+
+- **Stall-retry:** `./dev test it` runs the integration suite with
+  `ctest --repeat until-pass:${EHEM_TEST_REPEAT:-3}`; a test that hits a
+  transient stall is re-run after the device recovers (the live tests self-clean
+  via setup sweep + teardown cleanup, so re-runs are safe).
+- **Pacing:** `ehem_options.request_pace_ms` (REQ-NET-006) throttles requests;
+  the test harness sets it from `EHEM_TEST_PACE_MS`, defaulted to 150 ms for
+  `./dev test it`. `EHEM_TEST_PACE_MS=0` disables it.
+
+Neither prevents a rare hard hang (only the firmware can), but together they let
+the suite pass reliably on the flaky device instead of failing on the first
+stall.
+
+### Upstream (firmware) fixes to file
+
+- Re-enable the watchdog so a stall self-recovers via reset.
+- Give `vApplicationMallocFailedHook` / `vApplicationStackOverflowHook` /
+  `vAssertCalled` real bodies (log + reset, not spin).
+- Investigate the stall itself under sustained API load.
+
 ## RESOLVED — Windows (MinGW) X25519 crash: missing wolfCrypt_Init()
 
 **Status:** resolved 2026-07-16 (same day it was shelved). **Affected:**

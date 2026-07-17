@@ -2,7 +2,7 @@
  * test_context.c — ehem_ctx lifecycle, options, error enum, last-error,
  * global init/cleanup.
  *
- * verifies: REQ-API-001, REQ-API-002, REQ-API-003, REQ-API-004
+ * verifies: REQ-API-001, REQ-API-002, REQ-API-003, REQ-API-004, REQ-NET-006
  *
  * Reaches the internal error-setting helpers (context.h) to exercise
  * ehem_last_error without a transport — the fake transport lands in
@@ -93,6 +93,34 @@ static void test_options_init_and_apply(void **state)
     ehem_ctx *ctx = NULL;
     assert_int_equal(ehem_ctx_create("https://hem.local", &opts, &ctx), EHEM_OK);
     assert_non_null(ctx);
+    ehem_ctx_destroy(ctx);
+}
+
+/* Request pacing (REQ-NET-006): defaults to 0 (no pace); a set value is copied
+ * into the context; an old-ABI options block (abi_size too small to include the
+ * field) leaves the default, per the append-only discipline. */
+static void test_options_request_pace(void **state)
+{
+    (void)state;
+    ehem_options opts;
+    ehem_ctx *ctx = NULL;
+
+    ehem_options_init(&opts);
+    assert_int_equal((int)opts.request_pace_ms, 0);        /* default: no pacing */
+
+    opts.request_pace_ms = 250;
+    assert_int_equal(ehem_ctx_create("https://hem.local", &opts, &ctx), EHEM_OK);
+    assert_int_equal((int)ctx->request_pace_ms, 250);      /* copied into ctx */
+    ehem_ctx_destroy(ctx);
+
+    /* Old caller whose options predate the field: abi_size excludes it, so
+     * EHEM_OPT_HAS is false and the context keeps the 0 default. */
+    ehem_options_init(&opts);
+    opts.request_pace_ms = 999;
+    opts.abi_size = offsetof(ehem_options, request_pace_ms);
+    ctx = NULL;
+    assert_int_equal(ehem_ctx_create("https://hem.local", &opts, &ctx), EHEM_OK);
+    assert_int_equal((int)ctx->request_pace_ms, 0);
     ehem_ctx_destroy(ctx);
 }
 
@@ -207,6 +235,7 @@ int main(void)
         cmocka_unit_test(test_destroy_null_is_safe),
         cmocka_unit_test(test_two_contexts_independent),
         cmocka_unit_test(test_options_init_and_apply),
+        cmocka_unit_test(test_options_request_pace),
         cmocka_unit_test(test_options_ca_file_requires_path),
         cmocka_unit_test(test_options_uninitialized_rejected),
         cmocka_unit_test(test_rc_str_covers_every_value),

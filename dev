@@ -98,6 +98,23 @@ ctest_run() {
   run ctest --test-dir "$dir" -L "$label" --output-on-failure --no-tests=ignore "$@"
 }
 
+# Number of attempts for the (device-flaky) integration suite. The dev HEM
+# intermittently stalls under load — an operation can freeze for tens of
+# seconds and then recover (see KNOWN-ISSUES.md "Device stalls/hangs under
+# load"). ctest --repeat until-pass re-runs a test that hit a stall, by which
+# time the device has recovered; the live tests self-clean (setup sweep +
+# teardown cleanup) so a re-run is safe. Override with EHEM_TEST_REPEAT.
+integration_repeat="${EHEM_TEST_REPEAT:-3}"
+
+# ctest_run_it <dir> — the integration suite with stall-retry (until-pass) and a
+# client-side request pace (EHEM_TEST_PACE_MS, REQ-NET-006) that throttles the
+# back-to-back load the flaky dev HEM misbehaves under. Override either knob in
+# the environment; EHEM_TEST_PACE_MS=0 disables pacing.
+ctest_run_it() {
+  EHEM_TEST_PACE_MS="${EHEM_TEST_PACE_MS:-150}" \
+    ctest_run "$1" integration --repeat "until-pass:${integration_repeat}"
+}
+
 # --- device credentials ---------------------------------------------------
 # maybe_source_hem_env <primary-var>: if the var is already set, use the
 # environment as-is; else source ./hem.env (with a stderr notice); else warn.
@@ -199,7 +216,7 @@ cmd_test() {
       local cc dir; cc="$(active_cc)"; dir="$(build_dir_for "$cc")"
       configure_and_build "$dir" "$cc"
       maybe_source_hem_env EHEM_TEST_URL
-      ctest_run "$dir" integration
+      ctest_run_it "$dir"
       if [[ $disruptive -eq 1 ]]; then
         EHEM_ALLOW_DISRUPTIVE=1 ctest_run "$dir" disruptive
       fi
@@ -209,7 +226,7 @@ cmd_test() {
       configure_and_build "$dir" "$cc"
       ctest_run "$dir" unit
       maybe_source_hem_env EHEM_TEST_URL
-      ctest_run "$dir" integration
+      ctest_run_it "$dir"
       if [[ $disruptive -eq 1 ]]; then
         EHEM_ALLOW_DISRUPTIVE=1 ctest_run "$dir" disruptive
       fi

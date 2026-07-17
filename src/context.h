@@ -29,6 +29,7 @@ struct ehem_ctx {
     char          *url;
     long           connect_timeout_ms;
     long           total_timeout_ms;
+    long           request_pace_ms;      /* min delay before each request (REQ-NET-006); 0 = none */
     ehem_tls_mode  tls_mode;
     char          *ca_file;              /* owned copy, or NULL when unused */
 

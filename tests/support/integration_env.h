@@ -28,6 +28,21 @@ static inline const char *ehem_test_url(void)        { return getenv("EHEM_TEST_
 static inline const char *ehem_test_passphrase(void) { return getenv("EHEM_TEST_PASSPHRASE"); }
 
 /*
+ * Apply the optional client-side request pace (REQ-NET-006) from
+ * EHEM_TEST_PACE_MS onto `opts`. The dev HEM intermittently stalls under
+ * back-to-back load (see KNOWN-ISSUES.md); pacing throttles the suite. The SDK
+ * itself reads no environment — the test harness does, and passes it as the
+ * option, keeping the "config arrives as parameters" rule.
+ */
+static inline void ehem_test_apply_pace(ehem_options *opts)
+{
+    const char *pace = getenv("EHEM_TEST_PACE_MS");
+    if (pace != NULL && pace[0] != '\0') {
+        opts->request_pace_ms = strtol(pace, NULL, 10);
+    }
+}
+
+/*
  * Call at the top of an integration test's main(): if no device URL is
  * configured, print why and exit with the skip code so CTest reports the test
  * as skipped rather than failed.
@@ -77,6 +92,7 @@ static inline ehem_rc ehem_test_ctx(ehem_ctx **out)
         opts.tls_mode = EHEM_TLS_CA_FILE;
         opts.ca_file  = cacert;
     }
+    ehem_test_apply_pace(&opts);
     return ehem_ctx_create(ehem_test_url(), &opts, out);
 }
 
@@ -99,6 +115,7 @@ static inline ehem_rc ehem_test_ctx_timeout(ehem_ctx **out, long total_ms)
         opts.ca_file  = cacert;
     }
     opts.total_timeout_ms = total_ms;
+    ehem_test_apply_pace(&opts);
     return ehem_ctx_create(ehem_test_url(), &opts, out);
 }
 

@@ -91,6 +91,7 @@ void ehem_options_init(ehem_options *opts)
     opts->abi_size           = sizeof(*opts);
     opts->connect_timeout_ms = EHEM_DEFAULT_CONNECT_TIMEOUT_MS;
     opts->total_timeout_ms   = EHEM_DEFAULT_TOTAL_TIMEOUT_MS;
+    opts->request_pace_ms    = 0;      /* no pacing by default */
     opts->tls_mode           = EHEM_TLS_SYSTEM;
     opts->ca_file            = NULL;
     opts->transport          = NULL;
@@ -106,6 +107,7 @@ static ehem_rc apply_options(ehem_ctx *ctx, const ehem_options *opts)
 {
     ctx->connect_timeout_ms = EHEM_DEFAULT_CONNECT_TIMEOUT_MS;
     ctx->total_timeout_ms   = EHEM_DEFAULT_TOTAL_TIMEOUT_MS;
+    ctx->request_pace_ms    = 0;
     ctx->tls_mode           = EHEM_TLS_SYSTEM;
     ctx->ca_file            = NULL;
     ctx->transport          = NULL;
@@ -124,6 +126,9 @@ static ehem_rc apply_options(ehem_ctx *ctx, const ehem_options *opts)
     }
     if (EHEM_OPT_HAS(opts, total_timeout_ms) && opts->total_timeout_ms > 0) {
         ctx->total_timeout_ms = opts->total_timeout_ms;
+    }
+    if (EHEM_OPT_HAS(opts, request_pace_ms) && opts->request_pace_ms > 0) {
+        ctx->request_pace_ms = opts->request_pace_ms;
     }
     if (EHEM_OPT_HAS(opts, tls_mode)) {
         ctx->tls_mode = opts->tls_mode;
