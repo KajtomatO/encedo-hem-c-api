@@ -1,7 +1,7 @@
 ---
 id: REQ-TOOL-010
 title: hem-tool random — read device hardware RNG bytes
-status: approved
+status: verified
 priority: should
 revision: 1
 source: user decision 2026-07-17 (M6 decomposition addition — pattern of keys pub/sign at M4, keys gen at M5); ARCHITECTURE.md §8 (thin consumer, subcommands grow with milestones); HEM-SDK-7/HEM-OP-3; approved 2026-07-17

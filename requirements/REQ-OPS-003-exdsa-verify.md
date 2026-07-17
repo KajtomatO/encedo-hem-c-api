@@ -1,7 +1,7 @@
 ---
 id: REQ-OPS-003
 title: Binding for /api/crypto/exdsa/verify — ECDSA and EdDSA signature verification by KID
-status: approved
+status: verified
 priority: must
 revision: 1
 source: ARCHITECTURE.md §6, §11 (M6); encedo-hem-api-doc crypto/exdsa-verify.md; encedo_firmware api_crypto.c api_post_crypto_exdsa_verify + crypto.c CRYPTO_SignVerify (fw v1.2.2); HEM-SDK-7 (verify), HEM-OP-1 (single-part); approved 2026-07-17

@@ -1,7 +1,7 @@
 ---
 id: REQ-OPS-007
 title: Bindings for /api/crypto/pqc/mlkem/encaps and /decaps — ML-KEM by KID
-status: approved
+status: verified
 priority: must
 revision: 2
 source: ARCHITECTURE.md §6, §11 (M6); encedo-hem-api-doc crypto/pqc/mlkem-encaps.md, mlkem-decaps.md; encedo_firmware api_crypto.c api_post_crypto_pqc_mlkem_encaps/_decaps + crypto.c CRYPTO_MLKEM_Encaps/Decaps (fw v1.2.2); HEM-SDK-7; approved 2026-07-17

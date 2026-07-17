@@ -1,7 +1,7 @@
 ---
 id: REQ-OPS-006
 title: Bindings for /api/crypto/cipher/encrypt and /api/crypto/cipher/decrypt — AES by KID
-status: approved
+status: verified
 priority: must
 revision: 2
 source: ARCHITECTURE.md §6, §11 (M6: GCM IV/tag handling); encedo-hem-api-doc crypto/cipher-encrypt.md, crypto/cipher-decrypt.md, FIRMWARE_NOTES.md:49; encedo_firmware api_crypto.c api_post_crypto_cipher_encrypt/_decrypt + crypto.c CRYPTO_Encrypt/CRYPTO_Decrypt (fw v1.2.2); HEM-SDK-7 (AES), HEM-OP-1; approved 2026-07-17

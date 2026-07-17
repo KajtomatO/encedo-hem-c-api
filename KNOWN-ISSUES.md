@@ -112,6 +112,36 @@ candidate REQ for a future milestone (user note, 2026-07-17).
 - Consider tolerating a client `exp` beyond the intended lifetime by
   clamping instead of rejecting (defense against exactly this drift).
 
+## OPEN — PQC endpoint response bugs (fw v1.2.2): decaps `alg` leak, mldsa-verify raw status
+
+**Status:** open (firmware bugs; the SDK ships defensive handling for both).
+**Affected:** `/api/crypto/pqc/mlkem/decaps` and `/api/crypto/pqc/mldsa/verify`.
+Both found at STEP-M6-050 from firmware source and confirmed live 2026-07-17.
+
+### 1. `mlkem/decaps` echoes an unwritten buffer as `alg`
+
+`CRYPTO_MLKEM_Decaps` takes no `alg_used` parameter (crypto.h:27), but the
+handler passes its scratch buffer anyway and serializes it into the response
+(api_crypto.c:2177, 2195). The buffer last held the request's scope string,
+so a live decaps answers with `"alg":"keymgmt:use:<kid-prefix>…"` — stale
+stack content in a response field (the leaked value is the caller's own
+scope today, but it is uninitialized-buffer serialization all the same).
+**SDK handling:** `ehem_mlkem_decaps` treats `alg` as informational,
+truncated, never interpreted (REQ-OPS-007).
+**Upstream fix:** thread `alg_used` through decaps like encaps, or drop the
+field from the decaps response.
+
+### 2. `mldsa/verify` reports failure with a raw error code as the HTTP status
+
+Every other crypto handler maps a failed operation to 406; the mldsa-verify
+handler returns `CRYPTO_MLDSA_Verify`'s raw failure code straight into the
+HTTP status line (api_crypto.c:2545 — no `ret = 406` mapping). An invalid
+signature produced **`HTTP/1.1 795`** live (the doc's crypto/pqc/
+mldsa-verify.md promises 406). **SDK handling:** `ehem_mldsa_verify` maps
+ANY completed non-200/non-auth status — including out-of-range ones — to
+`EHEM_ERR_DEVICE` with the raw status retrievable (REQ-OPS-008; unit tests
+pin 65307/−229/100). **Upstream fix:** add the missing 406 mapping.
+
 ## RESOLVED — Windows (MinGW) X25519 crash: missing wolfCrypt_Init()
 
 **Status:** resolved 2026-07-16 (same day it was shelved). **Affected:**

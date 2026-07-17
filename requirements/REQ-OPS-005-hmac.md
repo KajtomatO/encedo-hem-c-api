@@ -1,7 +1,7 @@
 ---
 id: REQ-OPS-005
 title: Bindings for /api/crypto/hmac/hash and /api/crypto/hmac/verify — MAC by KID
-status: approved
+status: verified
 priority: must
 revision: 2
 source: ARCHITECTURE.md §6, §11 (M6); encedo-hem-api-doc crypto/hmac-hash.md, crypto/hmac-verify.md; encedo_firmware api_crypto.c api_post_crypto_hmac_hash/_verify + crypto.c CRYPTO_Hash/CRYPTO_HashVerify (fw v1.2.2); HEM-SDK-7 (HMAC), HEM-OP-1; approved 2026-07-17

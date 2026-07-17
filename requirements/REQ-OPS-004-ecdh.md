@@ -1,7 +1,7 @@
 ---
 id: REQ-OPS-004
 title: Binding for /api/crypto/ecdh — raw ECDH shared secret by KID
-status: approved
+status: verified
 priority: must
 revision: 2
 source: ARCHITECTURE.md §6, §11 (M6); encedo-hem-api-doc crypto/ecdh.md; encedo_firmware api_crypto.c api_post_crypto_ecdh + crypto.c CRYPTO_ECDH/CRYPTO_DeriveKey (fw v1.2.2); HEM-SDK-7 (ECDH), HEM-OP-1; approved 2026-07-17

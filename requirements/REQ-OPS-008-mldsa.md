@@ -1,7 +1,7 @@
 ---
 id: REQ-OPS-008
 title: Bindings for /api/crypto/pqc/mldsa/sign and /verify — ML-DSA by KID
-status: approved
+status: verified
 priority: must
 revision: 2
 source: ARCHITECTURE.md §6, §11 (M6); encedo-hem-api-doc crypto/pqc/mldsa-sign.md, mldsa-verify.md; encedo_firmware api_crypto.c api_post_crypto_pqc_mldsa_sign/_verify + crypto.c CRYPTO_MLDSA_Sign/Verify (fw v1.2.2); HEM-SDK-7 (sign), HEM-OP-1; approved 2026-07-17

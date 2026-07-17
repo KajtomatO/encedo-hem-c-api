@@ -1,7 +1,7 @@
 ---
 id: REQ-OPS-002
 title: ehem_random — device hardware RNG via encrypt-IV harvest
-status: approved
+status: verified
 priority: must
 revision: 2
 source: user decision 2026-07-16 (encrypt-IV harvest, M5 decomposition discussion); HEM-SDK-7 / HEM-OP-3 (hardware random); encedo-hem-api-doc FIRMWARE_NOTES.md:49 (encrypt always returns a fresh random IV); firmware v1.2.2 api_crypto.c (no random endpoint; cipher/wrap rejects empty msg — generate path unreachable); approved 2026-07-17 (rev2 design)
