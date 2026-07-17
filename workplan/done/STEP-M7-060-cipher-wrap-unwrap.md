@@ -7,9 +7,23 @@ traces:
   architecture: ["ARCHITECTURE.md#6-protocol-bindings", "ARCHITECTURE.md#5-auth--session"]
 depends_on: []
 evidence:
-  commits: []
-  tests: []
-  notes: null
+  commits: ["e1d8b40"]
+  tests: ["verifies: REQ-OPS-009 (tests/unit/test_cipher.c — 3 wrap cases; tests/integration/test_wrap_live.c — 3 live cases green 2026-07-18)"]
+  notes: >
+    ehem_wrap/ehem_unwrap in proto_crypto.c + crypto.h (shared
+    build_wrap_body + wrap_request; reuses check_peer_args/
+    add_peer_fields/b64_dup; unwrapped zeroized on free). Read the fw
+    CRYPTO_Wrap/Unwrap source first (crypto.c:1014/1137) — resolved all
+    three REQ-OPS-009 open criteria, then confirmed live: (1) HKDF info
+    = "encedo-kek" ‖ ctx (crypto.c:57 — doc's "encedo" wrong, distinct
+    from encrypt's "encedo-aes") — the device ECDH-KEK wrap matched a
+    LOCAL wc_AesKeyWrap under HKDF(shim secret) BYTE-EXACTLY (this HKDF
+    uses the real secret length, so wrap IS externally reproducible,
+    unlike keymgmt derive); (2) alignment device-enforced: 20 B → 406,
+    8 B → 406 (two-semiblock min); (3) unwrap field = "unwrapped";
+    width rule = encrypt's ≤-stored-key (AES256 key served AES128 KEK
+    live). Round-trip 32→40→32 + tamper→406 green. Unit 30/30
+    gcc+clang + ASan; export/header gates green; MinGW cross-syntax OK.
 reopened: []
 cancelled: null
 ---
@@ -34,14 +48,15 @@ msgs); AES256-KEK-serving-AES128 width rule; tamper → 406. EHEMTEST
 AES-256 key, cleanup per REQ-TEST-003.
 
 **Definition of done**
-- [ ] Both bindings + free functions exported, tagged
+- [x] Both bindings + free functions exported, tagged
       `implements: REQ-OPS-009`; unwrapped buffer zeroized on free;
       header docs record the arbitrated HKDF info string and alignment
       rules
-- [ ] Unit tests green (gcc+clang+asan): body bytes for direct/ext_kid/
+- [x] Unit tests green (gcc+clang+asan): body bytes for direct/ext_kid/
       pubkey/ctx/iv variants, ARG pre-validation (both-peers, iv≠8, msg
       caps) with zero I/O, 400/403/406 mapping, response decode
-- [ ] Live: wrap→unwrap round-trip green; tampered wrapped → 406; local
+- [x] Live: wrap→unwrap round-trip green; tampered wrapped → 406; local
       wc_AesKeyWrap byte-exact match; REQ-OPS-009 open criteria (info
       string, alignment, width, unwrap field) resolved and recorded
-- [ ] Export/header gates green; MinGW cross-syntax check run
+      (rev2)
+- [x] Export/header gates green; MinGW cross-syntax check run
