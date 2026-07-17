@@ -3,7 +3,7 @@ id: REQ-SYS-007
 title: Binding for /api/system/selftest — run the self-test battery and read repo stats
 status: approved
 priority: must
-revision: 1
+revision: 2
 source: ARCHITECTURE.md §11 (M7: system group); encedo-hem-api-doc system/selftest.md; encedo_firmware api_system.c:260 api_get_system_selftest (fw v1.2.2); approved 2026-07-17
 depends_on: ["REQ-AUTH-002", "REQ-AUTH-003"]
 supersedes: null
@@ -42,13 +42,16 @@ slot exhaustion — both feed the hem-tool selftest subcommand
 - [ ] Unit (fake transport): full-shape fixture parsed into the struct;
       minimal fixture (no kat_busy/se_state) → defaults false/−1;
       missing `fls_state` → `EHEM_ERR_PROTOCOL`; error mapping.
-- [ ] Live: selftest on my.ence.do → fls_state == 0, selftest_ts sane
-      (post-checkin clock), repo_stats.total consistent with
-      `ehem_key_list`'s total (±0 — same repo); se_state
-      presence/absence recorded (PPA/EPA data point).
-- [ ] OPEN (live probe): call latency measured and recorded (synchronous
-      KAT re-run — does it fit the default 30 s timeout or does the
-      binding doc recommend a longer per-context timeout?).
-- [ ] OPEN (live probe): a token with an unrelated scope (e.g.
-      `keymgmt:list`) is accepted (any-scope confirmed) — recorded, SDK
-      keeps requesting `system:config`.
+- [x] Live (my.ence.do fw v1.2.2-DIAG, 2026-07-18): fls_state == 0,
+      selftest_ts sane, repo_stats present (total=4 keys, deleted=1554,
+      fragmented=99, freeslots=1616 — heavy EHEMTEST churn history
+      visible); **se_state present (=0) → the dev device is a PPA build**
+      (ATECC secure enclave live) — the shared PPA/EPA determination for
+      REQ-SYS-009/010/011. `kat_busy` observed true mid-run.
+- [x] ~~OPEN~~ **RESOLVED (live 2026-07-18):** latency ≈ 5 s wall-clock —
+      fits the 30 s default total timeout comfortably; no special
+      guidance needed beyond the don't-poll-in-a-loop note.
+- [x] ~~OPEN~~ **RESOLVED (live probe 2026-07-18, python-driven):** a
+      `keymgmt:list`-scoped token IS accepted by selftest (any-scope
+      confirmed, matching the firmware's "Scope: any"); the SDK keeps
+      requesting `system:config`.

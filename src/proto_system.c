@@ -3,6 +3,7 @@
  * check-in handshake (+ cert harvest), device config, cert install, and reboot.
  *
  * implements: REQ-SYS-001, REQ-SYS-002, REQ-SYS-003, REQ-SYS-004, REQ-SYS-005,
+ *             REQ-SYS-007, REQ-SYS-008, REQ-SYS-011,
  *             REQ-SYS-006, REQ-API-005
  *
  * The first real protocol bindings and the template the rest follow: build a
@@ -762,5 +763,174 @@ ehem_rc ehem_system_reboot(ehem_ctx *ctx)
      * so the next authenticated call re-logs-in (REQ-SYS-005, REQ-AUTH-002). */
     ehem_auth_invalidate(ctx, NULL);
     ehem_ctx_clear_error(ctx);      /* leave a clean success state */
+    return EHEM_OK;
+}
+
+/* -------------------------------------------------------------------------- */
+/* selftest (REQ-SYS-007)                                                     */
+/* -------------------------------------------------------------------------- */
+
+ehem_rc ehem_system_selftest(ehem_ctx *ctx, ehem_selftest_info **out)
+{
+    ehem_json *root = NULL;
+    const ehem_json *stats;
+    ehem_selftest_info *info;
+    ehem_rc rc;
+
+    if (ctx == NULL || out == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    *out = NULL;
+    ehem_ctx_clear_error(ctx);
+
+    /* The firmware checks no scope here ("allowed JTW Scope: any") — the SDK
+     * requests system:config: a real firmware scope family, future-proof if
+     * the check ever tightens, shared with the REQ-SYS-004 token. */
+    rc = ehem_proto_request_json(ctx, EHEM_HTTP_GET, "/api/system/selftest",
+                                 NULL, "system:config", EHEM_TLS_REQ_DEFAULT,
+                                 &root);
+    if (rc != EHEM_OK) {
+        return rc;
+    }
+
+    info = calloc(1, sizeof *info);
+    if (info == NULL) {
+        ehem_json_free(root);
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    /* fls_state is the verdict — the one required field. */
+    if (!ehem_json_get_int64(root, "fls_state", &info->fls_state)) {
+        free(info);
+        ehem_json_free(root);
+        return ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 200, NULL,
+                             "system/selftest: response missing 'fls_state'");
+    }
+    ehem_json_get_int64(root, "selftest_ts", &info->selftest_ts);
+    ehem_json_get_int64(root, "last_selftest_ts", &info->last_selftest_ts);
+    ehem_json_get_int64(root, "last_fls_state", &info->last_fls_state);
+    ehem_json_get_int64(root, "last_entropytest_ts", &info->last_entropytest_ts);
+    ehem_json_get_int64(root, "last_kat_ts", &info->last_kat_ts);
+    ehem_json_get_bool(root, "kat_busy", &info->kat_busy);   /* absent→false */
+
+    info->se_state = -1;                       /* PPA-only field */
+    ehem_json_get_int64(root, "se_state", &info->se_state);
+
+    info->repo_total = info->repo_deleted = info->repo_invalid = -1;
+    info->repo_fragmented = info->repo_freeslots = -1;
+    stats = ehem_json_get(root, "repo_stats");
+    if (stats != NULL) {
+        ehem_json_get_int64(stats, "total", &info->repo_total);
+        ehem_json_get_int64(stats, "deleted", &info->repo_deleted);
+        ehem_json_get_int64(stats, "invalid", &info->repo_invalid);
+        ehem_json_get_int64(stats, "fragmented", &info->repo_fragmented);
+        ehem_json_get_int64(stats, "freeslots", &info->repo_freeslots);
+    }
+    ehem_json_free(root);
+    *out = info;
+    return EHEM_OK;
+}
+
+void ehem_selftest_free(ehem_selftest_info *info)
+{
+    free(info);
+}
+
+/* -------------------------------------------------------------------------- */
+/* attestation (REQ-SYS-011)                                                  */
+/* -------------------------------------------------------------------------- */
+
+ehem_rc ehem_system_attestation(ehem_ctx *ctx, ehem_attestation_info **out)
+{
+    ehem_json *root = NULL;
+    ehem_attestation_info *info;
+    const char *s;
+    ehem_rc rc;
+
+    if (ctx == NULL || out == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    *out = NULL;
+    ehem_ctx_clear_error(ctx);
+
+    /* No firmware scope check (limits tracking, not capability) — same
+     * system:config token choice and rationale as selftest. PPA-only route:
+     * an EPA build 404s → EHEM_ERR_NOT_FOUND via the shared mapping. */
+    rc = ehem_proto_request_json(ctx, EHEM_HTTP_GET,
+                                 "/api/system/config/attestation",
+                                 NULL, "system:config", EHEM_TLS_REQ_DEFAULT,
+                                 &root);
+    if (rc != EHEM_OK) {
+        return rc;   /* 404 EPA / 409 busy / 500 "atecc_N" — mapped w/ payload */
+    }
+
+    info = calloc(1, sizeof *info);
+    if (info == NULL) {
+        ehem_json_free(root);
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    /* genuine is always present; the material fields select the shape. */
+    if (!ehem_json_get_string(root, "genuine", &s)) {
+        free(info);
+        ehem_json_free(root);
+        return ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 200, NULL,
+                             "system/config/attestation: response missing "
+                             "'genuine'");
+    }
+    if (!opt_str(root, "genuine", &info->genuine) ||
+        !opt_str(root, "crt", &info->crt_b64) ||
+        !opt_str(root, "csr", &info->csr_pem) ||
+        !opt_str(root, "key", &info->key_b64)) {
+        ehem_attestation_free(info);
+        ehem_json_free(root);
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    ehem_json_free(root);
+    *out = info;
+    return EHEM_OK;
+}
+
+void ehem_attestation_free(ehem_attestation_info *info)
+{
+    if (info == NULL) {
+        return;
+    }
+    free(info->crt_b64);
+    free(info->csr_pem);
+    free(info->key_b64);
+    free(info->genuine);
+    free(info);
+}
+
+/* -------------------------------------------------------------------------- */
+/* shutdown (REQ-SYS-008)                                                     */
+/* -------------------------------------------------------------------------- */
+
+ehem_rc ehem_system_shutdown(ehem_ctx *ctx)
+{
+    char *body = NULL;
+    ehem_rc rc;
+
+    if (ctx == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    ehem_ctx_clear_error(ctx);
+
+    /* Same empty-200-then-close convention as reboot — but recovery from a
+     * shutdown needs a PHYSICAL power-cycle (no wake-up endpoint). The device
+     * accepts system:shutdown or system:config; request the narrower one. */
+    rc = ehem_proto_request_raw(ctx, EHEM_HTTP_GET, "/api/system/shutdown",
+                                NULL, "system:shutdown", EHEM_TLS_REQ_DEFAULT,
+                                &body);
+    if (rc == EHEM_OK) {
+        free(body);                 /* a body is not expected, but tolerate one */
+    } else if (rc == EHEM_ERR_PROTOCOL && ehem_last_error(ctx)->http_status == 200) {
+        rc = EHEM_OK;
+    } else {
+        return rc;                  /* 401/403/409/transport — already recorded */
+    }
+
+    /* Every issued token dies with the services — as reboot. */
+    ehem_auth_invalidate(ctx, NULL);
+    ehem_ctx_clear_error(ctx);
     return EHEM_OK;
 }

@@ -3,7 +3,7 @@ id: REQ-SYS-011
 title: Binding for /api/system/config/attestation — device attestation material
 status: approved
 priority: should
-revision: 1
+revision: 2
 source: ARCHITECTURE.md §11 (M7: system group); encedo-hem-api-doc system/config-attestation.md, system/config-provisioning.md (provisioning EXCLUDED — factory-only, 403 once initialised); encedo_firmware api_system.c:2285 api_get_system_config_attestation (fw v1.2.2); approved 2026-07-17
 depends_on: ["REQ-AUTH-002", "REQ-AUTH-003", "REQ-SYS-006"]
 supersedes: null
@@ -48,10 +48,12 @@ ASN.1 seam.
 - [ ] Unit (fake transport): both shapes parsed (crt-variant,
       csr-variant); absent `genuine` → `EHEM_ERR_PROTOCOL`; 500 body
       `"atecc_1"` lands in last-error detail; 404/409 mapping.
-- [ ] Live: attestation on my.ence.do → `crt` variant expected
-      (provisioned device); `ehem_cert_inspect(crt_b64)` yields a
-      parseable leaf (serial/CN recorded); `genuine` non-empty;
-      PPA/EPA routing recorded (shared data point with REQ-SYS-009/010).
-- [ ] OPEN (live probe): whether the attestation cert differs from the
-      TLS cert chain (expected: yes — ATECC slot cert vs flash TLS
-      cert); recorded for consumer guidance.
+- [x] Live (2026-07-18): `crt` variant returned (provisioned device,
+      PPA build — route present); `ehem_cert_inspect` parsed the leaf:
+      serial `8E`, subject CN `#0123fd3c60540abbee` (the ATECC device
+      identity); `genuine` non-empty.
+- [x] ~~OPEN~~ **RESOLVED (live 2026-07-18):** the attestation cert is a
+      DIFFERENT identity from the TLS chain (device-id CN + serial 8E vs
+      the my.ence.do ZeroSSL leaf) — consumers must not conflate the
+      two; the attestation cert proves hardware genuineness, the TLS
+      cert proves endpoint identity.

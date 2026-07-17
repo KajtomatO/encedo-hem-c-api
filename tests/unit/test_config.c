@@ -6,7 +6,13 @@
  *           system:config, cert-install POST body {"tls":{"crt":…}} +
  *           updated/reboot_required, 400/409 mapping, _free NULL-safe),
  *           REQ-SYS-005 (reboot: authenticated GET, accepts the empty 200 the
- *           device sends, drops the token cache on success)
+ *           device sends, drops the token cache on success),
+ *           REQ-SYS-007 (selftest: full/minimal shapes, kat_busy/se_state/
+ *           repo_stats defaults, missing fls_state → PROTOCOL),
+ *           REQ-SYS-011 (attestation: crt vs csr+key shapes, missing genuine
+ *           → PROTOCOL, 500 atecc_N payload preserved),
+ *           REQ-SYS-008 (shutdown: empty-200 success + full cache drop, 409
+ *           kept as DEVICE with cache intact)
  *
  * Each binding is authenticated, so every call is preceded by a login exchange
  * (challenge GET + token POST) queued via push_login().
@@ -369,11 +375,223 @@ static void test_reboot_403(void **state)
     fake_transport_free(fake);
 }
 
+/* -------------------------------------------------------------------------- */
+/* selftest (REQ-SYS-007)                                                     */
+/* -------------------------------------------------------------------------- */
+
+static void test_selftest_full_shape(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "st");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"last_selftest_ts\":1705312200,\"last_fls_state\":0,"
+        "\"last_entropytest_ts\":1705311000,\"last_kat_ts\":1705300000,"
+        "\"kat_busy\":true,\"fls_state\":0,\"selftest_ts\":1705312300,"
+        "\"repo_stats\":{\"total\":128,\"deleted\":5,\"invalid\":0,"
+        "\"fragmented\":2,\"freeslots\":867},\"se_state\":0,"
+        "\"junk\":\"ignored\"}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    ehem_selftest_info *info = NULL;
+    assert_int_equal(ehem_system_selftest(ctx, &info), EHEM_OK);
+    assert_non_null(info);
+    assert_int_equal((int)info->fls_state, 0);
+    assert_int_equal((long)info->selftest_ts, 1705312300L);
+    assert_int_equal((long)info->last_selftest_ts, 1705312200L);
+    assert_int_equal((long)info->last_entropytest_ts, 1705311000L);
+    assert_int_equal((long)info->last_kat_ts, 1705300000L);
+    assert_true(info->kat_busy);
+    assert_int_equal((int)info->se_state, 0);
+    assert_int_equal((int)info->repo_total, 128);
+    assert_int_equal((int)info->repo_deleted, 5);
+    assert_int_equal((int)info->repo_invalid, 0);
+    assert_int_equal((int)info->repo_fragmented, 2);
+    assert_int_equal((int)info->repo_freeslots, 867);
+
+    const fake_captured_request *r = fake_transport_request(fake, 2);
+    assert_int_equal(r->method, EHEM_HTTP_GET);
+    assert_string_equal(r->path, "/api/system/selftest");
+    assert_non_null(fake_transport_request_header(fake, 2, "Authorization"));
+
+    ehem_selftest_free(info);
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* Minimal body (EPA, no KAT running): kat_busy → false, se_state / repo_* →
+ * -1; missing fls_state → PROTOCOL. */
+static void test_selftest_minimal_and_missing(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "stm");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"fls_state\":3,\"selftest_ts\":42}"), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"selftest_ts\":42}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    ehem_selftest_info *info = NULL;
+    assert_int_equal(ehem_system_selftest(ctx, &info), EHEM_OK);
+    assert_int_equal((int)info->fls_state, 3);   /* a FAIL verdict passes through */
+    assert_false(info->kat_busy);
+    assert_int_equal((int)info->se_state, -1);
+    assert_int_equal((int)info->repo_total, -1);
+    assert_int_equal((int)info->repo_freeslots, -1);
+    ehem_selftest_free(info);
+
+    info = NULL;
+    assert_int_equal(ehem_system_selftest(ctx, &info), EHEM_ERR_PROTOCOL);
+    assert_null(info);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* -------------------------------------------------------------------------- */
+/* attestation (REQ-SYS-011)                                                  */
+/* -------------------------------------------------------------------------- */
+
+static void test_attestation_both_shapes(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "at");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"crt\":\"REVSQ0VSVA==\",\"genuine\":\"tok1\"}"), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"csr\":\"-----BEGIN CERTIFICATE REQUEST-----\","
+        "\"key\":\"REVSS0VZ\",\"genuine\":\"tok2\"}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    ehem_attestation_info *a = NULL;
+
+    /* Provisioned shape. */
+    assert_int_equal(ehem_system_attestation(ctx, &a), EHEM_OK);
+    assert_string_equal(a->crt_b64, "REVSQ0VSVA==");
+    assert_string_equal(a->genuine, "tok1");
+    assert_null(a->csr_pem);
+    assert_null(a->key_b64);
+    ehem_attestation_free(a);
+    assert_string_equal(fake_transport_request(fake, 2)->path,
+                        "/api/system/config/attestation");
+
+    /* Fresh-chip shape. */
+    a = NULL;
+    assert_int_equal(ehem_system_attestation(ctx, &a), EHEM_OK);
+    assert_null(a->crt_b64);
+    assert_non_null(a->csr_pem);
+    assert_string_equal(a->key_b64, "REVSS0VZ");
+    assert_string_equal(a->genuine, "tok2");
+    ehem_attestation_free(a);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* Missing genuine → PROTOCOL; 500 "atecc_1" → DEVICE with the body kept. */
+static void test_attestation_errors(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "ate");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"crt\":\"REVS\"}"), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 500,
+        "atecc_1"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    ehem_attestation_info *a = NULL;
+    assert_int_equal(ehem_system_attestation(ctx, &a), EHEM_ERR_PROTOCOL);
+    assert_null(a);
+    assert_int_equal(ehem_system_attestation(ctx, &a), EHEM_ERR_DEVICE);
+    assert_int_equal(ehem_last_error(ctx)->http_status, 500);
+    assert_non_null(strstr(ehem_last_error(ctx)->device_payload, "atecc_1"));
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* -------------------------------------------------------------------------- */
+/* shutdown (REQ-SYS-008)                                                     */
+/* -------------------------------------------------------------------------- */
+
+/* Mirrors the reboot convention: empty 200 == success + full cache drop. */
+static void test_shutdown_empty_200_drops_cache(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "sd1");                                    /* req 0,1 */
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200, NULL), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    assert_int_equal(ehem_system_shutdown(ctx), EHEM_OK);
+    assert_int_equal((int)fake_transport_request_count(fake), 3);
+
+    const fake_captured_request *sd = fake_transport_request(fake, 2);
+    assert_int_equal(sd->method, EHEM_HTTP_GET);
+    assert_string_equal(sd->path, "/api/system/shutdown");
+    assert_non_null(fake_transport_request_header(fake, 2, "Authorization"));
+
+    /* Cache dropped: the next scoped acquisition re-logs-in. */
+    push_login(fake, "sd2");
+    const char *tok = NULL;
+    assert_int_equal(ehem_auth_ensure_token(ctx, "system:shutdown", &tok),
+                     EHEM_OK);
+    assert_int_equal((int)fake_transport_request_count(fake), 5);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* 409 (install in progress) → DEVICE; cache kept. */
+static void test_shutdown_409(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "sd9");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 409,
+        "{\"error\":\"busy\"}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    assert_int_equal(ehem_system_shutdown(ctx), EHEM_ERR_DEVICE);
+    assert_int_equal(ehem_last_error(ctx)->http_status, 409);
+
+    const char *tok = NULL;
+    assert_int_equal(ehem_auth_ensure_token(ctx, "system:shutdown", &tok),
+                     EHEM_OK);
+    assert_int_equal((int)fake_transport_request_count(fake), 3);  /* cached */
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
 static void test_free_null_safe(void **state)
 {
     (void)state;
     ehem_system_config_free(NULL);
     ehem_cert_install_free(NULL);
+    ehem_selftest_free(NULL);
+    ehem_attestation_free(NULL);
 }
 
 int main(void)
@@ -388,6 +606,15 @@ int main(void)
         cmocka_unit_test(test_install_cert_409_in_progress),
         cmocka_unit_test(test_reboot_empty_200_drops_cache),
         cmocka_unit_test(test_reboot_403),
+        /* REQ-SYS-007: selftest. */
+        cmocka_unit_test(test_selftest_full_shape),
+        cmocka_unit_test(test_selftest_minimal_and_missing),
+        /* REQ-SYS-011: attestation. */
+        cmocka_unit_test(test_attestation_both_shapes),
+        cmocka_unit_test(test_attestation_errors),
+        /* REQ-SYS-008: shutdown. */
+        cmocka_unit_test(test_shutdown_empty_200_drops_cache),
+        cmocka_unit_test(test_shutdown_409),
         cmocka_unit_test(test_free_null_safe),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);

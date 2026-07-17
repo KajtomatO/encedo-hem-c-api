@@ -289,6 +289,116 @@ EHEM_API void ehem_cert_install_free(ehem_cert_install_info *info);
  */
 EHEM_API ehem_rc ehem_system_reboot(ehem_ctx *ctx);
 
+/* ==========================================================================
+ * Self-test (authenticated; the firmware checks no scope — the SDK requests
+ * "system:config" and shares that token).
+ * implements: REQ-SYS-007
+ * ========================================================================== */
+
+/*
+ * Result of ehem_system_selftest(). `fls_state` is the device's own health
+ * verdict (0 = nominal) and the one field the SDK requires in the response;
+ * everything else parses tolerantly:
+ *   - kat_busy is only emitted while a KAT run is in progress → false when
+ *     absent;
+ *   - se_state (ATECC608 secure-enclave status) is PPA-build-only → -1 when
+ *     absent;
+ *   - the repo_* fields mirror the response's repo_stats block — the ONLY
+ *     place key-slot usage is visible (status does not carry it) → -1 each
+ *     when the block is absent.
+ * Timestamps are unix seconds, retro-adjusted by the firmware when the RTC
+ * was set after a pre-clock run.
+ */
+typedef struct ehem_selftest_info {
+    int64_t fls_state;            /* current fail-state after THIS run; 0 = OK */
+    int64_t selftest_ts;          /* timestamp of this run */
+    int64_t last_selftest_ts;     /* previous run */
+    int64_t last_fls_state;       /* fail-state at the previous run */
+    int64_t last_entropytest_ts;  /* most recent entropy self-test */
+    int64_t last_kat_ts;          /* most recent known-answer-test pass */
+    bool    kat_busy;             /* a KAT run is in progress (absent→false) */
+    int64_t se_state;             /* ATECC608 status; -1 when absent (EPA) */
+    int64_t repo_total;           /* keys in the repository; -1 when absent */
+    int64_t repo_deleted;         /* logically deleted slots */
+    int64_t repo_invalid;         /* slots flagged invalid */
+    int64_t repo_fragmented;      /* slots awaiting compaction */
+    int64_t repo_freeslots;       /* free slots remaining */
+} ehem_selftest_info;
+
+/*
+ * Run the device self-test battery and read the result:
+ * GET /api/system/selftest. SIDE EFFECT BY DESIGN: every call synchronously
+ * re-runs the full battery (KAT, entropy, FLS) on the device — do not poll
+ * this in a tight loop. The firmware accepts any valid bearer (no scope
+ * check); the SDK requests "system:config".
+ *
+ * On success writes *out (caller frees with ehem_selftest_free) and returns
+ * EHEM_OK. A response without `fls_state` is EHEM_ERR_PROTOCOL; 401 maps per
+ * REQ-AUTH-003; 500 → EHEM_ERR_DEVICE.
+ */
+EHEM_API ehem_rc ehem_system_selftest(ehem_ctx *ctx, ehem_selftest_info **out);
+
+/* Release a selftest result. NULL is a no-op. */
+EHEM_API void ehem_selftest_free(ehem_selftest_info *info);
+
+/* ==========================================================================
+ * Device attestation material (authenticated; no firmware scope check — the
+ * SDK requests "system:config").
+ * implements: REQ-SYS-011
+ * ========================================================================== */
+
+/*
+ * Result of ehem_system_attestation(). Two shapes, by ATECC608 state:
+ *   - provisioned device (the normal case): `crt_b64` set (base64 DER device
+ *     certificate — inspect with ehem_cert_inspect), csr_pem/key_b64 NULL;
+ *   - fresh chip: `csr_pem` (PEM CSR) + `key_b64` (base64 DER attestation
+ *     public key) set, crt_b64 NULL.
+ * `genuine` is always present: a freshly-timestamped attestation token
+ * proving a real ATECC608 holds the private key.
+ */
+typedef struct ehem_attestation_info {
+    char *crt_b64;   /* base64 DER device certificate, or NULL */
+    char *csr_pem;   /* PEM CSR (fresh chip), or NULL */
+    char *key_b64;   /* base64 DER attestation public key (fresh chip), or NULL */
+    char *genuine;   /* attestation token (always present) */
+} ehem_attestation_info;
+
+/*
+ * Fetch ATECC608 attestation material: GET /api/system/config/attestation.
+ * PPA-only — on an EPA build the route is absent and the device 404s →
+ * EHEM_ERR_NOT_FOUND. A response without `genuine` is EHEM_ERR_PROTOCOL; a
+ * secure-element I/O failure is HTTP 500 with an "atecc_N" body →
+ * EHEM_ERR_DEVICE (body in ehem_last_error()->device_payload); 409 (install
+ * in progress / fls_state) → EHEM_ERR_DEVICE.
+ */
+EHEM_API ehem_rc ehem_system_attestation(ehem_ctx *ctx,
+                                         ehem_attestation_info **out);
+
+/* Release an attestation result. NULL is a no-op. */
+EHEM_API void ehem_attestation_free(ehem_attestation_info *info);
+
+/* ==========================================================================
+ * Shutdown (authenticated, scope "system:shutdown").
+ * implements: REQ-SYS-008
+ * ========================================================================== */
+
+/*
+ * Stop the device's network and USB services: GET /api/system/shutdown. The
+ * device answers 200, closes the connection, then stops its USB stack and
+ * web-server task ~2 s later.
+ *
+ * WARNING: there is NO wake-up endpoint — recovery from shutdown requires a
+ * PHYSICAL POWER-CYCLE of the device. This call is shipped API-complete per
+ * the architecture's dangerous-operations rule; its live test is attended-
+ * manual only and it must never run in unattended automation.
+ *
+ * As with reboot, success drops this context's entire token cache. The
+ * device accepts scope "system:shutdown" or "system:config"; the SDK
+ * requests the narrower "system:shutdown". Returns EHEM_OK once the device
+ * has accepted the shutdown; 409 (install in progress) → EHEM_ERR_DEVICE.
+ */
+EHEM_API ehem_rc ehem_system_shutdown(ehem_ctx *ctx);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
