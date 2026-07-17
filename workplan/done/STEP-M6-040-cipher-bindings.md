@@ -7,7 +7,7 @@ traces:
   architecture: ["ARCHITECTURE.md#6-protocol-bindings", "ARCHITECTURE.md#5-auth--session"]
 depends_on: ["STEP-M6-020"]
 evidence:
-  commits: ["3815983"]
+  commits: ["3815983", "a04c6f5"]
   tests: ["verifies: REQ-OPS-006 (tests/unit/test_cipher.c — 5 cases; tests/integration/test_cipher_live.c — 3 cases live green 2026-07-17)"]
   notes: >
     Unit 26/26 gcc+clang + ASan clean; export/header gates green. Live
@@ -18,7 +18,10 @@ evidence:
     HKDF-SHA256(secret, info="encedo-aes"‖ctx) — local reproduction matched
     ciphertext+tag byte-for-byte ±ctx; doc's "encedo" does NOT match
     (REQ-OPS-006 rev2). Plaintext zeroized on free; zero-length plaintext
-    (external all-padding CBC) tolerated.
+    (external all-padding CBC) tolerated. Post-done fix a04c6f5: %zu in an
+    ehem_ctx_fail format broke windows-mingw CI (the known ms_printf
+    gotcha) — %d + int cast; cross-syntax re-checked with
+    x86_64-w64-mingw32-gcc.
 reopened: []
 cancelled: null
 ---
