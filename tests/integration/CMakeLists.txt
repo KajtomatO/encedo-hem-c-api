@@ -70,6 +70,10 @@ target_compile_options(test_cipher_live PRIVATE ${EHEM_WARNING_FLAGS})
 add_test(NAME test_cipher_live COMMAND test_cipher_live)
 set_tests_properties(test_cipher_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
 
+# REQ-OPS-007/008: live ML-KEM/ML-DSA round-trips + quirk probes (public API,
+# longer keygen timeout).
+ehem_add_integration_test(test_pqc_live SOURCES test_pqc_live.c)
+
 # REQ-TEST-004: the M5 per-family generation matrix — create → list → get/
 # classify → sign(where ExDSA-capable)+local verify → delete, for every fw
 # create type. Internal-linking (crypto shim local verify), like test_sign_live.

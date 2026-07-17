@@ -3,7 +3,7 @@ id: REQ-OPS-008
 title: Bindings for /api/crypto/pqc/mldsa/sign and /verify — ML-DSA by KID
 status: approved
 priority: must
-revision: 1
+revision: 2
 source: ARCHITECTURE.md §6, §11 (M6); encedo-hem-api-doc crypto/pqc/mldsa-sign.md, mldsa-verify.md; encedo_firmware api_crypto.c api_post_crypto_pqc_mldsa_sign/_verify + crypto.c CRYPTO_MLDSA_Sign/Verify (fw v1.2.2); HEM-SDK-7 (sign), HEM-OP-1; approved 2026-07-17
 depends_on: ["REQ-AUTH-002", "REQ-AUTH-003", "REQ-OPS-001"]
 supersedes: null
@@ -59,12 +59,15 @@ with a different response shape (`alg` + raw `sign`) and no client-side
       65307) → `EHEM_ERR_DEVICE`, not `EHEM_ERR_PROTOCOL`/crash; error
       mapping and `EHEM_ERR_ARG` pre-validation with zero transport calls
       (unit tests).
-- [ ] Live round-trip on an `EHEMTEST` ML-DSA-65 key: sign → alg
-      `"MLDSA65"`, 3309-byte signature; device verify → `EHEM_OK`; the
-      same pair with a ctx round-trips and cross-ctx verify fails; one
-      additional set (44 or 87) round-tripped with its size verified;
-      cleanup per REQ-TEST-003.
-- [ ] OPEN (live probe, closes the status conflict): the HTTP status the
-      device actually emits for an invalid ML-DSA signature on fw v1.2.2
-      (doc says 406; code says garbage ≈ 65307) — record it here and, if
-      it is garbage, file it upstream as a firmware bug (non-blocking).
+- [x] Live round-trip (test_pqc_live, my.ence.do fw v1.2.2-DIAG,
+      2026-07-17) on an `EHEMTEST` MLDSA65 key: sign → alg `"MLDSA65"`,
+      3309-byte signature; device verify → `EHEM_OK`; ctx round-trip OK
+      and cross-ctx verify failed as required; MLDSA44 round-tripped with
+      a 2420-byte signature; cleanup clean.
+- [x] ~~OPEN~~ **RESOLVED (live probe 2026-07-17):** an invalid ML-DSA
+      signature produced **HTTP status 795** — a raw firmware error code
+      in the status line, NOT the documented 406 (device > doc; garbage
+      status confirmed, upstream filing = non-blocking follow-up). The
+      SDK reported `EHEM_ERR_DEVICE` with the raw status retrievable,
+      exactly per the defensive mapping; unit tests additionally pin
+      65307/−229/100 → `EHEM_ERR_DEVICE`.

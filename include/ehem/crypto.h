@@ -2,7 +2,7 @@
  * crypto.h — Encedo HEM C SDK, cryptographic-operation protocol bindings.
  *
  * implements: REQ-OPS-001, REQ-OPS-003, REQ-OPS-004, REQ-OPS-005,
- *             REQ-OPS-006
+ *             REQ-OPS-006, REQ-OPS-007, REQ-OPS-008
  *
  * The `crypto` API group (ARCHITECTURE.md §6, §11 M4/M6): single-shot
  * operations against keys that never leave the device — the SDK sends the
@@ -358,6 +358,110 @@ EHEM_API ehem_rc ehem_decrypt(ehem_ctx *ctx, const char *kid, const char *alg,
 
 /* Release (and zeroize) plaintext from ehem_decrypt(). NULL is a no-op. */
 EHEM_API void ehem_plaintext_free(ehem_plaintext *p);
+
+/* ML-KEM sizes (FIPS 203, fw v1.2.2): the shared secret is always 32; the
+ * ciphertext is 768/1088/1568 by parameter set (the key decides the set). */
+#define EHEM_MLKEM_SS_LEN 32
+#define EHEM_MLKEM_CT_MAX 1568
+
+/* Parameter-set name buffer for the PQC responses ("MLKEM768", "MLDSA65",
+ * ...). May be EMPTY: the field is informational and, on mlkem/decaps, fw
+ * v1.2.2 echoes an uninitialized buffer (REQ-OPS-007) — the SDK stores a
+ * best-effort truncated copy and never interprets it. */
+#define EHEM_PQC_ALG_SIZE 16
+
+/*
+ * ML-KEM encapsulation output: a fresh 32-byte shared secret (zeroized on
+ * free) + the ciphertext for the peer + the key's parameter set. Caller-
+ * owned; release with ehem_mlkem_encaps_result_free().
+ */
+typedef struct ehem_mlkem_encaps_result {
+    char     alg[EHEM_PQC_ALG_SIZE];
+    uint8_t  ss[EHEM_MLKEM_SS_LEN];
+    uint8_t *ct;
+    size_t   ct_len;
+} ehem_mlkem_encaps_result;
+
+/* ML-KEM decapsulation output (ss zeroized on free). */
+typedef struct ehem_mlkem_secret {
+    char    alg[EHEM_PQC_ALG_SIZE];
+    uint8_t ss[EHEM_MLKEM_SS_LEN];
+} ehem_mlkem_secret;
+
+/*
+ * ML-KEM encapsulate against the device key `kid`:
+ * POST /api/crypto/pqc/mlkem/encaps (REQ-OPS-007). The body is {kid} only —
+ * the parameter set is fixed by the key. NOTE the shared secret crosses the
+ * wire (inside TLS) by the endpoint's design; the SDK zeroizes its struct
+ * copy on free. Scope: exact "keymgmt:use:<kid>". Errors: 403 →
+ * EHEM_ERR_SCOPE_DENIED; 400/406 (not ML-KEM / not found / crypto failure)
+ * → EHEM_ERR_DEVICE. EHEM_ERR_ARG (no I/O): NULL ctx/kid/out, malformed kid.
+ */
+EHEM_API ehem_rc ehem_mlkem_encaps(ehem_ctx *ctx, const char *kid,
+                                   ehem_mlkem_encaps_result **out);
+
+/* Release (ss zeroized) an encaps result. NULL is a no-op. */
+EHEM_API void ehem_mlkem_encaps_result_free(ehem_mlkem_encaps_result *r);
+
+/*
+ * ML-KEM decapsulate `ct` with the device key `kid`:
+ * POST /api/crypto/pqc/mlkem/decaps (REQ-OPS-007). The device requires
+ * ct_len to match the key's set EXACTLY (768/1088/1568 — a mismatch is its
+ * 406); the SDK pre-validates only 1..EHEM_MLKEM_CT_MAX (it does not know
+ * the key's set). The response `alg` is unreliable on fw v1.2.2 (see
+ * EHEM_PQC_ALG_SIZE). On success writes *out (free with
+ * ehem_mlkem_secret_free(), which zeroizes).
+ */
+EHEM_API ehem_rc ehem_mlkem_decaps(ehem_ctx *ctx, const char *kid,
+                                   const uint8_t *ct, size_t ct_len,
+                                   ehem_mlkem_secret **out);
+
+/* Release (and zeroize) a decaps secret. NULL is a no-op. */
+EHEM_API void ehem_mlkem_secret_free(ehem_mlkem_secret *s);
+
+/* ML-DSA signature sizes (FIPS 204): 2420/3309/4627 by set. */
+#define EHEM_MLDSA_SIG_MAX 4627
+
+/* An ML-DSA signature + the key's parameter set ("MLDSA44/65/87").
+ * Caller-owned; release with ehem_mldsa_signature_free(). */
+typedef struct ehem_mldsa_signature {
+    char     alg[EHEM_PQC_ALG_SIZE];
+    uint8_t *sig;
+    size_t   sig_len;
+} ehem_mldsa_signature;
+
+/*
+ * ML-DSA sign: POST /api/crypto/pqc/mldsa/sign (REQ-OPS-008). `msg` is the
+ * full message (1..EHEM_SIGN_MSG_MAX — the device hashes internally);
+ * `sig_ctx` is the optional FIPS 204 context (≤ EHEM_SIGN_SIG_CTX_MAX
+ * bytes, NULL omits) — a signature made with a ctx verifies only with the
+ * same ctx. No client-side `alg` selector exists: the key's set decides and
+ * the response reports it. Scope/errors as ehem_mlkem_encaps.
+ */
+EHEM_API ehem_rc ehem_mldsa_sign(ehem_ctx *ctx, const char *kid,
+                                 const uint8_t *msg, size_t msg_len,
+                                 const uint8_t *sig_ctx, size_t sig_ctx_len,
+                                 ehem_mldsa_signature **out);
+
+/* Release an ML-DSA signature. NULL is a no-op. */
+EHEM_API void ehem_mldsa_signature_free(ehem_mldsa_signature *sig);
+
+/*
+ * ML-DSA verify: POST /api/crypto/pqc/mldsa/verify (REQ-OPS-008). EHEM_OK
+ * exactly when the device reports the signature valid (empty-body 200).
+ *
+ * FIRMWARE QUIRK (fw v1.2.2): a FAILED verification does not produce the
+ * documented 406 — the handler passes the crypto layer's raw failure code
+ * into the HTTP status line (api_crypto.c:2545), yielding an out-of-range
+ * status. The SDK therefore maps ANY completed non-200 response that is not
+ * an auth failure (401/403) to EHEM_ERR_DEVICE with the raw status
+ * retrievable via ehem_last_error() — including statuses outside 100..599.
+ * Genuine transport failures keep their EHEM_ERR_NETWORK/UNREACHABLE codes.
+ */
+EHEM_API ehem_rc ehem_mldsa_verify(ehem_ctx *ctx, const char *kid,
+                                   const uint8_t *msg, size_t msg_len,
+                                   const uint8_t *sig_ctx, size_t sig_ctx_len,
+                                   const uint8_t *sig, size_t sig_len);
 
 #ifdef __cplusplus
 } /* extern "C" */

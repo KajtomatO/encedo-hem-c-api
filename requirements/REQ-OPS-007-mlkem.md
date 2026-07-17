@@ -3,7 +3,7 @@ id: REQ-OPS-007
 title: Bindings for /api/crypto/pqc/mlkem/encaps and /decaps — ML-KEM by KID
 status: approved
 priority: must
-revision: 1
+revision: 2
 source: ARCHITECTURE.md §6, §11 (M6); encedo-hem-api-doc crypto/pqc/mlkem-encaps.md, mlkem-decaps.md; encedo_firmware api_crypto.c api_post_crypto_pqc_mlkem_encaps/_decaps + crypto.c CRYPTO_MLKEM_Encaps/Decaps (fw v1.2.2); HEM-SDK-7; approved 2026-07-17
 depends_on: ["REQ-AUTH-002", "REQ-AUTH-003"]
 supersedes: null
@@ -55,11 +55,15 @@ same kid.
       `alg` tolerated absent; ss zeroized on free, `_free` NULL-safe;
       error mapping and `EHEM_ERR_ARG` pre-validation with zero transport
       calls (unit tests asserting body bytes).
-- [ ] Live round-trip on an `EHEMTEST` ML-KEM-768 key: encaps → alg
-      `"MLKEM768"`, 32-byte ss, 1088-byte ct; decaps(ct) → identical ss;
-      decaps with a truncated ct → 406/`EHEM_ERR_DEVICE`; one additional
-      set (512 or 1024) round-tripped with its ct size verified; cleanup
-      per REQ-TEST-003.
-- [ ] OPEN (live, informational): record what decaps actually returns in
-      `alg` on fw v1.2.2 (expected garbage/absent per the prototype
-      mismatch) here.
+- [x] Live round-trip (test_pqc_live, my.ence.do fw v1.2.2-DIAG,
+      2026-07-17) on an `EHEMTEST` MLKEM768 key: encaps → alg `"MLKEM768"`,
+      32-byte ss, 1088-byte ct; decaps(ct) → identical ss; truncated ct →
+      406/`EHEM_ERR_DEVICE`; MLKEM512 round-tripped with a 768-byte ct;
+      cleanup clean.
+- [x] ~~OPEN~~ **RESOLVED (live 2026-07-17):** decaps `alg` returned
+      `"keymgmt:use:2cd…"` — the handler echoes its scope-check SCRATCH
+      BUFFER exactly as the prototype mismatch predicts (crypto.h:27 vs
+      api_crypto.c:2177; the buffer last held the request's scope string,
+      so this is also a minor response-content bug worth filing upstream).
+      The SDK's tolerant handling (informational, truncated, never
+      interpreted) is confirmed correct.

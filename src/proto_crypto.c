@@ -1009,3 +1009,428 @@ void ehem_plaintext_free(ehem_plaintext *p)
     }
     free(p);
 }
+
+/* implements: REQ-OPS-007, REQ-OPS-008 (PQC bindings below; the file header
+ * tag block lists the whole group) */
+
+/* Copy an optional response `alg` name (best-effort, truncated; empty when
+ * absent — on mlkem/decaps fw v1.2.2 echoes an unwritten buffer). */
+static void copy_alg(ehem_json *root, char out[EHEM_PQC_ALG_SIZE])
+{
+    const char *alg;
+
+    out[0] = '\0';
+    if (ehem_json_get_string(root, "alg", &alg)) {
+        snprintf(out, EHEM_PQC_ALG_SIZE, "%s", alg);
+    }
+}
+
+/* Decode a required fixed-length base64 field (the 32-byte ss). */
+static bool decode_ss(ehem_json *root, uint8_t ss[EHEM_MLKEM_SS_LEN])
+{
+    const char *b64;
+    uint8_t buf[EHEM_MLKEM_SS_LEN + 4];
+    size_t n;
+
+    if (!ehem_json_get_string(root, "ss", &b64) || b64[0] == '\0') {
+        return false;
+    }
+    n = ehem_b64_std_decode(b64, strlen(b64), buf, sizeof buf);
+    if (n != EHEM_MLKEM_SS_LEN) {
+        ehem_zeroize(buf, sizeof buf);
+        return false;
+    }
+    memcpy(ss, buf, EHEM_MLKEM_SS_LEN);
+    ehem_zeroize(buf, sizeof buf);
+    return true;
+}
+
+ehem_rc ehem_mlkem_encaps(ehem_ctx *ctx, const char *kid,
+                          ehem_mlkem_encaps_result **out)
+{
+    char scope[64];
+    char *body;
+    ehem_json *body_obj;
+    ehem_json *root = NULL;
+    ehem_mlkem_encaps_result *result;
+    const char *ct_b64;
+    size_t b64_len;
+    size_t n;
+    ehem_rc rc;
+
+    if (ctx == NULL || kid == NULL || out == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    *out = NULL;
+    ehem_ctx_clear_error(ctx);
+
+    if (!ehem_proto_is_kid_hex(kid)) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                             "crypto/mlkem/encaps: kid must be exactly 32 "
+                             "hex chars");
+    }
+
+    body_obj = ehem_json_new_object();
+    if (body_obj == NULL ||
+        !ehem_json_add_string(body_obj, "kid", kid)) {
+        ehem_json_free(body_obj);
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    body = ehem_json_print(body_obj);
+    ehem_json_free(body_obj);
+    if (body == NULL) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+
+    snprintf(scope, sizeof scope, "keymgmt:use:%s", kid);
+
+    rc = ehem_proto_request_json(ctx, EHEM_HTTP_POST,
+                                 "/api/crypto/pqc/mlkem/encaps",
+                                 body, scope, EHEM_TLS_REQ_DEFAULT, &root);
+    ehem_json_string_free(body);
+    if (rc != EHEM_OK) {
+        return rc;
+    }
+
+    if (!ehem_json_get_string(root, "ct", &ct_b64) || ct_b64[0] == '\0') {
+        ehem_json_free(root);
+        return ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 200, NULL,
+                             "crypto/mlkem/encaps: response missing 'ct'");
+    }
+
+    result = calloc(1, sizeof *result);
+    b64_len = strlen(ct_b64);
+    if (result != NULL) {
+        result->ct = malloc(b64_len);   /* decoded ≤ encoded */
+    }
+    if (result == NULL || result->ct == NULL) {
+        ehem_mlkem_encaps_result_free(result);
+        ehem_json_free(root);
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    n = ehem_b64_std_decode(ct_b64, b64_len, result->ct, b64_len);
+    if (n == (size_t)-1 || n == 0 || !decode_ss(root, result->ss)) {
+        ehem_mlkem_encaps_result_free(result);
+        ehem_json_free(root);
+        return ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 200, NULL,
+                             "crypto/mlkem/encaps: malformed 'ct'/'ss'");
+    }
+    result->ct_len = n;
+    copy_alg(root, result->alg);
+    ehem_json_free(root);
+
+    *out = result;
+    return EHEM_OK;
+}
+
+void ehem_mlkem_encaps_result_free(ehem_mlkem_encaps_result *r)
+{
+    if (r == NULL) {
+        return;
+    }
+    ehem_zeroize(r->ss, sizeof r->ss);
+    free(r->ct);
+    free(r);
+}
+
+ehem_rc ehem_mlkem_decaps(ehem_ctx *ctx, const char *kid,
+                          const uint8_t *ct, size_t ct_len,
+                          ehem_mlkem_secret **out)
+{
+    char scope[64];
+    char *field;
+    char *body;
+    ehem_json *body_obj;
+    ehem_json *root = NULL;
+    ehem_mlkem_secret *result;
+    ehem_rc rc;
+
+    if (ctx == NULL || kid == NULL || ct == NULL || out == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    *out = NULL;
+    ehem_ctx_clear_error(ctx);
+
+    if (!ehem_proto_is_kid_hex(kid)) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                             "crypto/mlkem/decaps: kid must be exactly 32 "
+                             "hex chars");
+    }
+    if (ct_len < 1 || ct_len > EHEM_MLKEM_CT_MAX) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                             "crypto/mlkem/decaps: ct must be 1..%d bytes "
+                             "(the key's set demands its exact size)",
+                             EHEM_MLKEM_CT_MAX);
+    }
+
+    body_obj = ehem_json_new_object();
+    if (body_obj == NULL) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    field = b64_dup(ct, ct_len);
+    if (!ehem_json_add_string(body_obj, "kid", kid) ||
+        field == NULL ||
+        !ehem_json_add_string(body_obj, "ct", field)) {
+        free(field);
+        ehem_json_free(body_obj);
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    free(field);
+    body = ehem_json_print(body_obj);
+    ehem_json_free(body_obj);
+    if (body == NULL) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+
+    snprintf(scope, sizeof scope, "keymgmt:use:%s", kid);
+
+    rc = ehem_proto_request_json(ctx, EHEM_HTTP_POST,
+                                 "/api/crypto/pqc/mlkem/decaps",
+                                 body, scope, EHEM_TLS_REQ_DEFAULT, &root);
+    ehem_json_string_free(body);
+    if (rc != EHEM_OK) {
+        return rc;
+    }
+
+    result = calloc(1, sizeof *result);
+    if (result == NULL) {
+        ehem_json_free(root);
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    if (!decode_ss(root, result->ss)) {
+        ehem_mlkem_secret_free(result);
+        ehem_json_free(root);
+        return ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 200, NULL,
+                             "crypto/mlkem/decaps: response missing/bad 'ss'");
+    }
+    copy_alg(root, result->alg);
+    ehem_json_free(root);
+
+    *out = result;
+    return EHEM_OK;
+}
+
+void ehem_mlkem_secret_free(ehem_mlkem_secret *s)
+{
+    if (s == NULL) {
+        return;
+    }
+    ehem_zeroize(s->ss, sizeof s->ss);
+    free(s);
+}
+
+/* Shared body builder for the two mldsa endpoints ({kid,msg[,sign][,ctx]}). */
+static char *mldsa_build(ehem_ctx *ctx, const char *what,
+                         const char *kid,
+                         const uint8_t *msg, size_t msg_len,
+                         const uint8_t *sig, size_t sig_len,
+                         const uint8_t *sig_ctx, size_t sig_ctx_len,
+                         ehem_rc *rc_out)
+{
+    char *field = NULL;
+    char *body;
+    ehem_json *body_obj;
+
+    *rc_out = EHEM_ERR_ARG;
+
+    if (!ehem_proto_is_kid_hex(kid)) {
+        ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                      "%s: kid must be exactly 32 hex chars", what);
+        return NULL;
+    }
+    if (msg_len < 1 || msg_len > EHEM_SIGN_MSG_MAX) {
+        ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                      "%s: msg must be 1..%d bytes", what, EHEM_SIGN_MSG_MAX);
+        return NULL;
+    }
+    if (sig != NULL && (sig_len < 1 || sig_len > EHEM_MLDSA_SIG_MAX)) {
+        ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                      "%s: sig must be 1..%d bytes", what,
+                      EHEM_MLDSA_SIG_MAX);
+        return NULL;
+    }
+    if ((sig_ctx == NULL && sig_ctx_len != 0) ||
+        sig_ctx_len > EHEM_SIGN_SIG_CTX_MAX) {
+        ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                      "%s: sig_ctx must be at most %d bytes", what,
+                      EHEM_SIGN_SIG_CTX_MAX);
+        return NULL;
+    }
+
+    *rc_out = EHEM_ERR_NOMEM;
+    body_obj = ehem_json_new_object();
+    if (body_obj == NULL) {
+        ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+        return NULL;
+    }
+    if (!ehem_json_add_string(body_obj, "kid", kid)) {
+        goto oom;
+    }
+    if ((field = b64_dup(msg, msg_len)) == NULL ||
+        !ehem_json_add_string(body_obj, "msg", field)) {
+        goto oom;
+    }
+    free(field);
+    field = NULL;
+    if (sig != NULL) {
+        if ((field = b64_dup(sig, sig_len)) == NULL ||
+            !ehem_json_add_string(body_obj, "sign", field)) {
+            goto oom;
+        }
+        free(field);
+        field = NULL;
+    }
+    if (sig_ctx != NULL && sig_ctx_len > 0) {
+        if ((field = b64_dup(sig_ctx, sig_ctx_len)) == NULL ||
+            !ehem_json_add_string(body_obj, "ctx", field)) {
+            goto oom;
+        }
+        free(field);
+        field = NULL;
+    }
+
+    body = ehem_json_print(body_obj);
+    ehem_json_free(body_obj);
+    if (body == NULL) {
+        ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+        return NULL;
+    }
+    *rc_out = EHEM_OK;
+    return body;
+
+oom:
+    free(field);
+    ehem_json_free(body_obj);
+    ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    return NULL;
+}
+
+ehem_rc ehem_mldsa_sign(ehem_ctx *ctx, const char *kid,
+                        const uint8_t *msg, size_t msg_len,
+                        const uint8_t *sig_ctx, size_t sig_ctx_len,
+                        ehem_mldsa_signature **out)
+{
+    char scope[64];
+    char *body;
+    ehem_json *root = NULL;
+    ehem_mldsa_signature *result;
+    const char *sign_b64;
+    size_t b64_len;
+    size_t n;
+    ehem_rc rc;
+
+    if (ctx == NULL || kid == NULL || msg == NULL || out == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    *out = NULL;
+    ehem_ctx_clear_error(ctx);
+
+    body = mldsa_build(ctx, "crypto/mldsa/sign", kid, msg, msg_len,
+                       NULL, 0, sig_ctx, sig_ctx_len, &rc);
+    if (body == NULL) {
+        return rc;
+    }
+
+    snprintf(scope, sizeof scope, "keymgmt:use:%s", kid);
+
+    rc = ehem_proto_request_json(ctx, EHEM_HTTP_POST,
+                                 "/api/crypto/pqc/mldsa/sign",
+                                 body, scope, EHEM_TLS_REQ_DEFAULT, &root);
+    ehem_json_string_free(body);
+    if (rc != EHEM_OK) {
+        return rc;
+    }
+
+    if (!ehem_json_get_string(root, "sign", &sign_b64) ||
+        sign_b64[0] == '\0') {
+        ehem_json_free(root);
+        return ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 200, NULL,
+                             "crypto/mldsa/sign: response missing 'sign'");
+    }
+
+    result = calloc(1, sizeof *result);
+    b64_len = strlen(sign_b64);
+    if (result != NULL) {
+        result->sig = malloc(b64_len);   /* decoded ≤ encoded */
+    }
+    if (result == NULL || result->sig == NULL) {
+        ehem_mldsa_signature_free(result);
+        ehem_json_free(root);
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    n = ehem_b64_std_decode(sign_b64, b64_len, result->sig, b64_len);
+    if (n == (size_t)-1 || n == 0) {
+        ehem_mldsa_signature_free(result);
+        ehem_json_free(root);
+        return ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 200, NULL,
+                             "crypto/mldsa/sign: 'sign' is not valid base64");
+    }
+    result->sig_len = n;
+    copy_alg(root, result->alg);
+    ehem_json_free(root);
+
+    *out = result;
+    return EHEM_OK;
+}
+
+void ehem_mldsa_signature_free(ehem_mldsa_signature *sig)
+{
+    if (sig == NULL) {
+        return;
+    }
+    free(sig->sig);
+    free(sig);
+}
+
+ehem_rc ehem_mldsa_verify(ehem_ctx *ctx, const char *kid,
+                          const uint8_t *msg, size_t msg_len,
+                          const uint8_t *sig_ctx, size_t sig_ctx_len,
+                          const uint8_t *sig, size_t sig_len)
+{
+    char scope[64];
+    char *body;
+    char *resp = NULL;
+    long status;
+    ehem_rc rc;
+
+    if (ctx == NULL || kid == NULL || msg == NULL || sig == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    ehem_ctx_clear_error(ctx);
+
+    body = mldsa_build(ctx, "crypto/mldsa/verify", kid, msg, msg_len,
+                       sig, sig_len, sig_ctx, sig_ctx_len, &rc);
+    if (body == NULL) {
+        return rc;
+    }
+
+    snprintf(scope, sizeof scope, "keymgmt:use:%s", kid);
+
+    rc = ehem_proto_request_raw(ctx, EHEM_HTTP_POST,
+                                "/api/crypto/pqc/mldsa/verify",
+                                body, scope, EHEM_TLS_REQ_DEFAULT, &resp);
+    ehem_json_string_free(body);
+    if (rc == EHEM_OK) {
+        free(resp);             /* valid: empty 200; tolerate a body anyway */
+        ehem_ctx_clear_error(ctx);
+        return EHEM_OK;
+    }
+
+    status = ehem_last_error(ctx)->http_status;
+    if (rc == EHEM_ERR_PROTOCOL && status == 200) {
+        /* Valid signature = EMPTY 200 (shared-path empty-body detour). */
+        ehem_ctx_clear_error(ctx);
+        return EHEM_OK;
+    }
+    if (rc == EHEM_ERR_PROTOCOL && status != 0) {
+        /* FW QUIRK (REQ-OPS-008): a failed verify puts the crypto layer's
+         * raw error code in the status line, which can land outside
+         * 100..599 and map to PROTOCOL above. The device DID answer — this
+         * is its (buggy) failure report, not a protocol breakdown. */
+        return ehem_ctx_fail(ctx, EHEM_ERR_DEVICE, status, NULL,
+                             "crypto/mldsa/verify: device reported failure "
+                             "(raw status %ld — fw v1.2.2 emits its crypto "
+                             "error code here)", status);
+    }
+    return rc;
+}
