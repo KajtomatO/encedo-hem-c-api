@@ -65,6 +65,53 @@ stall.
   `vAssertCalled` real bodies (log + reset, not spin).
 - Investigate the stall itself under sustained API load.
 
+## OPEN — Device clock runs ~8% fast; login breaks after ~12 h; check-in resyncs
+
+**Status:** open (device/firmware issue; workaround known, SDK/consumer
+recommendation below). **Affected:** every authenticated call — the login
+starts failing device-wide once the drift accumulates.
+
+### Symptom and measurements (dev HEM my.ence.do, fw v1.2.2-DIAG, 2026-07-17)
+
+Every login returned **401 on the token POST** with correct credentials.
+Root cause: the device RTC **gains ~8% continuously** — measured twice via
+the challenge `exp` (= device_now + 60): ~77 min ahead after ~15.4 h of
+uptime, and ~380 s ahead after ~80 min of uptime following a power-cycle.
+Since STEP-M2-045 the SDK requests bearer `exp = local_now + 3600`; once the
+device clock is more than that ahead, the requested expiry is already in the
+device's past → the eJWT is rejected as expired. At ~8% drift that happens
+roughly **12 hours after the last resync**.
+
+The existing automatic recovery (REQ-NET-005 / REQ-AUTH-001) does NOT
+trigger here: it keys on expired-cert TLS failures and on a challenge-GET
+403, not on a token-POST 401.
+
+### Workaround
+
+`hem-tool checkin` (or `ehem_system_checkin()`): the check-in flow resyncs
+the device clock as a side effect — verified twice on 2026-07-17 (challenge
+`exp` returned to exactly now + 60 both times). Run it after any device
+power-cycle and periodically on long-lived deployments.
+
+### Recommendation for consumers / possible SDK feature (note 2026-07-17)
+
+The **encedo-pkcs11 (Cryptoki) implementation should probably run a
+check-in whenever a new session starts** (C_Initialize or first
+C_OpenSession per slot) — it is one unauthenticated round-trip, it heals
+both known device time/cert pathologies (this drift and the REQ-SYS-003
+certificate rotation), and it makes the later authenticated calls
+predictable. Possibly this belongs in the SDK itself as an **opt-in
+option** (e.g. `ehem_options.checkin_on_login`, or extending the
+REQ-NET-005-style auto-recovery to a single check-in + retry on a login
+401) so every consumer gets it without re-implementing. Not decided —
+candidate REQ for a future milestone (user note, 2026-07-17).
+
+### Upstream (firmware) fixes to file
+
+- RTC gains ~8% — calibrate/fix the clock source.
+- Consider tolerating a client `exp` beyond the intended lifetime by
+  clamping instead of rejecting (defense against exactly this drift).
+
 ## RESOLVED — Windows (MinGW) X25519 crash: missing wolfCrypt_Init()
 
 **Status:** resolved 2026-07-16 (same day it was shelved). **Affected:**
