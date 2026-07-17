@@ -1,7 +1,7 @@
 ---
 id: REQ-NET-006
 title: Optional client-side request pacing
-status: approved
+status: verified
 priority: should
 revision: 1
 source: user decision 2026-07-17 (mitigate dev-HEM stalls/hangs under back-to-back load — see KNOWN-ISSUES.md; approved 2026-07-17); ARCHITECTURE.md §7 (timeouts are options; retries are the caller's)

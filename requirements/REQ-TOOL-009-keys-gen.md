@@ -1,7 +1,7 @@
 ---
 id: REQ-TOOL-009
 title: hem-tool keys gen — generate a key on the device
-status: approved
+status: verified
 priority: should
 revision: 1
 source: user decision 2026-07-16 (M5 decomposition: add hem-tool keys gen); ARCHITECTURE.md §8 (thin consumer, subcommands grow with milestones); HEM-SDK-6 (generate); approved 2026-07-16

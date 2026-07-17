@@ -1,7 +1,7 @@
 ---
 id: REQ-TEST-004
 title: Per-family generation matrix — every fw create type exercised live
-status: approved
+status: verified
 priority: must
 revision: 1
 source: ARCHITECTURE.md §11 (M5 gate); user decision 2026-07-16 (M5 decomposition); firmware v1.2.2 api_keymgmt.c:866-963 (create type vocabulary, ground truth per REQ-MGMT §8); approved 2026-07-16
