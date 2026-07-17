@@ -3,7 +3,7 @@ id: REQ-KEY-008
 title: Binding for /api/keymgmt/import — import an external public key
 status: approved
 priority: must
-revision: 1
+revision: 2
 source: ARCHITECTURE.md §11 (M7: keymgmt import); encedo-hem-api-doc keymgmt/import.md; encedo_firmware api_keymgmt.c:1123 api_post_keymgmt_import (fw v1.2.2; REPO_ImportKey body not in the source checkout); encedo-hem-python-api keymgmt.py import_key (406 = dedup finding); approved 2026-07-17
 depends_on: ["REQ-AUTH-002", "REQ-AUTH-003", "REQ-KEY-006"]
 supersedes: null
@@ -53,14 +53,19 @@ the device arbitrates.
       `mode`/`descr` only when given (bytes asserted); `{"kid"}` parsed
       to out_kid; 400/403/406 mapping; `EHEM_ERR_ARG` pre-validation
       with zero transport calls.
-- [ ] Live: import a shim-generated X25519 public key (EHEMTEST label) →
-      `ehem_ecdh` via `ext_kid` against a device key matches the
-      shim-computed shared secret byte-exact; list shows the imported
-      key's flag-set (recorded for REQ-KEY-006 vocabulary); delete.
-- [ ] Live: re-import of the identical pubkey → 406 (dedup) confirmed
-      and recorded.
-- [ ] OPEN (live probe): which `type` families import on fw v1.2.2 —
-      probe at least SECP256R1 (compressed x963, as `ehem_key_get`
-      exports), ED25519, and MLKEM512 (800-byte pubkey, testing the dead
-      70-byte cap); record accepted/rejected per family and the expected
-      pubkey encoding for NIST curves.
+- [x] Live (2026-07-18): imported a shim-generated X25519 public key →
+      readback via get is byte-identical → `ehem_ecdh` via `ext_kid`
+      against a device key matched the shim-computed shared secret
+      byte-exact; cleanup clean.
+- [x] ~~OPEN~~ **RESOLVED (live 2026-07-18):** re-import of the identical
+      pubkey → HTTP 406 with an EMPTY payload — the dedup rejection
+      (python finding confirmed; the device gives no error body to
+      distinguish dedup from other repo rejects).
+- [x] ~~OPEN~~ **RESOLVED (live probe 2026-07-18):** type support on fw
+      v1.2.2-DIAG — SECP256R1 (SEC1 COMPRESSED point, 33 B, mode
+      ECDH,ExDSA) ACCEPTED; ED25519 (raw 32 B) ACCEPTED; **MLKEM512 with
+      an 800-byte pubkey ACCEPTED** — the nominal 70-byte decoded cap is
+      confirmed dead code (no length rejection whatsoever; the repo did
+      not validate the ML-KEM key material either — arbitrary bytes of
+      the right shape stored fine). NIST encoding = the compressed x963
+      form `ehem_key_get` exports.

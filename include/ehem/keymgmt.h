@@ -255,6 +255,97 @@ EHEM_API ehem_rc ehem_key_get(ehem_ctx *ctx, const char *kid,
 EHEM_API void ehem_key_details_free(ehem_key_details *details);
 
 /* ==========================================================================
+ * Key metadata update (authenticated, scope "keymgmt:upd").
+ * implements: REQ-KEY-007
+ * ========================================================================== */
+
+/*
+ * Rewrite a key's LABEL and (optionally) DESCR: POST /api/keymgmt/update
+ * (scope "keymgmt:upd"). Does not rotate key material.
+ *
+ * `label` is REQUIRED — the firmware's parse rejects a body without it (400),
+ * even for a descr-only intent (fw v1.2.2 api_post_keymgmt_update; the
+ * label-or-descr fallback in the handler is dead code). It follows the same
+ * 1..32-printable-bytes policy as create. `descr`/`descr_len` set the stored
+ * DESCR (raw bytes, SDK base64-encodes, capped at 64 like create).
+ *
+ * WARNING — whole-record semantics (live-proven 2026-07-18, device > doc):
+ * the firmware REWRITES the key's metadata record, so passing NULL / 0 for
+ * descr CLEARS any stored DESCR rather than leaving it unchanged (the API
+ * doc's "omitted fields left untouched" note is wrong). A caller that wants
+ * to keep the existing DESCR must read it first and resend it.
+ *
+ * Returns EHEM_OK on the device's empty 200. EHEM_ERR_ARG (no network I/O) on
+ * a NULL ctx/kid/label, a kid that is not 32 hex chars, a label outside the
+ * policy, or descr_len > 64. A kid the device does not hold is HTTP 406 →
+ * EHEM_ERR_NOT_FOUND; 400 → EHEM_ERR_DEVICE with payload; 401/403 map per
+ * REQ-AUTH-003. NOTE for hem-tool-style consumers: renaming a key can add or
+ * remove its protected-set classification (REQ-TOOL-005) — the SDK applies no
+ * such policy itself.
+ */
+EHEM_API ehem_rc ehem_key_update(ehem_ctx *ctx, const char *kid,
+                                 const char *label,
+                                 const uint8_t *descr, size_t descr_len);
+
+/* ==========================================================================
+ * Public-key import (authenticated, scope "keymgmt:imp").
+ * implements: REQ-KEY-008
+ * ========================================================================== */
+
+/*
+ * Parameters for ehem_key_import(). `type`, `label`, and `pubkey` are
+ * required; `mode` and `descr` are optional (NULL / 0 to omit). As with
+ * create, the SDK keeps no type allowlist: `type` and `mode` pass through
+ * verbatim and the device is the authority.
+ */
+typedef struct ehem_key_import_params {
+    /* Algorithm literal of the imported public key, per encedo-hem-api-doc
+     * keymgmt/import.md — asymmetric only ("SECP256R1", "CURVE25519",
+     * "ED25519", "MLKEM768", ...). Symmetric types (AES/HMAC) are rejected by
+     * the device: importing raw symmetric material is unsupported by design. */
+    const char    *type;
+
+    /* Human label, same 1..32 printable-bytes policy as create. */
+    const char    *label;
+
+    /* The RAW public key bytes (SDK base64-encodes for the wire). Encoding is
+     * algorithm-native: X25519/Ed25519 raw 32 bytes, NIST curves the SEC1
+     * point form the device exports from ehem_key_get() (compressed x963).
+     * The firmware's nominal 70-byte decoded cap is dead code (its length
+     * check is broken), so the SDK imposes no client-side length cap — the
+     * device's repo import is the authority on what fits. */
+    const uint8_t *pubkey;
+    size_t         pubkey_len;
+
+    /* Optional role mode, NIST-P ECC only: exact literals "ECDH", "ExDSA", or
+     * "ECDH,ExDSA" (anything else is a device 400). NULL omits the field. */
+    const char    *mode;
+
+    /* Optional opaque blob, as create (raw bytes, ≤ 64, SDK base64-encodes). */
+    const uint8_t *descr;
+    size_t         descr_len;
+} ehem_key_import_params;
+
+/*
+ * Import an external PUBLIC key into the device repository:
+ * POST /api/keymgmt/import (scope "keymgmt:imp"). The stored key can then be
+ * referenced by kid as the peer of crypto operations (ehem_ecdh ext_kid,
+ * ehem_verify, cipher wrap). There is no private-key import.
+ *
+ * On success writes the new key id (32 hex chars + NUL) into `kid_out` — a
+ * caller-provided buffer of at least EHEM_KID_HEX_SIZE bytes — and returns
+ * EHEM_OK. EHEM_ERR_ARG (no network I/O) on NULL/missing required fields, a
+ * label outside policy, an empty pubkey, or descr_len > 64. HTTP 406 means
+ * the repo rejected the import — the known live cause is key deduplication
+ * (this exact public key already exists on the device; python-client finding)
+ * — mapped to EHEM_ERR_DEVICE with the payload retrievable; 400 →
+ * EHEM_ERR_DEVICE; 401/403 map per REQ-AUTH-003.
+ */
+EHEM_API ehem_rc ehem_key_import(ehem_ctx *ctx,
+                                 const ehem_key_import_params *params,
+                                 char *kid_out);
+
+/* ==========================================================================
  * Key-type classification (pure, client-side — no I/O, no allocation).
  * implements: REQ-KEY-006
  *

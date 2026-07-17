@@ -2,7 +2,8 @@
  * test_keymgmt.c — the keymgmt bindings (list, search, create, delete, get)
  * driven offline through the fake transport.
  *
- * verifies: REQ-KEY-001, REQ-KEY-002, REQ-KEY-003, REQ-KEY-004, REQ-KEY-005
+ * verifies: REQ-KEY-001, REQ-KEY-002, REQ-KEY-003, REQ-KEY-004, REQ-KEY-005,
+ *           REQ-KEY-007, REQ-KEY-008
  *   - ehem_key_list / _list_all: entry parse (absent descr → NULL/0), missing
  *     required field → EHEM_ERR_PROTOCOL, unknown fields ignored, descr decode,
  *     scope + path, 401/403 per REQ-AUTH-003, 406/409 → device; the multi-page
@@ -879,6 +880,249 @@ static void test_delete_403_scope(void **state)
 }
 
 /* -------------------------------------------------------------------------- */
+/* update (REQ-KEY-007)                                                       */
+/* -------------------------------------------------------------------------- */
+
+/* Label-only update: body is exactly {kid,label}; empty 200 == success;
+ * scope is keymgmt:upd. */
+static void test_update_label_only(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "ku");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200, NULL), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    assert_int_equal(ehem_key_update(ctx, TEST_KID, "new name", NULL, 0),
+                     EHEM_OK);
+
+    const fake_captured_request *post = fake_transport_request(fake, 2);
+    assert_int_equal(post->method, EHEM_HTTP_POST);
+    assert_string_equal(post->path, "/api/keymgmt/update");
+    assert_string_equal((const char *)post->body,
+        "{\"kid\":\"" TEST_KID "\",\"label\":\"new name\"}");
+    assert_non_null(fake_transport_request_header(fake, 2, "Authorization"));
+    assert_token_scope(fake, 1, "keymgmt:upd");
+    assert_int_equal(ehem_last_error(ctx)->http_status, 0);   /* left clean */
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* Label+descr update: descr rides as std base64; a 200 WITH a body is
+ * tolerated as success too. */
+static void test_update_label_and_descr(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "kud");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"status\":\"ok\"}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    const uint8_t descr[] = {0x01, 0x02, 0x03};
+    assert_int_equal(ehem_key_update(ctx, TEST_KID, "k", descr, sizeof descr),
+                     EHEM_OK);
+    assert_string_equal((const char *)fake_transport_request(fake, 2)->body,
+        "{\"kid\":\"" TEST_KID "\",\"label\":\"k\",\"descr\":\"AQID\"}");
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* 406 (kid not in repo) → EHEM_ERR_NOT_FOUND (REQ-KEY-007). */
+static void test_update_406_not_found(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "ku6");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 406,
+        "{\"error\":\"unknown kid\"}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    assert_int_equal(ehem_key_update(ctx, TEST_KID, "n", NULL, 0),
+                     EHEM_ERR_NOT_FOUND);
+    assert_int_equal(ehem_last_error(ctx)->http_status, 406);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* Pre-validation → EHEM_ERR_ARG with NO transport call: NULL/malformed kid,
+ * NULL label (firmware requires it), label policy, descr cap. */
+static void test_update_arg_guards(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    uint8_t big[65] = {0};
+
+    assert_int_equal(ehem_key_update(NULL, TEST_KID, "l", NULL, 0), EHEM_ERR_ARG);
+    assert_int_equal(ehem_key_update(ctx, NULL, "l", NULL, 0), EHEM_ERR_ARG);
+    assert_int_equal(ehem_key_update(ctx, "xyz", "l", NULL, 0), EHEM_ERR_ARG);
+    assert_int_equal(ehem_key_update(ctx, TEST_KID, NULL, NULL, 0), EHEM_ERR_ARG);
+    assert_int_equal(ehem_key_update(ctx, TEST_KID,
+        "012345678901234567890123456789012", NULL, 0), EHEM_ERR_ARG); /* 33 */
+    assert_int_equal(ehem_key_update(ctx, TEST_KID, "l", big, sizeof big),
+                     EHEM_ERR_ARG);                                   /* 65 */
+    assert_int_equal((int)fake_transport_request_count(fake), 0);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* -------------------------------------------------------------------------- */
+/* import (REQ-KEY-008)                                                       */
+/* -------------------------------------------------------------------------- */
+
+/* Minimal import: type+label+pubkey → body carries pubkey as std base64;
+ * response {"kid"} lands in kid_out; scope is keymgmt:imp. */
+static void test_import_minimal(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "ki");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"kid\":\"" TEST_KID "\"}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    const uint8_t pub[] = {0x01, 0x02, 0x03};
+    ehem_key_import_params p = {0};
+    p.type = "CURVE25519";
+    p.label = "peer";
+    p.pubkey = pub;
+    p.pubkey_len = sizeof pub;
+    char kid[EHEM_KID_HEX_SIZE] = {0};
+    assert_int_equal(ehem_key_import(ctx, &p, kid), EHEM_OK);
+    assert_string_equal(kid, TEST_KID);
+
+    const fake_captured_request *post = fake_transport_request(fake, 2);
+    assert_int_equal(post->method, EHEM_HTTP_POST);
+    assert_string_equal(post->path, "/api/keymgmt/import");
+    assert_string_equal((const char *)post->body,
+        "{\"type\":\"CURVE25519\",\"label\":\"peer\",\"pubkey\":\"AQID\"}");
+    assert_token_scope(fake, 1, "keymgmt:imp");
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* Full import body: mode and descr appended in order. */
+static void test_import_full_body(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "kif");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"kid\":\"" TEST_KID "\"}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    const uint8_t pub[]   = {0x01, 0x02, 0x03};
+    const uint8_t descr[] = {0x01, 0x02, 0x03};
+    ehem_key_import_params p = {0};
+    p.type = "SECP256R1";
+    p.label = "peer p256";
+    p.pubkey = pub;
+    p.pubkey_len = sizeof pub;
+    p.mode = "ECDH,ExDSA";
+    p.descr = descr;
+    p.descr_len = sizeof descr;
+    char kid[EHEM_KID_HEX_SIZE] = {0};
+    assert_int_equal(ehem_key_import(ctx, &p, kid), EHEM_OK);
+    assert_string_equal((const char *)fake_transport_request(fake, 2)->body,
+        "{\"type\":\"SECP256R1\",\"label\":\"peer p256\",\"pubkey\":\"AQID\","
+        "\"mode\":\"ECDH,ExDSA\",\"descr\":\"AQID\"}");
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* 406 (repo rejected — live cause: DEDUP, the pubkey already exists) stays
+ * EHEM_ERR_DEVICE with the payload preserved (REQ-KEY-008; NOT NOT_FOUND). */
+static void test_import_406_device(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "ki6");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 406,
+        "{\"error\":\"duplicate\"}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    const uint8_t pub[] = {0x01};
+    ehem_key_import_params p = {0};
+    p.type = "ED25519";
+    p.label = "dup";
+    p.pubkey = pub;
+    p.pubkey_len = sizeof pub;
+    char kid[EHEM_KID_HEX_SIZE] = {0};
+    assert_int_equal(ehem_key_import(ctx, &p, kid), EHEM_ERR_DEVICE);
+    assert_int_equal(ehem_last_error(ctx)->http_status, 406);
+    assert_non_null(strstr(ehem_last_error(ctx)->device_payload, "duplicate"));
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* Pre-validation → EHEM_ERR_ARG with NO transport call; a kid-less 200 is
+ * EHEM_ERR_PROTOCOL. */
+static void test_import_arg_guards(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    const uint8_t pub[] = {0x01};
+    uint8_t big[65] = {0};
+    char kid[EHEM_KID_HEX_SIZE];
+    ehem_key_import_params p = {0};
+
+    assert_int_equal(ehem_key_import(ctx, NULL, kid), EHEM_ERR_ARG);
+    p.type = NULL; p.label = "l"; p.pubkey = pub; p.pubkey_len = 1;
+    assert_int_equal(ehem_key_import(ctx, &p, kid), EHEM_ERR_ARG);
+    p.type = "ED25519"; p.label = NULL;
+    assert_int_equal(ehem_key_import(ctx, &p, kid), EHEM_ERR_ARG);
+    p.label = "l"; p.pubkey = NULL;
+    assert_int_equal(ehem_key_import(ctx, &p, kid), EHEM_ERR_ARG);
+    p.pubkey = pub; p.pubkey_len = 0;
+    assert_int_equal(ehem_key_import(ctx, &p, kid), EHEM_ERR_ARG);
+    p.pubkey_len = 1; p.descr = big; p.descr_len = sizeof big;
+    assert_int_equal(ehem_key_import(ctx, &p, kid), EHEM_ERR_ARG);
+    assert_int_equal((int)fake_transport_request_count(fake), 0);
+
+    /* Missing kid in an otherwise-good 200 → PROTOCOL. */
+    push_login(fake, "kip");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200, "{}"), 0);
+    p.descr = NULL; p.descr_len = 0;
+    assert_int_equal(ehem_key_import(ctx, &p, kid), EHEM_ERR_PROTOCOL);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* -------------------------------------------------------------------------- */
 /* search                                                                     */
 /* -------------------------------------------------------------------------- */
 
@@ -1443,6 +1687,16 @@ int main(void)
         cmocka_unit_test(test_delete_malformed_kid),
         cmocka_unit_test(test_delete_406_not_found),
         cmocka_unit_test(test_delete_403_scope),
+        /* REQ-KEY-007: update. */
+        cmocka_unit_test(test_update_label_only),
+        cmocka_unit_test(test_update_label_and_descr),
+        cmocka_unit_test(test_update_406_not_found),
+        cmocka_unit_test(test_update_arg_guards),
+        /* REQ-KEY-008: import. */
+        cmocka_unit_test(test_import_minimal),
+        cmocka_unit_test(test_import_full_body),
+        cmocka_unit_test(test_import_406_device),
+        cmocka_unit_test(test_import_arg_guards),
         cmocka_unit_test(test_search_prefix_body),
         cmocka_unit_test(test_search_suffix_body),
         cmocka_unit_test(test_search_substring_body),

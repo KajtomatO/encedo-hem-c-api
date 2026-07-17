@@ -5,7 +5,7 @@
  * envelope as list and shares parse_key_page().
  *
  * implements: REQ-KEY-001, REQ-KEY-002, REQ-KEY-003, REQ-KEY-004, REQ-KEY-005,
- *             REQ-API-005
+ *             REQ-KEY-007, REQ-KEY-008, REQ-API-005
  *
  * Follows the proto_system.c template: build the request → send it through the
  * shared request path (proto_common — scope-based bearer, REQ-NET-005 recovery,
@@ -30,6 +30,8 @@
 #define KEYMGMT_GEN_SCOPE    "keymgmt:gen"
 #define KEYMGMT_DEL_SCOPE    "keymgmt:del"
 #define KEYMGMT_SEARCH_SCOPE "keymgmt:search"
+#define KEYMGMT_UPD_SCOPE    "keymgmt:upd"
+#define KEYMGMT_IMP_SCOPE    "keymgmt:imp"
 
 /* A key id is exactly 32 hex chars (16 bytes); EHEM_KID_HEX_SIZE == 33 with NUL. */
 #define KID_HEX_LEN 32
@@ -407,6 +409,23 @@ static bool label_ok(const char *label)
  * refuse silent-data-loss keys, matching ARCHITECTURE §2 and the doc intent. */
 #define KEYMGMT_DESCR_MAX 64
 
+/* Add obj[key] = std-base64(bytes). False on OOM (caller cleans the obj). */
+static bool add_b64_field(ehem_json *obj, const char *key,
+                          const uint8_t *bytes, size_t len)
+{
+    size_t enc = ehem_b64_std_encoded_len(len);
+    char *b64 = malloc(enc + 1);
+    size_t w;
+    bool ok;
+    if (b64 == NULL) {
+        return false;
+    }
+    w  = ehem_b64_std_encode(bytes, len, b64, enc + 1);
+    ok = (w != (size_t)-1) && ehem_json_add_string(obj, key, b64);
+    free(b64);
+    return ok;
+}
+
 ehem_rc ehem_key_create(ehem_ctx *ctx, const ehem_key_create_params *params,
                         char *kid_out)
 {
@@ -444,21 +463,9 @@ ehem_rc ehem_key_create(ehem_ctx *ctx, const ehem_key_create_params *params,
         !ehem_json_add_string(body_obj, "mode", params->mode)) {
         goto oom_obj;
     }
-    if (params->descr != NULL && params->descr_len > 0) {
-        size_t enc = ehem_b64_std_encoded_len(params->descr_len);
-        char *descr_b64 = malloc(enc + 1);
-        size_t w;
-        if (descr_b64 == NULL) {
-            goto oom_obj;
-        }
-        w = ehem_b64_std_encode(params->descr, params->descr_len,
-                                descr_b64, enc + 1);
-        if (w == (size_t)-1 ||
-            !ehem_json_add_string(body_obj, "descr", descr_b64)) {
-            free(descr_b64);
-            goto oom_obj;
-        }
-        free(descr_b64);
+    if (params->descr != NULL && params->descr_len > 0 &&
+        !add_b64_field(body_obj, "descr", params->descr, params->descr_len)) {
+        goto oom_obj;
     }
 
     body = ehem_json_print(body_obj);
@@ -532,6 +539,154 @@ ehem_rc ehem_key_delete(ehem_ctx *ctx, const char *kid)
     /* 406 = kid not in the repository → NOT_FOUND (REQ-KEY-004); any other rc
      * (401/403/transport/…) passes through, already recorded. */
     return map_406_not_found(ctx, rc, "keymgmt/delete");
+}
+
+/* -------------------------------------------------------------------------- */
+/* update (REQ-KEY-007)                                                       */
+/* -------------------------------------------------------------------------- */
+
+ehem_rc ehem_key_update(ehem_ctx *ctx, const char *kid, const char *label,
+                        const uint8_t *descr, size_t descr_len)
+{
+    ehem_json *body_obj;
+    char *body;
+    char *resp = NULL;
+    ehem_rc rc;
+
+    if (ctx == NULL || kid == NULL || label == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    ehem_ctx_clear_error(ctx);
+    if (!ehem_proto_is_kid_hex(kid)) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                             "keymgmt/update: kid must be exactly 32 hex chars");
+    }
+    /* label is REQUIRED by the firmware parse (a descr-only update is a device
+     * 400 — fw v1.2.2 api_post_keymgmt_update; REQ-KEY-007). Conversely, an
+     * omitted descr does NOT mean "keep": the firmware rewrites the whole
+     * metadata record, so a label-only update CLEARS the stored DESCR
+     * (live-proven 2026-07-18; the doc's "left untouched" note is wrong —
+     * device > doc, recorded in REQ-KEY-007). */
+    if (!label_ok(label)) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                             "keymgmt/update: label must be 1..32 printable bytes");
+    }
+    if (descr != NULL && descr_len > KEYMGMT_DESCR_MAX) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                             "keymgmt/update: descr must be at most 64 bytes");
+    }
+
+    body_obj = ehem_json_new_object();
+    if (body_obj == NULL) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    if (!ehem_json_add_string(body_obj, "kid", kid) ||
+        !ehem_json_add_string(body_obj, "label", label) ||
+        (descr != NULL && descr_len > 0 &&
+         !add_b64_field(body_obj, "descr", descr, descr_len))) {
+        ehem_json_free(body_obj);
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    body = ehem_json_print(body_obj);
+    ehem_json_free(body_obj);
+    if (body == NULL) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+
+    rc = ehem_proto_request_raw(ctx, EHEM_HTTP_POST, "/api/keymgmt/update",
+                                body, KEYMGMT_UPD_SCOPE, EHEM_TLS_REQ_DEFAULT,
+                                &resp);
+    ehem_json_string_free(body);
+    if (rc == EHEM_OK) {
+        free(resp);                 /* doc: empty 200; tolerate a body anyway */
+        ehem_ctx_clear_error(ctx);
+        return EHEM_OK;
+    }
+    /* Success is an EMPTY 200 (return_http_simple with no body), which the
+     * shared path reports as PROTOCOL+200 — same convention as delete/reboot. */
+    if (rc == EHEM_ERR_PROTOCOL && ehem_last_error(ctx)->http_status == 200) {
+        ehem_ctx_clear_error(ctx);
+        return EHEM_OK;
+    }
+    /* 406 = kid not in the repository (doc: repo update failed). */
+    return map_406_not_found(ctx, rc, "keymgmt/update");
+}
+
+/* -------------------------------------------------------------------------- */
+/* import (REQ-KEY-008)                                                       */
+/* -------------------------------------------------------------------------- */
+
+ehem_rc ehem_key_import(ehem_ctx *ctx, const ehem_key_import_params *params,
+                        char *kid_out)
+{
+    ehem_json *body_obj;
+    ehem_json *root = NULL;
+    char *body;
+    const char *kid;
+    ehem_rc rc;
+
+    if (ctx == NULL || params == NULL || kid_out == NULL ||
+        params->type == NULL || params->label == NULL ||
+        params->pubkey == NULL || params->pubkey_len == 0) {
+        return EHEM_ERR_ARG;
+    }
+    ehem_ctx_clear_error(ctx);
+    if (!label_ok(params->label)) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                             "keymgmt/import: label must be 1..32 printable bytes");
+    }
+    if (params->descr != NULL && params->descr_len > KEYMGMT_DESCR_MAX) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                             "keymgmt/import: descr must be at most 64 bytes");
+    }
+    /* No client-side pubkey length cap: the firmware's nominal 70-byte check
+     * is dead code (REQ-KEY-008) — the device repo arbitrates what imports. */
+
+    /* Body {type,label,pubkey(b64)[,mode][,descr(b64)]}. */
+    body_obj = ehem_json_new_object();
+    if (body_obj == NULL) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    if (!ehem_json_add_string(body_obj, "type", params->type) ||
+        !ehem_json_add_string(body_obj, "label", params->label) ||
+        !add_b64_field(body_obj, "pubkey", params->pubkey, params->pubkey_len) ||
+        (params->mode != NULL &&
+         !ehem_json_add_string(body_obj, "mode", params->mode)) ||
+        (params->descr != NULL && params->descr_len > 0 &&
+         !add_b64_field(body_obj, "descr", params->descr, params->descr_len))) {
+        ehem_json_free(body_obj);
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    body = ehem_json_print(body_obj);
+    ehem_json_free(body_obj);
+    if (body == NULL) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+
+    rc = ehem_proto_request_json(ctx, EHEM_HTTP_POST, "/api/keymgmt/import",
+                                 body, KEYMGMT_IMP_SCOPE, EHEM_TLS_REQ_DEFAULT,
+                                 &root);
+    ehem_json_string_free(body);
+    if (rc != EHEM_OK) {
+        /* 400 validation → DEVICE; 406 repo-rejected → DEVICE with payload —
+         * the known live cause is key DEDUPLICATION (this exact public key is
+         * already stored; python-client finding, REQ-KEY-008). */
+        return rc;
+    }
+
+    if (!ehem_json_get_string(root, "kid", &kid)) {
+        rc = ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 200, NULL,
+                           "keymgmt/import: response missing 'kid'");
+    } else if (!ehem_proto_is_kid_hex(kid)) {
+        rc = ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 200, NULL,
+                           "keymgmt/import: 'kid' is not 32 hex chars");
+    } else {
+        memcpy(kid_out, kid, KID_HEX_LEN);
+        kid_out[KID_HEX_LEN] = '\0';
+        rc = EHEM_OK;
+    }
+    ehem_json_free(root);
+    return rc;
 }
 
 /* -------------------------------------------------------------------------- */

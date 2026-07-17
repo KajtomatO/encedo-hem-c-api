@@ -30,6 +30,16 @@ target_compile_options(test_keymgmt_get_live PRIVATE ${EHEM_WARNING_FLAGS})
 add_test(NAME test_keymgmt_get_live COMMAND test_keymgmt_get_live)
 set_tests_properties(test_keymgmt_get_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
 
+# REQ-KEY-007/008: live update round-trip + import→ECDH cross-check + the
+# unknown-kid / label-required / dedup / type-support probes. Internal-linking
+# (crypto shim X25519 + internal request path for the label-less body probe).
+add_executable(test_update_import_live test_update_import_live.c)
+target_link_libraries(test_update_import_live PRIVATE ehem_test_support cmocka::cmocka)
+target_include_directories(test_update_import_live PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
+target_compile_options(test_update_import_live PRIVATE ${EHEM_WARNING_FLAGS})
+add_test(NAME test_update_import_live COMMAND test_update_import_live)
+set_tests_properties(test_update_import_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
+
 # REQ-OPS-001 (+ REQ-KEY-006 live cross-check): live sign → local wolfCrypt
 # verify (the M4 gate criterion) + the sign scope probe closing §12 risk 3.
 # Internal-linking like test_keymgmt_get_live (probe + crypto shim).

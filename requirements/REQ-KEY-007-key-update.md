@@ -3,7 +3,7 @@ id: REQ-KEY-007
 title: Binding for /api/keymgmt/update — rewrite LABEL/DESCR by KID
 status: approved
 priority: must
-revision: 1
+revision: 2
 source: ARCHITECTURE.md §11 (M7: keymgmt update — LABEL/DESCR); encedo-hem-api-doc keymgmt/update.md; encedo_firmware api_keymgmt.c:999 api_post_keymgmt_update (fw v1.2.2); approved 2026-07-17
 depends_on: ["REQ-AUTH-002", "REQ-AUTH-003", "REQ-KEY-005"]
 supersedes: null
@@ -21,7 +21,14 @@ response as success.
 - **`label` is REQUIRED** by the firmware parse (`!label` → 400) even
   though a dead fallback branch suggests label-or-descr; the doc records
   the same (update.md). The SDK mirrors: `label` mandatory, `descr`
-  optional (NULL = leave the stored DESCR unchanged).
+  optional.
+- **Whole-record rewrite (rev2 — live finding 2026-07-18, device > doc):**
+  the firmware rewrites the key's metadata record on every update, so an
+  OMITTED `descr` CLEARS the stored DESCR — it is NOT "left untouched" as
+  the doc's Notes claim (update.md is wrong; upstream-doc filing
+  candidate). The SDK passes the semantics through verbatim and documents
+  that keep-descr requires read-then-resend; the live test pins the
+  clearing behavior.
 - Pre-validation → `EHEM_ERR_ARG`, no I/O: kid not 32 hex; label NULL,
   empty, > 32 printable chars (REQ-KEY-005 limits); descr_len > 64.
   `descr` is sent base64-encoded (raw bytes in, like create).
@@ -43,11 +50,12 @@ whichever fields are sent and leaves omitted ones untouched.
       `descr` only when given (base64, asserted bytes); empty-200 →
       `EHEM_OK`; 406→NOT_FOUND / 400→DEVICE / 403→SCOPE_DENIED mapping;
       `EHEM_ERR_ARG` pre-validation with zero transport calls.
-- [ ] Live (EHEMTEST key): create → update label → get shows new label;
-      update label+descr → search by new DESCR prefix finds it; delete.
-- [ ] OPEN (live probe): 406-vs-other for an unknown-but-well-formed KID
-      confirmed (doc says 406 = not found; device arbitrates the
-      NOT_FOUND mapping).
-- [ ] OPEN (live probe): descr-only update (label omitted) → 400
-      confirmed, pinning the label-required firmware behavior the SDK
-      mirrors.
+- [x] Live (EHEMTEST key, 2026-07-18): create → update label+descr →
+      list shows both, search by the new DESCR prefix finds it; a
+      label-only update then CLEARS the descr (whole-record rewrite —
+      pinned in test_update_import_live); delete clean.
+- [x] ~~OPEN~~ **RESOLVED (live probe 2026-07-18):** unknown-but-well-formed
+      KID → HTTP 406 → `EHEM_ERR_NOT_FOUND` (doc confirmed).
+- [x] ~~OPEN~~ **RESOLVED (live probe 2026-07-18):** descr-only body (no
+      label, internal request path) → HTTP 400 — the label-required
+      firmware rule the SDK mirrors is confirmed.
