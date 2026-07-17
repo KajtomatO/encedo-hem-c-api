@@ -2,7 +2,7 @@
  * proto_crypto.c — bindings for the `crypto` API group: exdsa signing (M4),
  * exdsa verification, ECDH, HMAC, AES cipher (M6).
  *
- * implements: REQ-OPS-001, REQ-OPS-003, REQ-OPS-004, REQ-OPS-005,
+ * implements: REQ-OPS-001, REQ-OPS-003, REQ-OPS-004, REQ-OPS-005, REQ-OPS-009,
  *             REQ-OPS-006
  *
  * Follows the proto_keymgmt.c template: pre-validate → build the JSON body →
@@ -1010,6 +1010,261 @@ void ehem_plaintext_free(ehem_plaintext *p)
         free(p->plaintext);
     }
     free(p);
+}
+
+/* -------------------------------------------------------------------------- */
+/* AES key wrap / unwrap (REQ-OPS-009)                                        */
+/* -------------------------------------------------------------------------- */
+
+/* Shared pre-validation + body builder for wrap/unwrap:
+ * {kid,msg(b64)[,alg][,ext_kid|pubkey(b64)][,ctx(b64)][,iv(b64)]}. Peer is
+ * OPTIONAL (absent = direct KEK). On failure records the error and returns
+ * NULL. */
+static char *build_wrap_body(ehem_ctx *ctx, const char *what,
+                             const char *kid, const char *alg,
+                             const uint8_t *msg, size_t msg_len,
+                             const char *ext_kid,
+                             const uint8_t *pubkey, size_t pubkey_len,
+                             const uint8_t *hkdf_ctx, size_t hkdf_ctx_len,
+                             const uint8_t *iv, size_t iv_len,
+                             ehem_rc *rc_out)
+{
+    ehem_json *body_obj;
+    char *field = NULL;
+    char *body;
+
+    *rc_out = EHEM_ERR_ARG;
+    if (!ehem_proto_is_kid_hex(kid)) {
+        ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                      "%s: kid must be exactly 32 hex chars", what);
+        return NULL;
+    }
+    if (msg == NULL || msg_len < 1 || msg_len > EHEM_WRAP_MSG_MAX) {
+        ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                      "%s: msg must be 1..%d bytes", what, EHEM_WRAP_MSG_MAX);
+        return NULL;
+    }
+    /* Exact width literals; NULL = let the device default (AES256). The
+     * multiple-of-8/≥16 RFC 3394 alignment stays device-enforced (406). */
+    if (alg != NULL && strcmp(alg, "AES128") != 0 &&
+        strcmp(alg, "AES192") != 0 && strcmp(alg, "AES256") != 0) {
+        ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                      "%s: alg must be AES128, AES192 or AES256", what);
+        return NULL;
+    }
+    if (check_peer_args(ctx, what, ext_kid, pubkey, pubkey_len, 1) != EHEM_OK) {
+        return NULL;
+    }
+    if ((hkdf_ctx == NULL && hkdf_ctx_len != 0) ||
+        hkdf_ctx_len > EHEM_CIPHER_HKDF_CTX_MAX) {
+        ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                      "%s: hkdf_ctx must be at most %d bytes", what,
+                      EHEM_CIPHER_HKDF_CTX_MAX);
+        return NULL;
+    }
+    if ((iv != NULL || iv_len != 0) &&
+        (iv == NULL || iv_len != EHEM_WRAP_IV_LEN)) {
+        ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                      "%s: iv must be exactly %d bytes when given", what,
+                      EHEM_WRAP_IV_LEN);
+        return NULL;
+    }
+
+    *rc_out = EHEM_ERR_NOMEM;
+    body_obj = ehem_json_new_object();
+    if (body_obj == NULL) {
+        ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+        return NULL;
+    }
+    if (!ehem_json_add_string(body_obj, "kid", kid)) {
+        goto oom;
+    }
+    if ((field = b64_dup(msg, msg_len)) == NULL ||
+        !ehem_json_add_string(body_obj, "msg", field)) {
+        goto oom;
+    }
+    free(field);
+    field = NULL;
+    if (alg != NULL && !ehem_json_add_string(body_obj, "alg", alg)) {
+        goto oom;
+    }
+    if (!add_peer_fields(body_obj, ext_kid, pubkey, pubkey_len)) {
+        goto oom;
+    }
+    if (hkdf_ctx != NULL && hkdf_ctx_len > 0) {
+        if ((field = b64_dup(hkdf_ctx, hkdf_ctx_len)) == NULL ||
+            !ehem_json_add_string(body_obj, "ctx", field)) {
+            goto oom;
+        }
+        free(field);
+        field = NULL;
+    }
+    if (iv != NULL) {
+        if ((field = b64_dup(iv, iv_len)) == NULL ||
+            !ehem_json_add_string(body_obj, "iv", field)) {
+            goto oom;
+        }
+        free(field);
+        field = NULL;
+    }
+
+    body = ehem_json_print(body_obj);
+    ehem_json_free(body_obj);
+    if (body == NULL) {
+        ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+        return NULL;
+    }
+    *rc_out = EHEM_OK;
+    return body;
+
+oom:
+    free(field);
+    ehem_json_free(body_obj);
+    ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    return NULL;
+}
+
+/* POST + decode the single base64 response field into a heap buffer. */
+static ehem_rc wrap_request(ehem_ctx *ctx, const char *path, const char *scope,
+                            char *body, const char *resp_field,
+                            uint8_t **data_out, size_t *len_out)
+{
+    ehem_json *root = NULL;
+    const char *b64;
+    size_t b64_len, n;
+    uint8_t *buf;
+    ehem_rc rc;
+
+    rc = ehem_proto_request_json(ctx, EHEM_HTTP_POST, path, body, scope,
+                                 EHEM_TLS_REQ_DEFAULT, &root);
+    ehem_json_string_free(body);
+    if (rc != EHEM_OK) {
+        return rc;   /* 400 / 406 (width, alignment, integrity) with payload */
+    }
+    if (!ehem_json_get_string(root, resp_field, &b64) || b64[0] == '\0') {
+        ehem_json_free(root);
+        return ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 200, NULL,
+                             "%s: response missing '%s'", path, resp_field);
+    }
+    b64_len = strlen(b64);
+    buf = malloc(b64_len);              /* decoded ≤ encoded */
+    if (buf == NULL) {
+        ehem_json_free(root);
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    n = ehem_b64_std_decode(b64, b64_len, buf, b64_len);
+    ehem_json_free(root);
+    if (n == (size_t)-1 || n == 0) {
+        free(buf);
+        return ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 200, NULL,
+                             "%s: '%s' is not valid base64", path, resp_field);
+    }
+    *data_out = buf;
+    *len_out = n;
+    return EHEM_OK;
+}
+
+ehem_rc ehem_wrap(ehem_ctx *ctx, const char *kid, const char *alg,
+                  const uint8_t *msg, size_t msg_len,
+                  const char *ext_kid,
+                  const uint8_t *pubkey, size_t pubkey_len,
+                  const uint8_t *hkdf_ctx, size_t hkdf_ctx_len,
+                  const uint8_t *iv, size_t iv_len,
+                  ehem_wrapped **out)
+{
+    char scope[48];
+    char *body;
+    ehem_wrapped *w;
+    ehem_rc rc;
+
+    if (ctx == NULL || kid == NULL || out == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    *out = NULL;
+    ehem_ctx_clear_error(ctx);
+
+    body = build_wrap_body(ctx, "crypto/cipher/wrap", kid, alg, msg, msg_len,
+                           ext_kid, pubkey, pubkey_len, hkdf_ctx, hkdf_ctx_len,
+                           iv, iv_len, &rc);
+    if (body == NULL) {
+        return rc;
+    }
+    w = calloc(1, sizeof *w);
+    if (w == NULL) {
+        ehem_json_string_free(body);
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    snprintf(scope, sizeof scope, "keymgmt:use:%s", kid);
+    rc = wrap_request(ctx, "/api/crypto/cipher/wrap", scope, body,
+                      "wrapped", &w->data, &w->data_len);
+    if (rc != EHEM_OK) {
+        free(w);
+        return rc;
+    }
+    *out = w;
+    return EHEM_OK;
+}
+
+void ehem_wrapped_free(ehem_wrapped *w)
+{
+    if (w == NULL) {
+        return;
+    }
+    free(w->data);
+    free(w);
+}
+
+ehem_rc ehem_unwrap(ehem_ctx *ctx, const char *kid, const char *alg,
+                    const uint8_t *msg, size_t msg_len,
+                    const char *ext_kid,
+                    const uint8_t *pubkey, size_t pubkey_len,
+                    const uint8_t *hkdf_ctx, size_t hkdf_ctx_len,
+                    const uint8_t *iv, size_t iv_len,
+                    ehem_unwrapped **out)
+{
+    char scope[48];
+    char *body;
+    ehem_unwrapped *u;
+    ehem_rc rc;
+
+    if (ctx == NULL || kid == NULL || out == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    *out = NULL;
+    ehem_ctx_clear_error(ctx);
+
+    body = build_wrap_body(ctx, "crypto/cipher/unwrap", kid, alg, msg, msg_len,
+                           ext_kid, pubkey, pubkey_len, hkdf_ctx, hkdf_ctx_len,
+                           iv, iv_len, &rc);
+    if (body == NULL) {
+        return rc;
+    }
+    u = calloc(1, sizeof *u);
+    if (u == NULL) {
+        ehem_json_string_free(body);
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    snprintf(scope, sizeof scope, "keymgmt:use:%s", kid);
+    rc = wrap_request(ctx, "/api/crypto/cipher/unwrap", scope, body,
+                      "unwrapped", &u->data, &u->data_len);
+    if (rc != EHEM_OK) {
+        free(u);
+        return rc;
+    }
+    *out = u;
+    return EHEM_OK;
+}
+
+void ehem_unwrapped_free(ehem_unwrapped *u)
+{
+    if (u == NULL) {
+        return;
+    }
+    if (u->data != NULL) {
+        ehem_zeroize(u->data, u->data_len);
+        free(u->data);
+    }
+    free(u);
 }
 
 /* implements: REQ-OPS-007, REQ-OPS-008 (PQC bindings below; the file header

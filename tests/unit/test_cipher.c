@@ -356,6 +356,120 @@ static void test_cipher_device_errors(void **state)
     expect_device_status(EHEM_ERR_DEVICE, 406, NULL);
 }
 
+/* -------------------------------------------------------------------------- */
+/* wrap / unwrap (REQ-OPS-009)                                                */
+/* -------------------------------------------------------------------------- */
+
+/* Direct-KEK wrap: body {kid,msg(b64),alg}; {"wrapped"} decoded; the same
+ * per-KID token as the other cipher ops. */
+static void test_wrap_direct_body(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "w1");
+    /* "wrapped" = base64 of 24 bytes {0x01..} — content is opaque here. */
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"wrapped\":\"AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB\"}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    static const uint8_t MSG16[16] = {1, 2, 3, 4, 5, 6, 7, 8,
+                                      9, 10, 11, 12, 13, 14, 15, 16};
+    ehem_wrapped *w = NULL;
+    assert_int_equal(ehem_wrap(ctx, TEST_KID, "AES256", MSG16, sizeof MSG16,
+                               NULL, NULL, 0, NULL, 0, NULL, 0, &w), EHEM_OK);
+    assert_non_null(w);
+    assert_int_equal((int)w->data_len, 24);
+
+    const fake_captured_request *post = fake_transport_request(fake, 2);
+    assert_string_equal(post->path, "/api/crypto/cipher/wrap");
+    assert_string_equal((const char *)post->body,
+        "{\"kid\":\"" TEST_KID "\",\"msg\":\"AQIDBAUGBwgJCgsMDQ4PEA==\","
+        "\"alg\":\"AES256\"}");
+    assert_non_null(fake_transport_request_header(fake, 2, "Authorization"));
+
+    ehem_wrapped_free(w);
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* ECDH-KEK unwrap with ctx + custom iv; alg omitted (device default). */
+static void test_unwrap_derived_body(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "w2");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"unwrapped\":\"AQID\"}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    static const uint8_t BLOB24[24] = {0};
+    static const uint8_t PUB[3] = {1, 2, 3};
+    static const uint8_t CTX2[2] = {0xAA, 0xBB};
+    static const uint8_t IV8[8] = {9, 9, 9, 9, 9, 9, 9, 9};
+    ehem_unwrapped *u = NULL;
+    assert_int_equal(ehem_unwrap(ctx, TEST_KID, NULL, BLOB24, sizeof BLOB24,
+                                 NULL, PUB, sizeof PUB, CTX2, sizeof CTX2,
+                                 IV8, sizeof IV8, &u), EHEM_OK);
+    assert_int_equal((int)u->data_len, 3);
+    assert_int_equal(u->data[0], 0x01);
+
+    assert_string_equal((const char *)fake_transport_request(fake, 2)->body,
+        "{\"kid\":\"" TEST_KID "\",\"msg\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\","
+        "\"pubkey\":\"AQID\",\"ctx\":\"qrs=\",\"iv\":\"CQkJCQkJCQk=\"}");
+
+    ehem_unwrapped_free(u);
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* Pre-validation → ARG with no I/O; 406 (integrity/width) → DEVICE. */
+static void test_wrap_guards_and_406(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    static const uint8_t M16[16] = {0};
+    static const uint8_t P[3] = {1, 2, 3};
+    static const uint8_t IV7[7] = {0};
+    static uint8_t big[2049];
+    ehem_wrapped *w = NULL;
+
+    assert_int_equal(ehem_wrap(ctx, TEST_KID, "AES-256", M16, 16, NULL, NULL,
+                               0, NULL, 0, NULL, 0, &w), EHEM_ERR_ARG);
+    assert_int_equal(ehem_wrap(ctx, TEST_KID, "AES256", M16, 16, TEST_KID,
+                               P, 3, NULL, 0, NULL, 0, &w), EHEM_ERR_ARG);
+    assert_int_equal(ehem_wrap(ctx, TEST_KID, "AES256", M16, 16, NULL, NULL,
+                               0, NULL, 0, IV7, sizeof IV7, &w), EHEM_ERR_ARG);
+    assert_int_equal(ehem_wrap(ctx, TEST_KID, "AES256", big, sizeof big, NULL,
+                               NULL, 0, NULL, 0, NULL, 0, &w), EHEM_ERR_ARG);
+    assert_int_equal(ehem_wrap(ctx, "xyz", "AES256", M16, 16, NULL, NULL,
+                               0, NULL, 0, NULL, 0, &w), EHEM_ERR_ARG);
+    assert_int_equal((int)fake_transport_request_count(fake), 0);
+
+    /* Device-side rejection (tamper/width/alignment) → DEVICE + payload. */
+    push_login(fake, "w3");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 406,
+        "{\"error\":\"unwrap failed\"}"), 0);
+    ehem_unwrapped *u = NULL;
+    assert_int_equal(ehem_unwrap(ctx, TEST_KID, "AES256", M16, 16, NULL,
+                                 NULL, 0, NULL, 0, NULL, 0, &u),
+                     EHEM_ERR_DEVICE);
+    assert_int_equal(ehem_last_error(ctx)->http_status, 406);
+    assert_null(u);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -364,6 +478,10 @@ int main(void)
         cmocka_unit_test(test_decrypt_body_and_token_share),
         cmocka_unit_test(test_cipher_arg_guards),
         cmocka_unit_test(test_cipher_device_errors),
+        /* REQ-OPS-009: wrap/unwrap. */
+        cmocka_unit_test(test_wrap_direct_body),
+        cmocka_unit_test(test_unwrap_derived_body),
+        cmocka_unit_test(test_wrap_guards_and_406),
     };
     if (ehem_global_init() != EHEM_OK) {
         return 1;

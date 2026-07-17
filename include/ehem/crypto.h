@@ -359,6 +359,86 @@ EHEM_API ehem_rc ehem_decrypt(ehem_ctx *ctx, const char *kid, const char *alg,
 /* Release (and zeroize) plaintext from ehem_decrypt(). NULL is a no-op. */
 EHEM_API void ehem_plaintext_free(ehem_plaintext *p);
 
+/* ==========================================================================
+ * AES key wrap / unwrap (authenticated, per-key scope "keymgmt:use:<kid>").
+ * implements: REQ-OPS-009
+ *
+ * RFC 3394 AES Key Wrap under a device-held KEK: POST /api/crypto/cipher/
+ * wrap and /unwrap. Two KEK flows, as encrypt/decrypt:
+ *   - DIRECT (no peer): `kid` names an AES key; the requested width must be
+ *     ≤ the stored key's width (an AES-256 key serves AES128/192/256 by
+ *     truncation; a narrower key with a wider alg → 406).
+ *   - ECDH-DERIVED (exactly one of ext_kid / pubkey): KEK =
+ *     HKDF-SHA256(ECDH secret, salt=∅, info = "encedo-kek" ‖ ctx-bytes,
+ *     L = width). NOTE the info prefix (firmware crypto.c:57
+ *     CRYPTO_HKDF_CONTEXT_KEK): it is "encedo-kek" — NOT the doc/handler
+ *     comment's "encedo" and NOT encrypt's "encedo-aes". Unlike keymgmt
+ *     derive, this HKDF uses the ECDH secret's REAL length, so the KEK is
+ *     externally reproducible.
+ *
+ * `alg` selects the KEK width: exact literals "AES128" / "AES192" /
+ * "AES256"; NULL omits the field and the DEVICE defaults to AES256
+ * (api_crypto.c:820 — a real default, unlike encrypt's unreachable one).
+ * `msg` is the secret to wrap: 1..2048 bytes and (device-enforced, RFC
+ * 3394) a multiple of 8, at least 16. `iv` optionally overrides the RFC
+ * 3394 initial value (exactly 8 bytes; omitted → A6A6A6A6A6A6A6A6).
+ * The wrapped blob is msg_len + 8 bytes; unwrap returns the original.
+ * ========================================================================== */
+
+#define EHEM_WRAP_IV_LEN  8     /* RFC 3394 initial-value length */
+#define EHEM_WRAP_MSG_MAX 2048  /* device cap on the decoded msg */
+
+/* A wrapped blob from ehem_wrap(). Caller-owned; ehem_wrapped_free(). */
+typedef struct ehem_wrapped {
+    uint8_t *data;
+    size_t   data_len;   /* msg_len + 8 */
+} ehem_wrapped;
+
+/* An unwrapped secret from ehem_unwrap(). Caller-owned; zeroized on free. */
+typedef struct ehem_unwrapped {
+    uint8_t *data;
+    size_t   data_len;
+} ehem_unwrapped;
+
+/*
+ * Wrap `msg` under the KEK selected by kid/alg/peer: returns {"wrapped"} as
+ * a caller-owned blob. EHEM_ERR_ARG (no I/O) on: kid not 32 hex; NULL/empty
+ * msg or msg_len > EHEM_WRAP_MSG_MAX; an alg that is not one of the three
+ * literals; both ext_kid and pubkey; pubkey_len > EHEM_ECDH_PUBKEY_MAX;
+ * hkdf_ctx_len > EHEM_CIPHER_HKDF_CTX_MAX; iv given but not exactly 8
+ * bytes. Alignment (multiple-of-8, ≥ 16) is enforced by the device: 406 →
+ * EHEM_ERR_DEVICE. 403 → EHEM_ERR_SCOPE_DENIED (exact per-KID scope, as
+ * sign/encrypt — one cached token serves all uses of the key).
+ */
+EHEM_API ehem_rc ehem_wrap(ehem_ctx *ctx, const char *kid, const char *alg,
+                           const uint8_t *msg, size_t msg_len,
+                           const char *ext_kid,
+                           const uint8_t *pubkey, size_t pubkey_len,
+                           const uint8_t *hkdf_ctx, size_t hkdf_ctx_len,
+                           const uint8_t *iv, size_t iv_len,
+                           ehem_wrapped **out);
+
+/* Release a wrapped blob. NULL is a no-op. */
+EHEM_API void ehem_wrapped_free(ehem_wrapped *w);
+
+/*
+ * Unwrap a wrapped blob (same KEK selection as ehem_wrap): returns
+ * {"unwrapped"} as a caller-owned buffer, ZEROIZED on free. `msg` here is
+ * the wrapped blob (its 8-byte integrity register is checked device-side: a
+ * tampered blob or wrong KEK is 406 → EHEM_ERR_DEVICE). Same argument
+ * contract as ehem_wrap.
+ */
+EHEM_API ehem_rc ehem_unwrap(ehem_ctx *ctx, const char *kid, const char *alg,
+                             const uint8_t *msg, size_t msg_len,
+                             const char *ext_kid,
+                             const uint8_t *pubkey, size_t pubkey_len,
+                             const uint8_t *hkdf_ctx, size_t hkdf_ctx_len,
+                             const uint8_t *iv, size_t iv_len,
+                             ehem_unwrapped **out);
+
+/* Release (and zeroize) an unwrapped secret. NULL is a no-op. */
+EHEM_API void ehem_unwrapped_free(ehem_unwrapped *u);
+
 /* ML-KEM sizes (FIPS 203, fw v1.2.2): the shared secret is always 32; the
  * ciphertext is 768/1088/1568 by parameter set (the key decides the set). */
 #define EHEM_MLKEM_SS_LEN 32

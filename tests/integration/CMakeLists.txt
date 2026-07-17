@@ -40,6 +40,16 @@ target_compile_options(test_update_import_live PRIVATE ${EHEM_WARNING_FLAGS})
 add_test(NAME test_update_import_live COMMAND test_update_import_live)
 set_tests_properties(test_update_import_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
 
+# REQ-OPS-009: live wrap/unwrap — direct round-trip + tamper + width +
+# alignment probes + the ECDH-KEK byte-exact local wc_AesKeyWrap cross-check.
+# Internal-linking (shim + wolfCrypt key wrap).
+add_executable(test_wrap_live test_wrap_live.c)
+target_link_libraries(test_wrap_live PRIVATE ehem_test_support cmocka::cmocka)
+target_include_directories(test_wrap_live PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
+target_compile_options(test_wrap_live PRIVATE ${EHEM_WARNING_FLAGS})
+add_test(NAME test_wrap_live COMMAND test_wrap_live)
+set_tests_properties(test_wrap_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
+
 # REQ-SYS-009: live logger — key triple + shim Ed25519 nonce verification,
 # list → get round-trip. Internal-linking (crypto shim verify).
 add_executable(test_logger_live test_logger_live.c)

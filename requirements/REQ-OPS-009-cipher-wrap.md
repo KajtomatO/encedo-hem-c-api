@@ -3,7 +3,7 @@ id: REQ-OPS-009
 title: Bindings for /api/crypto/cipher/wrap and /api/crypto/cipher/unwrap — AES key wrap by KID
 status: approved
 priority: must
-revision: 1
+revision: 2
 source: user decision 2026-07-17 (pulled into M7 from the M6 "(M7/M9 sweep)" note); encedo-hem-api-doc crypto/cipher-wrap.md, crypto/cipher-unwrap.md; encedo_firmware api_crypto.c:721 api_post_crypto_cipher_wrap / :947 api_post_crypto_cipher_unwrap + crypto.c CRYPTO_Wrap/CRYPTO_Unwrap (fw v1.2.2); approved 2026-07-17
 depends_on: ["REQ-AUTH-002", "REQ-AUTH-003", "REQ-OPS-004", "REQ-OPS-006"]
 supersedes: null
@@ -61,20 +61,24 @@ cipher/peer-arg helpers are fresh (user decision 2026-07-17).
       mirrors; `{"wrapped"}` and the unwrap response decoded into
       caller-owned buffers (unwrapped zeroized on free); error mapping
       and `EHEM_ERR_ARG` pre-validation with zero transport calls.
-- [ ] Live round-trip (EHEMTEST AES-256 key): wrap 32 bytes → wrapped is
-      40 bytes → unwrap returns the original; tampered wrapped → 406.
-- [ ] Live local cross-check: device wrap output equals local
-      wolfCrypt `wc_AesKeyWrap` under the same KEK bytes (KEK derived
-      via the REQ-OPS-009 ECDH flow against a shim-known peer so the
-      test possesses the KEK; proves RFC 3394 + KEK derivation
-      end-to-end).
-- [ ] OPEN (live probe): CRYPTO_Wrap's HKDF info string — `"encedo"`
-      (handler comment/doc) vs `"encedo-aes"` ‖ ctx (REQ-OPS-006's
-      encrypt finding) vs other; byte-exact arbitration recorded here
-      and in the header doc.
-- [ ] OPEN (live probe): msg alignment — wrap of a non-8-multiple and a
-      short (8-byte) msg; response field name and status for unwrap
-      failures recorded (unwrap handler tail not yet read; doc says 406).
-- [ ] OPEN (live probe): unwrap response field name + whether width
-      follows encrypt's ≤-stored-key rule (AES256 KEK serving AES128
-      wrap).
+- [x] Live round-trip (EHEMTEST AES-256 key, 2026-07-18): wrap 32 bytes
+      → 40 → unwrap returned the original; one flipped byte → 406.
+- [x] Live local cross-check (2026-07-18): device ECDH-KEK wrap output
+      is BYTE-IDENTICAL to local `wc_AesKeyWrap` under
+      HKDF-SHA256(shim X25519 secret, salt=∅, info) — RFC 3394 + KEK
+      derivation proven end-to-end and externally reproducible (unlike
+      keymgmt derive, this HKDF uses the secret's real length).
+- [x] ~~OPEN~~ **RESOLVED (source + live byte-exact, 2026-07-18):** the
+      HKDF info prefix is **`"encedo-kek"` ‖ ctx-bytes** (firmware
+      crypto.c:57 CRYPTO_HKDF_CONTEXT_KEK) — a THIRD literal: the
+      doc/handler-comment's `"encedo"` is wrong, and it is distinct
+      from encrypt's `"encedo-aes"`. Recorded in the header doc; the
+      live cross-check pins it. Upstream doc filing candidate.
+- [x] ~~OPEN~~ **RESOLVED (live 2026-07-18):** alignment is
+      device-enforced — 20-byte msg (not %8) → 406 (fw −20); 8-byte msg
+      (single semiblock) → 406 (wolfCrypt RFC 3394 two-semiblock
+      minimum). SDK keeps alignment device-side, per the rev1 decision.
+- [x] ~~OPEN~~ **RESOLVED (source + live, 2026-07-18):** unwrap response
+      field is `"unwrapped"` (api_crypto.c); width follows encrypt's
+      ≤-stored-key rule — the AES-256 key served an AES128 KEK wrap
+      (24-byte blob) live.
