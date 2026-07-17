@@ -3,7 +3,7 @@ id: REQ-OPS-004
 title: Binding for /api/crypto/ecdh — raw ECDH shared secret by KID
 status: approved
 priority: must
-revision: 1
+revision: 2
 source: ARCHITECTURE.md §6, §11 (M6); encedo-hem-api-doc crypto/ecdh.md; encedo_firmware api_crypto.c api_post_crypto_ecdh + crypto.c CRYPTO_ECDH/CRYPTO_DeriveKey (fw v1.2.2); HEM-SDK-7 (ECDH), HEM-OP-1; approved 2026-07-17
 depends_on: ["REQ-AUTH-002", "REQ-AUTH-003", "REQ-KEY-006"]
 supersedes: null
@@ -61,16 +61,20 @@ stored key.
       decoded into a caller-owned buffer; `_free` NULL-safe and zeroizing;
       both-or-neither peer args and oversize pubkey → `EHEM_ERR_ARG` with
       zero transport calls; 403/406 mapping (unit tests).
-- [ ] Live X25519 cross-check: a local X25519 keypair from the crypto shim
-      (REQ-AUTH-001 primitives) sends its pubkey against an `EHEMTEST`
-      X25519 device key; the returned raw secret equals the shim-computed
-      `ehem_x25519_shared` against the device key's public key from
-      `ehem_key_get` — byte-exact; the `SHA2-256` variant equals the local
-      SHA-256 of that secret.
-- [ ] Live ext_kid symmetry: two `EHEMTEST` same-family NIST keys A,B —
-      `ecdh(A, ext_kid=B)` == `ecdh(B, ext_kid=A)`; a family-mismatched
-      pair → 406/`EHEM_ERR_DEVICE`.
-- [ ] OPEN (live probe, closes the doc/firmware conflict): raw-mode output
-      length for a >256-bit family (P-384 or P-521) — 32 (firmware
-      truncation) or full curve length (doc)? Record the result here and
-      in the binding's doc comment.
+- [x] Live X25519 cross-check (test_ecdh_live, my.ence.do fw v1.2.2-DIAG,
+      2026-07-17): a local X25519 keypair from the crypto shim sends its
+      pubkey against an `EHEMTEST` CURVE25519 device key; the returned raw
+      secret equals the shim-computed `ehem_x25519_shared` against the
+      device key's pubkey from `ehem_key_get` — byte-exact; the `SHA2-256`
+      variant equals the local SHA-256 of that secret.
+- [x] Live ext_kid symmetry (same run): two `EHEMTEST` SECP256R1 mode-ECDH
+      keys — `ecdh(A, ext_kid=B)` == `ecdh(B, ext_kid=A)` (32 bytes); a
+      family-mismatched pair (P-256 × CURVE25519) → 406/`EHEM_ERR_DEVICE`.
+- [x] ~~OPEN~~ **RESOLVED (live probe 2026-07-17, test_ecdh_live):**
+      raw-mode P-384 ecdh returned **32 bytes — the firmware truncation is
+      confirmed**; the doc's "full curve length" claim is wrong (device >
+      doc). Both ext_kid directions agree on the same 32 truncated bytes;
+      the `SHA2-384` variant returns 48 bytes (digest of the FULL 48-byte
+      secret — so hashed algs are the usable path for >256-bit curves).
+      Recorded in the ehem_ecdh() header doc; test pinned to 32 so a
+      firmware fix surfaces as a failure to investigate.

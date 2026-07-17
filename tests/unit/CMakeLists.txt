@@ -61,6 +61,9 @@ ehem_add_unit_test(test_sign SOURCES test_sign.c)
 # REQ-OPS-003: exdsa verify binding — body/empty-200/scope-share/error mapping.
 ehem_add_unit_test(test_verify SOURCES test_verify.c)
 
+# REQ-OPS-004: ecdh binding — peer selection, body bytes, decode, errors.
+ehem_add_unit_test(test_ecdh SOURCES test_ecdh.c)
+
 # REQ-AUTH-001: crypto shim (PBKDF2 / HMAC-SHA256 / X25519) against RFC vectors.
 ehem_add_unit_test(test_crypto SOURCES test_crypto.c)
 

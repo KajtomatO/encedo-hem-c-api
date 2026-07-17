@@ -1,7 +1,7 @@
 /*
  * crypto.h — Encedo HEM C SDK, cryptographic-operation protocol bindings.
  *
- * implements: REQ-OPS-001, REQ-OPS-003
+ * implements: REQ-OPS-001, REQ-OPS-003, REQ-OPS-004
  *
  * The `crypto` API group (ARCHITECTURE.md §6, §11 M4/M6): single-shot
  * operations against keys that never leave the device — the SDK sends the
@@ -120,6 +120,77 @@ EHEM_API ehem_rc ehem_verify(ehem_ctx *ctx, const char *kid, const char *alg,
                              const uint8_t *msg, size_t msg_len,
                              const uint8_t *sig_ctx, size_t sig_ctx_len,
                              const uint8_t *sig, size_t sig_len);
+
+/*
+ * Hash selectors shared by the ECDH and HMAC endpoints — the device's literal
+ * vocabulary, passed verbatim.
+ */
+#define EHEM_HASH_ALG_SHA2_256 "SHA2-256"
+#define EHEM_HASH_ALG_SHA2_384 "SHA2-384"
+#define EHEM_HASH_ALG_SHA2_512 "SHA2-512"
+#define EHEM_HASH_ALG_SHA3_256 "SHA3-256"
+#define EHEM_HASH_ALG_SHA3_384 "SHA3-384"
+#define EHEM_HASH_ALG_SHA3_512 "SHA3-512"
+
+/* Largest raw peer public key the crypto endpoints accept (P-521 compressed
+ * x963: 66-byte curve size + 1 parity byte). */
+#define EHEM_ECDH_PUBKEY_MAX 67
+
+/*
+ * An ECDH shared secret (or its hash) from ehem_ecdh(). Caller-owned; release
+ * with ehem_ecdh_secret_free(), which ZEROIZES the bytes before freeing.
+ */
+typedef struct ehem_ecdh_secret {
+    uint8_t *secret;
+    size_t   secret_len;
+} ehem_ecdh_secret;
+
+/*
+ * Raw ECDH between the device key `kid` and a peer: POST /api/crypto/ecdh
+ * (REQ-OPS-004). Nothing is stored on the device — the shared bytes come back
+ * to the caller (contrast /api/keymgmt/derive, M7).
+ *
+ * `kid` must name an ECDH-capable private key (Curve25519/Curve448, or a
+ * NIST-P / secp256k1 key created with a mode containing "ECDH"). The peer is
+ * EXACTLY ONE of:
+ *   - `ext_kid`             — a key already on the device (public half used);
+ *                             must be the same family as `kid`;
+ *   - `pubkey`/`pubkey_len` — a caller-supplied raw public key: NIST curves
+ *                             take COMPRESSED x963 of exactly curve_size+1
+ *                             bytes (33/49/67/33 — the format ehem_key_get()
+ *                             returns), X25519/X448 take raw little-endian
+ *                             32/56 bytes. Wrong length/format is the
+ *                             device's 406.
+ * Pass NULL / (NULL,0) for the unused one; both or neither → EHEM_ERR_ARG.
+ *
+ * `alg` (optional, NULL omits): one of the EHEM_HASH_ALG_* literals — the
+ * device then returns that hash of the shared secret instead of the raw
+ * bytes. CAUTION, raw mode (fw v1.2.2): the firmware reports the raw secret
+ * with a FIXED 32-byte length — for curves whose shared secret is longer
+ * (P-384: 48, P-521: 66, X448: 56) the returned bytes are TRUNCATED to the
+ * first 32 (firmware crypto.c:1679; LIVE-CONFIRMED on fw v1.2.2-DIAG
+ * 2026-07-17 — the API doc's "full curve length" is wrong, REQ-OPS-004).
+ * The hashed variants digest the FULL secret. Use an alg for >256-bit
+ * curves.
+ *
+ * Scope: exact "keymgmt:use:<kid>" on the primary kid only (shared cached
+ * token; no scope is checked on ext_kid). Errors: 403 →
+ * EHEM_ERR_SCOPE_DENIED; 400 and 406 (not found / not ECDH-capable / family
+ * mismatch / crypto failure, indistinguishable) → EHEM_ERR_DEVICE with
+ * detail. EHEM_ERR_ARG with no I/O on: NULL ctx/kid/out, malformed kid or
+ * ext_kid, pubkey_len 0 or > EHEM_ECDH_PUBKEY_MAX, a NULL pubkey with
+ * nonzero length, an empty alg string, or a peer violation (both/neither).
+ *
+ * On success writes *out (caller frees with ehem_ecdh_secret_free()).
+ */
+EHEM_API ehem_rc ehem_ecdh(ehem_ctx *ctx, const char *kid,
+                           const char *ext_kid,
+                           const uint8_t *pubkey, size_t pubkey_len,
+                           const char *alg,
+                           ehem_ecdh_secret **out);
+
+/* Release (and zeroize) a secret from ehem_ecdh(). NULL is a no-op. */
+EHEM_API void ehem_ecdh_secret_free(ehem_ecdh_secret *s);
 
 #ifdef __cplusplus
 } /* extern "C" */

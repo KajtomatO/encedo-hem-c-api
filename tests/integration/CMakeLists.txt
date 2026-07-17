@@ -43,6 +43,15 @@ set_tests_properties(test_sign_live PROPERTIES LABELS integration SKIP_RETURN_CO
 # REQ-OPS-003: live sign → device-side verify + tamper negatives (public API).
 ehem_add_integration_test(test_verify_live SOURCES test_verify_live.c)
 
+# REQ-OPS-004: live ECDH — X25519 shim cross-check + P-384 truncation probe.
+# Internal-linking (crypto shim + wolfCrypt SHA-256), like test_sign_live.
+add_executable(test_ecdh_live test_ecdh_live.c)
+target_link_libraries(test_ecdh_live PRIVATE ehem_test_support cmocka::cmocka)
+target_include_directories(test_ecdh_live PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
+target_compile_options(test_ecdh_live PRIVATE ${EHEM_WARNING_FLAGS})
+add_test(NAME test_ecdh_live COMMAND test_ecdh_live)
+set_tests_properties(test_ecdh_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
+
 # REQ-TEST-004: the M5 per-family generation matrix — create → list → get/
 # classify → sign(where ExDSA-capable)+local verify → delete, for every fw
 # create type. Internal-linking (crypto shim local verify), like test_sign_live.
