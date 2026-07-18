@@ -234,6 +234,9 @@ static void test_ecdh_kek_local_crosscheck(void **state)
                sizeof INFO_KEK - 1 + sizeof CTXB, kek, sizeof kek);
 
     (void)aes;
+#ifdef HAVE_AES_KEYWRAP
+    /* Debian wolfSSL compiles the RFC 3394 key-wrap; the byte-exact local
+     * cross-check runs there. */
     wret = wc_AesKeyWrap(kek, sizeof kek, SECRET32, 16,
                          local_wrapped, sizeof local_wrapped, NULL);
     if (wret == 24) {
@@ -243,12 +246,21 @@ static void test_ecdh_kek_local_crosscheck(void **state)
                match ? "BYTE-EXACT MATCH" : "MISMATCH");
         assert_true(match);
     } else {
-        /* wolfSSL built without key-wrap support: record, keep the finding
-         * source-grounded (crypto.c:57) — the round-trip already proves the
-         * device is internally consistent. */
-        printf("[probe] local wc_AesKeyWrap unavailable (ret=%d) — local "
+        printf("[probe] local wc_AesKeyWrap failed (ret=%d) — local "
                "cross-check skipped; info string stands on fw source\n", wret);
     }
+#else
+    /* MSYS2 wolfSSL is built WITHOUT HAVE_AES_KEYWRAP (wc_AesKeyWrap is not
+     * even declared — a compile error, not a runtime NOT_COMPILED_IN), the
+     * same class of gap as its missing HAVE_COMP_KEY (STEP-M4-020). The
+     * local cross-check is Linux-only; the finding stands on the firmware
+     * source (crypto.c:57) plus the Debian-verified byte-exact match. */
+    (void)wret;
+    (void)local_wrapped;
+    memset(local_wrapped, 0, sizeof local_wrapped);
+    printf("[probe] wolfSSL built without HAVE_AES_KEYWRAP — local "
+           "cross-check skipped on this platform\n");
+#endif
 
     ehem_wrapped_free(w);
     ehem_zeroize(priv, sizeof priv);
