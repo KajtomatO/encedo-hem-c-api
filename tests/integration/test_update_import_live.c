@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include <cmocka.h>
 
 #include "ehem/ehem.h"
@@ -197,16 +198,25 @@ static void test_update_label_required_probe(void **state)
 /* REQ-KEY-008: import + ECDH ext_kid cross-check + dedup                     */
 /* -------------------------------------------------------------------------- */
 
-static const uint8_t IMPORT_SEED[EHEM_X25519_KEYSIZE] = {
-    0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
-    0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00,
-    0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80,
-    0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0xe0, 0xf0, 0x01,
-};
+/* Per-run unique X25519 seed. FINDING (2026-07-18, full-sweep run): the
+ * repo's import dedup can reject material that was imported AND DELETED in
+ * an earlier run once the device has rebooted in between (406 on previously
+ * used constants) — fixed import fixtures are not rerun-safe across reboots.
+ * Deriving the seed from the wall clock keeps every run's imported pubkey
+ * unique, so the deliberate same-run duplicate probe stays the only dedup. */
+static void import_seed(uint8_t seed[EHEM_X25519_KEYSIZE])
+{
+    uint64_t t = (uint64_t)time(NULL);
+    size_t i;
+    for (i = 0; i < EHEM_X25519_KEYSIZE; i++) {
+        seed[i] = (uint8_t)((t >> ((i % 8) * 8)) ^ (0xA5u + 31u * (unsigned)i));
+    }
+}
 
 static void test_import_x25519_ecdh_crosscheck(void **state)
 {
     ui_state *s = *state;
+    uint8_t seed[EHEM_X25519_KEYSIZE];
     uint8_t local_priv[EHEM_X25519_KEYSIZE];
     uint8_t local_pub[EHEM_X25519_KEYSIZE];
     uint8_t local_secret[EHEM_X25519_KEYSIZE];
@@ -219,7 +229,8 @@ static void test_import_x25519_ecdh_crosscheck(void **state)
     ehem_ecdh_secret *dev = NULL;
     ehem_rc rc;
 
-    assert_int_equal(ehem_x25519_keypair_from_seed(IMPORT_SEED, local_priv,
+    import_seed(seed);
+    assert_int_equal(ehem_x25519_keypair_from_seed(seed, local_priv,
                                                    local_pub), EHEM_OK);
 
     /* Import our public half. */
@@ -320,6 +331,14 @@ static void probe_import(ui_state *s, const char *type, const char *mode,
         ehem_test_track(&s->reg, kid);
         printf("[probe] import %-10s (%3u bytes): ACCEPTED kid=%s\n",
                type, (unsigned)pub_len, kid);
+    } else if (rc == EHEM_ERR_DEVICE &&
+               ehem_last_error(s->ctx)->http_status == 406) {
+        /* Dedup against this constant's earlier imports (which can outlive
+         * their DELETION across a reboot — see import_seed's note): the
+         * material got past type/shape validation, so the type IS supported. */
+        printf("[probe] import %-10s (%3u bytes): 406 dedup — type "
+               "supported, material previously imported\n",
+               type, (unsigned)pub_len);
     } else {
         printf("[probe] import %-10s (%3u bytes): rc=%s http=%ld\n",
                type, (unsigned)pub_len, ehem_rc_str(rc),

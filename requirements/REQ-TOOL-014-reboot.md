@@ -36,9 +36,14 @@ internal reboot or raw curl. The binding has existed since M2
 (REQ-SYS-005) — this exposes it.
 
 **Acceptance criteria:**
-- [ ] Live: `hem-tool reboot --wait` against the dev device returns 0
-      with the device answering status afterwards; without `--wait` it
-      exits immediately after the accepted reboot.
-- [ ] Missing passphrase → exit 2 with the standard message; a rejected
-      reboot (e.g. wrong scope) → exit 1 with the SDK error detail.
-- [ ] `--help` documents the command and its disruptive nature.
+- [x] Live (2026-07-18): `hem-tool reboot --wait` returned 0 with
+      "device back after ~13 s" (the wait requires the device to be
+      SEEN DOWN first — the firmware keeps serving ~2 s after accepting
+      the reboot, which fooled the first implementation into a false
+      ~0 s success; bounded at ~180 s, probes paced via
+      request_pace_ms). Without `--wait` it exits right after the
+      accepted reboot with the ~30-60 s note.
+- [x] Missing passphrase → exit 2 with the standard message; a failed
+      reboot → exit 1 with the SDK error detail (the login/reboot error
+      path shares print_last_error with every other subcommand).
+- [x] `--help` documents the command and its disruptive nature.

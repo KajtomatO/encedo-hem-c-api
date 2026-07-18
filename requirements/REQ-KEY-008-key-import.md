@@ -3,7 +3,7 @@ id: REQ-KEY-008
 title: Binding for /api/keymgmt/import — import an external public key
 status: approved
 priority: must
-revision: 2
+revision: 3
 source: ARCHITECTURE.md §11 (M7: keymgmt import); encedo-hem-api-doc keymgmt/import.md; encedo_firmware api_keymgmt.c:1123 api_post_keymgmt_import (fw v1.2.2; REPO_ImportKey body not in the source checkout); encedo-hem-python-api keymgmt.py import_key (406 = dedup finding); approved 2026-07-17
 depends_on: ["REQ-AUTH-002", "REQ-AUTH-003", "REQ-KEY-006"]
 supersedes: null
@@ -61,6 +61,17 @@ the device arbitrates.
       pubkey → HTTP 406 with an EMPTY payload — the dedup rejection
       (python finding confirmed; the device gives no error body to
       distinguish dedup from other repo rejects).
+- [ ] OPEN (new observation, full-sweep run 2026-07-18): the dedup
+      rejection appears to match material from keys that were imported
+      and then DELETED, once the device has REBOOTED in between — the
+      morning's constants (P-256 generator, RFC 8032 pubkey, the ML-KEM
+      pattern, the fixed X25519 seed) all 406'd on re-import after
+      reboots despite clean deletes, while same-day re-imports without
+      an intervening reboot had succeeded. Suggests the boot-time repo
+      scan indexes non-compacted deleted slots. Confirm at the gate
+      (import fresh material → delete → reboot → re-import → expect
+      406 if the hypothesis holds); tests now use per-run-unique
+      material so this cannot produce false failures.
 - [x] ~~OPEN~~ **RESOLVED (live probe 2026-07-18):** type support on fw
       v1.2.2-DIAG — SECP256R1 (SEC1 COMPRESSED point, 33 B, mode
       ECDH,ExDSA) ACCEPTED; ED25519 (raw 32 B) ACCEPTED; **MLKEM512 with
