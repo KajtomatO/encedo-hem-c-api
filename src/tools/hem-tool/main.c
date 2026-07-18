@@ -11,7 +11,8 @@
  *             REQ-TOOL-009 (the `keys gen` subcommand),
  *             REQ-TOOL-011 (the `keys update` subcommand),
  *             REQ-TOOL-012 (the `logs` subcommands),
- *             REQ-TOOL-013 (the `selftest` subcommand)
+ *             REQ-TOOL-013 (the `selftest` subcommand),
+ *             REQ-TOOL-014 (the `reboot` subcommand)
  *
  * Consumes ONLY the public headers in include/ehem/ — it doubles as living
  * documentation of the API and as the manual driver for the M1/M2 gates.
@@ -27,7 +28,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
+#include "ehem/auth.h"
 #include "ehem/ehem.h"
 #include "ehem/system.h"
 
@@ -73,6 +76,9 @@ typedef struct {
 
     /* logs get output (REQ-TOOL-012). */
     const char *out_path;     /* --out (write the log file here; NULL → stdout) */
+
+    /* reboot behavior (REQ-TOOL-014). */
+    int         wait_back;    /* --wait: poll until the device answers again */
 } cli_opts;
 
 static void usage(FILE *f)
@@ -106,6 +112,7 @@ static void usage(FILE *f)
         "  --mode MODE      keys gen: ECDH | ExDSA | ECDH,ExDSA (NIST-P/K only;\n"
         "                   default ECDH,ExDSA so the key can sign)\n"
         "  --out FILE       logs get: write the log file here (default: stdout)\n"
+        "  --wait           reboot: block until the device answers again (~180 s max)\n"
         "  -h, --help       show this help\n"
         "\n"
         "commands:\n"
@@ -131,6 +138,8 @@ static void usage(FILE *f)
         "  logs key         print the Ed25519 log-signing key + signed nonce\n"
         "  selftest         run the device self-test battery; exit 0 = healthy,\n"
         "                   3 = device reports a fail state\n"
+        "  reboot           reboot the device (DISRUPTIVE — interrupts every\n"
+        "                   user); --wait polls until it answers again\n"
         "  sign KID         sign a message (stdin or --in FILE, max 2048 bytes)\n"
         "                   with the device key KID; prints the signature as\n"
         "                   base64 (--hex / --raw select the encoding)\n"
@@ -611,6 +620,89 @@ static int cmd_logs(const cli_opts *o, const char *subcmd, const char *arg)
     return ret;
 }
 
+/* `reboot [--wait]` — REQ-TOOL-014 over the REQ-SYS-005 binding. With
+ * --wait, poll status until the device answers again (bounded ~90 s; the
+ * loop is paced by each probe's short connect timeout — no sleep needed). */
+static int cmd_reboot(const cli_opts *o, int wait_back)
+{
+    ehem_ctx *ctx = NULL;
+    ehem_rc rc;
+    int ret;
+
+    if (o->passphrase == NULL || o->passphrase[0] == '\0') {
+        fprintf(stderr, "error: no passphrase — pass --passphrase or set "
+                        "EHEM_PASSPHRASE\n");
+        return 2;
+    }
+    ret = make_ctx(o, &ctx);
+    if (ret != 0) {
+        return ret;
+    }
+    rc = ehem_login(ctx, o->passphrase);
+    if (rc == EHEM_OK) {
+        rc = ehem_system_reboot(ctx);
+    }
+    if (rc != EHEM_OK) {
+        print_last_error(ctx, rc, "reboot");
+        ehem_ctx_destroy(ctx);
+        return 1;
+    }
+    print_cert_notice(ctx);
+    ehem_ctx_destroy(ctx);
+    fprintf(stderr, "reboot accepted — the device restarts now\n");
+
+    if (!wait_back) {
+        fprintf(stderr, "it should answer again in ~30-60 s "
+                        "(use --wait to block until then)\n");
+        return 0;
+    }
+
+    /* Two phases, probes spaced ≥ 1 s by the SDK's own request pacing: first
+     * wait for the OLD instance to stop answering (the firmware serves for
+     * ~2 s after accepting the reboot), then wait for status to answer again. */
+    {
+        time_t start = time(NULL);
+        time_t deadline = start + 180;
+        int attempts = 0;
+        int seen_down = 0;
+        for (;;) {
+            ehem_options opts;
+            ehem_ctx *probe = NULL;
+            ehem_status_info *st = NULL;
+            int up = 0;
+            ehem_options_init(&opts);
+            if (o->insecure) {
+                opts.tls_mode = EHEM_TLS_INSECURE;
+            } else if (o->cacert != NULL) {
+                opts.tls_mode = EHEM_TLS_CA_FILE;
+                opts.ca_file  = o->cacert;
+            }
+            opts.connect_timeout_ms = 3000;
+            opts.total_timeout_ms   = 4000;
+            opts.request_pace_ms    = 1000;
+            if (ehem_ctx_create(o->url, &opts, &probe) == EHEM_OK &&
+                ehem_system_status(probe, &st) == EHEM_OK) {
+                ehem_system_status_free(st);
+                up = 1;
+            }
+            ehem_ctx_destroy(probe);
+            if (up && seen_down) {
+                fprintf(stderr, "device back after ~%ld s\n",
+                        (long)(time(NULL) - start));
+                return 0;
+            }
+            if (!up) {
+                seen_down = 1;
+            }
+            attempts++;
+            if (time(NULL) >= deadline || attempts >= 180) {
+                fprintf(stderr, "error: device did not return within ~180 s\n");
+                return 1;
+            }
+        }
+    }
+}
+
 /* `selftest` — REQ-TOOL-013. */
 static int cmd_selftest(const cli_opts *o)
 {
@@ -714,6 +806,8 @@ int main(int argc, char **argv)
             o.kid = argv[++i];
         } else if (strncmp(a, "--kid=", 6) == 0) {
             o.kid = a + 6;
+        } else if (strcmp(a, "--wait") == 0) {
+            o.wait_back = 1;
         } else if (strcmp(a, "--insecure") == 0) {
             o.insecure = 1;
         } else if (strcmp(a, "--hex") == 0) {
@@ -759,6 +853,14 @@ int main(int argc, char **argv)
         ret = cmd_keys(&o, subcmd, arg);
     } else if (strcmp(cmd, "logs") == 0) {
         ret = cmd_logs(&o, subcmd, arg);
+    } else if (strcmp(cmd, "reboot") == 0) {
+        if (subcmd != NULL) {
+            fprintf(stderr, "error: unexpected argument '%s'\n", subcmd);
+            usage(stderr);
+            ret = 2;
+        } else {
+            ret = cmd_reboot(&o, o.wait_back);
+        }
     } else if (strcmp(cmd, "selftest") == 0) {
         if (subcmd != NULL) {
             fprintf(stderr, "error: unexpected argument '%s'\n", subcmd);

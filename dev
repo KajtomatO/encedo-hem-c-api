@@ -182,7 +182,7 @@ cmd_clean() {
 }
 
 cmd_test() {
-  local suite=ut disruptive=0
+  local suite=ut disruptive=0 reboot_each=0
   case "${1:-}" in
     ut|it|all|asan) suite="$1"; shift ;;
     ""|-d|--disruptive) suite=ut ;;
@@ -193,11 +193,21 @@ cmd_test() {
   for a in "$@"; do
     case "$a" in
       -d|--disruptive) disruptive=1 ;;
-      *) die "test $suite: unknown option '$a' (-d|--disruptive)" ;;
+      --reboot-each)   reboot_each=1 ;;
+      *) die "test $suite: unknown option '$a' (-d|--disruptive|--reboot-each)" ;;
     esac
   done
   if [[ $disruptive -eq 1 && "$suite" != it && "$suite" != all ]]; then
     die "test: -d/--disruptive applies only to 'it' or 'all'"
+  fi
+  if [[ $reboot_each -eq 1 ]]; then
+    if [[ "$suite" != it && "$suite" != all ]]; then
+      die "test: --reboot-each applies only to 'it' or 'all'"
+    fi
+    # REQ-TEST-005: reboot the device before each integration test binary
+    # (stall mitigation; needs the passphrase). implements: REQ-TEST-005
+    export EHEM_TEST_REBOOT_EACH=1
+    log "reboot-each enabled: every integration test reboots the device first"
   fi
 
   case "$suite" in
@@ -329,7 +339,7 @@ _dev_complete() {
             if [[ $COMP_CWORD -eq 2 ]]; then
                 COMPREPLY=( $(compgen -W "ut it all asan" -- "$cur") )
             else
-                COMPREPLY=( $(compgen -W "-d --disruptive" -- "$cur") )
+                COMPREPLY=( $(compgen -W "-d --disruptive --reboot-each" -- "$cur") )
             fi
             ;;
         install-dependencies) COMPREPLY=( $(compgen -W "--yes" -- "$cur") ) ;;
@@ -351,7 +361,10 @@ Commands:
                                  from \$EHEM_DEV_CC (gcc when unset)
   clean [--all]                  remove the active build dir; --all removes all build*/
   test [ut]                      unit suite only (ctest -L unit)
-  test it [-d|--disruptive]      integration suite; -d adds the disruptive label
+  test it [-d|--disruptive] [--reboot-each]
+                                 integration suite; -d adds the disruptive
+                                 label; --reboot-each reboots the device
+                                 before every test binary (stall mitigation)
                                  and EHEM_ALLOW_DISRUPTIVE=1
   test all [-d|--disruptive]     unit + integration (+ disruptive with -d)
   test asan                      ASan/LSan unit run (gcc)
