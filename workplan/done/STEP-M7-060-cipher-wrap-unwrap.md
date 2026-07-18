@@ -7,7 +7,7 @@ traces:
   architecture: ["ARCHITECTURE.md#6-protocol-bindings", "ARCHITECTURE.md#5-auth--session"]
 depends_on: []
 evidence:
-  commits: ["e1d8b40"]
+  commits: ["e1d8b40", "6e0a8bb"]
   tests: ["verifies: REQ-OPS-009 (tests/unit/test_cipher.c — 3 wrap cases; tests/integration/test_wrap_live.c — 3 live cases green 2026-07-18)"]
   notes: >
     ehem_wrap/ehem_unwrap in proto_crypto.c + crypto.h (shared
@@ -24,6 +24,10 @@ evidence:
     width rule = encrypt's ≤-stored-key (AES256 key served AES128 KEK
     live). Round-trip 32→40→32 + tamper→406 green. Unit 30/30
     gcc+clang + ASan; export/header gates green; MinGW cross-syntax OK.
+    CI FIX 6e0a8bb: MSYS2 wolfSSL is built WITHOUT HAVE_AES_KEYWRAP
+    (wc_AesKeyWrap undeclared → windows-mingw compile error) — the local
+    RFC 3394 cross-check is now #ifdef-guarded, Linux-only (same class
+    as the missing HAVE_COMP_KEY, STEP-M4-020).
 reopened: []
 cancelled: null
 ---

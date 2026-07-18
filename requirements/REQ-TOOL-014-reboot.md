@@ -1,0 +1,44 @@
+---
+id: REQ-TOOL-014
+title: hem-tool reboot — reboot the device from the CLI
+status: approved
+priority: should
+revision: 1
+source: user decision 2026-07-18 ("add reboot command to hem-tool"); REQ-SYS-005 (the binding)
+depends_on: ["REQ-SYS-005"]
+supersedes: null
+superseded_by: null
+traces:
+  architecture: ["ARCHITECTURE.md#8-hem-tool-cli"]
+---
+
+# hem-tool reboot — reboot the device from the CLI
+
+`hem-tool reboot [--wait]` SHALL reboot the device via the public
+`ehem_system_reboot` binding, and with `--wait` SHALL poll until the
+device serves `GET /api/system/status` again (bounded, ~90 s) before
+exiting.
+
+- Needs the passphrase (scope `system:config`); the standard
+  `--passphrase` / `EHEM_PASSPHRASE` sources apply.
+- Without `--wait` the tool prints that the reboot was accepted and that
+  the device returns in roughly 30-60 s, then exits 0 immediately.
+- Exit codes: 0 = reboot accepted (and, with `--wait`, the device came
+  back); 1 = login/reboot failure or `--wait` timeout (distinct message);
+  2 = usage/environment error — the keys-subcommand convention.
+- DISRUPTIVE by nature (interrupts the device for all users); the tool
+  says so in `--help`. It is also the manual companion to the
+  REQ-TEST-005 per-test reboot flag.
+
+**Rationale:** operators (and the stall-mitigation workflow) need a
+one-command reboot; until now the only CLI paths were cert-install's
+internal reboot or raw curl. The binding has existed since M2
+(REQ-SYS-005) — this exposes it.
+
+**Acceptance criteria:**
+- [ ] Live: `hem-tool reboot --wait` against the dev device returns 0
+      with the device answering status afterwards; without `--wait` it
+      exits immediately after the accepted reboot.
+- [ ] Missing passphrase → exit 2 with the standard message; a rejected
+      reboot (e.g. wrong scope) → exit 1 with the SDK error detail.
+- [ ] `--help` documents the command and its disruptive nature.
