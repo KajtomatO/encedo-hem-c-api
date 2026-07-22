@@ -48,13 +48,17 @@ itself defaults to `https://`, the very protocol that is down). One
 command with a skip-guard makes the next wipe a non-event.
 
 **Acceptance criteria:**
-- [ ] Unit (hem-tool-core, fake transport): healthy-status skip (exit 0,
-      no further traffic, `--force` overrides); the full downed-device
-      sequence (status → check-in legs → login → recovery legs → reboot
-      → poll until `https: true`) with exit 0; no-bundle → exit 3;
-      poll exhaustion → exit 4; missing passphrase → exit 2.
-- [ ] Live demo: on the healthy device `tls-recover` exits 0 via the
-      skip path; `tls-recover --force` performs the full recovery
-      (reinstall + reboot) and ends with the device serving HTTPS.
-- [ ] `--help` documents the command, `--force`, and its disruptive
+- [x] Unit (hem-tool-core, fake transport, tests/unit/test_recover.c,
+      2026-07-22): healthy-status skip (exit 0, status probe only);
+      `--force` runs the full sequence; downed-device flow (status →
+      check-in legs → login → recovery legs → reboot → poll until
+      `https:true`) exit 0; no-bundle → exit 3; poll exhaustion →
+      exit 4; missing passphrase → exit 2. (Caught + fixed a real bug:
+      `ehem_system_checkin` rejects a NULL `out`, so the clock-sync leg
+      was a silent no-op — the tool now passes and frees an info.)
+- [x] Live demo (2026-07-22): on the healthy device `tls-recover` exits
+      0 via the skip path; `tls-recover --force` performed the full
+      recovery (reinstall + reboot) and ended with the device serving a
+      system-trusted HTTPS cert.
+- [x] `--help` documents the command, `--force`, and its disruptive
       nature.

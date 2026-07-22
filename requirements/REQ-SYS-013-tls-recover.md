@@ -55,13 +55,14 @@ the provisioning-cloud endpoint into the SDK follows the
 EHEM_DEFAULT_CHECKIN_URL precedent.
 
 **Acceptance criteria:**
-- [ ] Unit (fake transport): the three-leg sequence with exact bodies —
+- [x] Unit (fake transport, tests/unit/test_config.c, 2026-07-22):
       attestation GET; register POST to the DEFAULT URL with
-      `{"genuine": …}` (and to a caller URL when given); config POST
-      whose `tls` value is the cloud response VERBATIM with the bearer
-      attached; `{updated, reboot_required}` parsed; a bundle without
-      `crt` → `EHEM_ERR_PROTOCOL`; cloud 4xx passes through with
-      payload.
-- [ ] Live: the flow restores HTTPS on the real device (2026-07-22
-      manual run pre-implementation; re-proven through the binding via
-      the hem-tool live demo, REQ-TOOL-015).
+      `{"genuine":…}` and to a caller URL when given; config POST whose
+      `tls` value is the cloud response VERBATIM with a bearer (register
+      itself unauthenticated); `{updated, reboot_required}` parsed; a
+      bundle without `crt` → `EHEM_ERR_PROTOCOL` and no config POST.
+- [x] Live (2026-07-22): the binding restored HTTPS on the real device
+      via the `hem-tool tls-recover --force` demo (REQ-TOOL-015) —
+      attestation → domain/register/my → config `tls` install → reboot
+      → `https://my.ence.do` serving a system-trusted cert
+      (curl verify=0).

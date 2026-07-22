@@ -7,9 +7,23 @@ traces:
   architecture: ["ARCHITECTURE.md#6-protocol-bindings", "ARCHITECTURE.md#8-hem-tool-cli"]
 depends_on: []
 evidence:
-  commits: []
-  tests: []
-  notes: null
+  commits: ["dcec047"]
+  tests: ["verifies: REQ-SYS-013 (tests/unit/test_config.c — 3 cases), REQ-TOOL-015 (tests/unit/test_recover.c — 6 cases); live demo green 2026-07-22"]
+  notes: >
+    ehem_tls_recover in proto_system.c + system.h (EHEM_DEFAULT_REGISTER_URL
+    default; attestation genuine → cloud register POST [absolute URL,
+    EHEM_TLS_REQ_VERIFY, unauthenticated] → validate bundle has crt →
+    splice VERBATIM into {"tls":...} → config POST system:config →
+    {updated,reboot_required}). hem-tool-core recover.{h,c}: tls-recover
+    [--force] (skip-if-healthy via status https flag → checkin → login →
+    recover → reboot → poll until https:true; exit 0/1/2/3/4). Unit
+    33/33 gcc+clang+ASan; gates green; MinGW cross-syntax OK on
+    proto_system/recover/main. BUG CAUGHT: ehem_system_checkin rejects
+    NULL out (EHEM_ERR_ARG), so the tool's clock-sync leg was a silent
+    no-op — fixed to pass+free an ehem_checkin_info. LIVE (my.ence.do
+    2026-07-22): skip path exit 0; --force full recovery reinstalled +
+    rebooted → https://my.ence.do system-trusted (curl verify=0). This
+    codifies the manual wipe-recovery done earlier the same session.
 reopened: []
 cancelled: null
 ---
@@ -33,14 +47,14 @@ plan: skip path on the healthy device, then one `--force` full pass
 device).
 
 **Definition of done**
-- [ ] `ehem_tls_recover` exported, tagged `implements: REQ-SYS-013`;
+- [x] `ehem_tls_recover` exported, tagged `implements: REQ-SYS-013`;
       header doc covers the ceremony, the verbatim rule, and the
       default register endpoint
-- [ ] `hem-tool tls-recover [--force]` in hem-tool-core + main.c with
+- [x] `hem-tool tls-recover [--force]` in hem-tool-core + main.c with
       exit codes 0/1/2/3/4 and `--help` text
-- [ ] Unit tests green (gcc+clang+asan): binding leg bodies incl.
+- [x] Unit tests green (gcc+clang+asan): binding leg bodies incl.
       verbatim `tls` splice + no-crt PROTOCOL; tool skip/full/no-bundle/
       poll-exhaustion/usage paths
-- [ ] Live: skip path exits 0 on the healthy device; `--force` full
+- [x] Live: skip path exits 0 on the healthy device; `--force` full
       recovery ends with the device serving HTTPS (system trust)
-- [ ] Export/header gates green; MinGW cross-syntax check on touched TUs
+- [x] Export/header gates green; MinGW cross-syntax check on touched TUs
