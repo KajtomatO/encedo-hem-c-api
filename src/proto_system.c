@@ -3,7 +3,7 @@
  * check-in handshake (+ cert harvest), device config, cert install, and reboot.
  *
  * implements: REQ-SYS-001, REQ-SYS-002, REQ-SYS-003, REQ-SYS-004, REQ-SYS-005,
- *             REQ-SYS-007, REQ-SYS-008, REQ-SYS-011,
+ *             REQ-SYS-007, REQ-SYS-008, REQ-SYS-011, REQ-SYS-013,
  *             REQ-SYS-006, REQ-API-005
  *
  * The first real protocol bindings and the template the rest follow: build a
@@ -16,6 +16,7 @@
  */
 #include "ehem/system.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -899,6 +900,112 @@ void ehem_attestation_free(ehem_attestation_info *info)
     free(info->key_b64);
     free(info->genuine);
     free(info);
+}
+
+/* -------------------------------------------------------------------------- */
+/* TLS recovery (REQ-SYS-013)                                                 */
+/* -------------------------------------------------------------------------- */
+
+ehem_rc ehem_tls_recover(ehem_ctx *ctx, const char *register_url,
+                         ehem_cert_install_info **out)
+{
+    ehem_attestation_info *att = NULL;
+    ehem_json *body_obj = NULL;
+    ehem_json *probe = NULL;
+    ehem_json *root = NULL;
+    char *body = NULL;
+    char *bundle = NULL;
+    char *config_body = NULL;
+    const char *crt;
+    size_t n;
+    ehem_rc rc;
+
+    if (ctx == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    if (out != NULL) {
+        *out = NULL;
+    }
+    if (register_url == NULL) {
+        register_url = EHEM_DEFAULT_REGISTER_URL;
+    }
+    ehem_ctx_clear_error(ctx);
+
+    /* 1. The device's attestation carries the `genuine` token the cloud
+     * accepts as proof it is issuing for a real Encedo device. */
+    rc = ehem_system_attestation(ctx, &att);
+    if (rc != EHEM_OK) {
+        return rc;
+    }
+
+    body_obj = ehem_json_new_object();
+    if (body_obj == NULL ||
+        !ehem_json_add_string(body_obj, "genuine", att->genuine)) {
+        ehem_json_free(body_obj);
+        ehem_attestation_free(att);
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    ehem_attestation_free(att);
+    body = ehem_json_print(body_obj);
+    ehem_json_free(body_obj);
+    if (body == NULL) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+
+    /* 2. Provisioning cloud: unauthenticated, absolute URL, and ALWAYS fully
+     * TLS-verified (the response delivers key material — same posture as the
+     * check-in relay leg). */
+    rc = ehem_proto_request_raw(ctx, EHEM_HTTP_POST, register_url, body,
+                                NULL, EHEM_TLS_REQ_VERIFY, &bundle);
+    ehem_json_string_free(body);
+    if (rc != EHEM_OK) {
+        return rc;   /* cloud 4xx/5xx with payload, or transport failure */
+    }
+
+    /* The bundle must be a JSON object carrying at least `crt`; anything else
+     * means the cloud had nothing usable for this device. The bundle is then
+     * spliced VERBATIM — its `key` is encrypted to the device's secure
+     * element and must reach it byte-for-byte. */
+    probe = (bundle != NULL) ? ehem_json_parse(bundle, strlen(bundle)) : NULL;
+    if (probe == NULL || !ehem_json_get_string(probe, "crt", &crt)) {
+        ehem_json_free(probe);
+        free(bundle);
+        return ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 0, NULL,
+                             "tls-recover: the cloud delivered no usable "
+                             "bundle (no JSON object with 'crt')");
+    }
+    ehem_json_free(probe);
+
+    n = strlen(bundle);
+    config_body = malloc(n + sizeof "{\"tls\":}" );
+    if (config_body == NULL) {
+        free(bundle);
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    snprintf(config_body, n + sizeof "{\"tls\":}", "{\"tls\":%s}", bundle);
+    free(bundle);
+
+    /* 3. Install on the device (REQ-SYS-004 config surface). */
+    rc = ehem_proto_request_json(ctx, EHEM_HTTP_POST, "/api/system/config",
+                                 config_body, "system:config",
+                                 EHEM_TLS_REQ_DEFAULT, &root);
+    free(config_body);
+    if (rc != EHEM_OK) {
+        return rc;
+    }
+
+    if (out != NULL) {
+        ehem_cert_install_info *info = calloc(1, sizeof *info);
+        if (info == NULL) {
+            ehem_json_free(root);
+            return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+        }
+        ehem_json_get_bool(root, "updated", &info->updated);
+        ehem_json_get_bool(root, "reboot_required", &info->reboot_required);
+        *out = info;
+    }
+    ehem_json_free(root);
+    return EHEM_OK;
 }
 
 /* -------------------------------------------------------------------------- */

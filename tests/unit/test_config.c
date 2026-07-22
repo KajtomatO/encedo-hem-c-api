@@ -12,7 +12,10 @@
  *           REQ-SYS-011 (attestation: crt vs csr+key shapes, missing genuine
  *           → PROTOCOL, 500 atecc_N payload preserved),
  *           REQ-SYS-008 (shutdown: empty-200 success + full cache drop, 409
- *           kept as DEVICE with cache intact)
+ *           kept as DEVICE with cache intact),
+ *           REQ-SYS-013 (tls-recover: attestation → register POST {genuine}
+ *           to default/custom URL → config POST with the cloud bundle
+ *           spliced verbatim into `tls`; no-crt cloud reply → PROTOCOL)
  *
  * Each binding is authenticated, so every call is preceded by a login exchange
  * (challenge GET + token POST) queued via push_login().
@@ -585,6 +588,111 @@ static void test_shutdown_409(void **state)
     fake_transport_free(fake);
 }
 
+/* -------------------------------------------------------------------------- */
+/* tls-recover (REQ-SYS-013)                                                  */
+/* -------------------------------------------------------------------------- */
+
+/* Full ceremony: attestation GET → register POST (default URL, {genuine}) →
+ * config POST whose `tls` is the cloud bundle VERBATIM, with a bearer. */
+static void test_tls_recover_full(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "tr");                                       /* req 0,1 */
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,      /* 2 */
+        "{\"crt\":\"REVSQ0VSVA==\",\"genuine\":\"tok-xyz\"}"), 0);
+    /* Cloud bundle (verbatim splice target) — object with crt + key + emp. */
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,      /* 3 */
+        "{\"emp\":\"AAA\",\"key\":\"K.C\",\"crt\":\"Q1JU\",\"ip\":\"1.2.3.4\"}"),
+        0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,      /* 4 */
+        "{\"updated\":true,\"reboot_required\":true}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    ehem_cert_install_info *info = NULL;
+    assert_int_equal(ehem_tls_recover(ctx, NULL, &info), EHEM_OK);
+    assert_non_null(info);
+    assert_true(info->updated);
+    assert_true(info->reboot_required);
+    ehem_cert_install_free(info);
+
+    /* attestation GET, then the cloud register POST to the DEFAULT URL. */
+    assert_string_equal(fake_transport_request(fake, 2)->path,
+                        "/api/system/config/attestation");
+    const fake_captured_request *reg = fake_transport_request(fake, 3);
+    assert_int_equal(reg->method, EHEM_HTTP_POST);
+    assert_string_equal(reg->path, EHEM_DEFAULT_REGISTER_URL);
+    assert_string_equal((const char *)reg->body, "{\"genuine\":\"tok-xyz\"}");
+
+    /* config POST: the `tls` value is the cloud response VERBATIM, bearer set. */
+    const fake_captured_request *cfg = fake_transport_request(fake, 4);
+    assert_string_equal(cfg->path, "/api/system/config");
+    assert_string_equal((const char *)cfg->body,
+        "{\"tls\":{\"emp\":\"AAA\",\"key\":\"K.C\",\"crt\":\"Q1JU\","
+        "\"ip\":\"1.2.3.4\"}}");
+    assert_non_null(fake_transport_request_header(fake, 4, "Authorization"));
+    /* attestation + register carried no bearer via NULL scope; only the
+     * config POST is authenticated. */
+    assert_null(fake_transport_request_header(fake, 3, "Authorization"));
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* A caller-supplied register URL is used verbatim. */
+static void test_tls_recover_custom_url(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "tru");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"crt\":\"x\",\"genuine\":\"g\"}"), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"crt\":\"Q1JU\"}"), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"updated\":true,\"reboot_required\":false}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    assert_int_equal(ehem_tls_recover(ctx,
+        "https://cloud.example/domain/register/acme", NULL), EHEM_OK);
+    assert_string_equal(fake_transport_request(fake, 3)->path,
+                        "https://cloud.example/domain/register/acme");
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* A cloud reply that is not an object with `crt` → PROTOCOL, no config POST. */
+static void test_tls_recover_no_bundle(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "trn");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"crt\":\"x\",\"genuine\":\"g\"}"), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"error\":\"unknown device\"}"), 0);   /* no crt */
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    ehem_cert_install_info *info = NULL;
+    assert_int_equal(ehem_tls_recover(ctx, NULL, &info), EHEM_ERR_PROTOCOL);
+    assert_null(info);
+    /* attestation(2) + cloud register(3) only — no config install. */
+    assert_int_equal((int)fake_transport_request_count(fake), 4);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
 static void test_free_null_safe(void **state)
 {
     (void)state;
@@ -615,6 +723,10 @@ int main(void)
         /* REQ-SYS-008: shutdown. */
         cmocka_unit_test(test_shutdown_empty_200_drops_cache),
         cmocka_unit_test(test_shutdown_409),
+        /* REQ-SYS-013: tls-recover binding. */
+        cmocka_unit_test(test_tls_recover_full),
+        cmocka_unit_test(test_tls_recover_custom_url),
+        cmocka_unit_test(test_tls_recover_no_bundle),
         cmocka_unit_test(test_free_null_safe),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);

@@ -169,6 +169,7 @@ if(EHEM_BUILD_TOOL)
     src/tools/hem-tool/keys.c
     src/tools/hem-tool/logs.c
     src/tools/hem-tool/random.c
+    src/tools/hem-tool/recover.c
     src/tools/hem-tool/selftest.c
     src/tools/hem-tool/sign.c)
   target_link_libraries(hem-tool-core PUBLIC encedo-hem::encedo-hem-static)

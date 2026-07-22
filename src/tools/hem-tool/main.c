@@ -12,7 +12,8 @@
  *             REQ-TOOL-011 (the `keys update` subcommand),
  *             REQ-TOOL-012 (the `logs` subcommands),
  *             REQ-TOOL-013 (the `selftest` subcommand),
- *             REQ-TOOL-014 (the `reboot` subcommand)
+ *             REQ-TOOL-014 (the `reboot` subcommand),
+ *             REQ-TOOL-015 (the `tls-recover` subcommand)
  *
  * Consumes ONLY the public headers in include/ehem/ — it doubles as living
  * documentation of the API and as the manual driver for the M1/M2 gates.
@@ -38,6 +39,7 @@
 #include "keys.h"
 #include "logs.h"
 #include "random.h"
+#include "recover.h"
 #include "selftest.h"
 #include "sign.h"
 
@@ -92,7 +94,8 @@ static void usage(FILE *f)
         "  --cacert FILE    verify TLS against this CA/pinned certificate\n"
         "  --insecure       skip TLS verification (lab use only)\n"
         "  --passphrase PW  login passphrase (or set EHEM_PASSPHRASE)\n"
-        "  --force          cert-install: reinstall even if already current\n"
+        "  --force          cert-install / tls-recover: run even if the device\n"
+        "                   is already healthy\n"
         "  --all            keys rm: target every non-protected key\n"
         "  --label-prefix P keys rm: target keys whose label starts with P\n"
         "                   (repeatable; exact match required for protected keys)\n"
@@ -140,6 +143,10 @@ static void usage(FILE *f)
         "                   3 = device reports a fail state\n"
         "  reboot           reboot the device (DISRUPTIVE — interrupts every\n"
         "                   user); --wait polls until it answers again\n"
+        "  tls-recover      restore HTTPS after a wipe: fetch a key+cert bundle\n"
+        "                   from the provisioning cloud, install it, and reboot\n"
+        "                   (DISRUPTIVE; run against the device's http:// URL;\n"
+        "                   --force reinstalls even when HTTPS is up)\n"
         "  sign KID         sign a message (stdin or --in FILE, max 2048 bytes)\n"
         "                   with the device key KID; prints the signature as\n"
         "                   base64 (--hex / --raw select the encoding)\n"
@@ -703,6 +710,30 @@ static int cmd_reboot(const cli_opts *o, int wait_back)
     }
 }
 
+/* `tls-recover [--force]` — REQ-TOOL-015. */
+static int cmd_tls_recover(const cli_opts *o)
+{
+    ehem_ctx *ctx = NULL;
+    hem_recover_opts ro;
+    int ret;
+
+    ret = make_ctx(o, &ctx);
+    if (ret != 0) {
+        return ret;
+    }
+    memset(&ro, 0, sizeof ro);
+    ro.passphrase   = o->passphrase;
+    ro.force        = o->force;
+    ro.poll_delay_ms = HEM_RECOVER_POLL_DELAY_MS;
+    ro.out          = stdout;
+    ro.err          = stderr;
+
+    ret = hem_tls_recover_run(ctx, &ro);
+    print_cert_notice(ctx);
+    ehem_ctx_destroy(ctx);
+    return ret;
+}
+
 /* `selftest` — REQ-TOOL-013. */
 static int cmd_selftest(const cli_opts *o)
 {
@@ -860,6 +891,14 @@ int main(int argc, char **argv)
             ret = 2;
         } else {
             ret = cmd_reboot(&o, o.wait_back);
+        }
+    } else if (strcmp(cmd, "tls-recover") == 0) {
+        if (subcmd != NULL) {
+            fprintf(stderr, "error: unexpected argument '%s'\n", subcmd);
+            usage(stderr);
+            ret = 2;
+        } else {
+            ret = cmd_tls_recover(&o);
         }
     } else if (strcmp(cmd, "selftest") == 0) {
         if (subcmd != NULL) {

@@ -378,6 +378,48 @@ EHEM_API ehem_rc ehem_system_attestation(ehem_ctx *ctx,
 EHEM_API void ehem_attestation_free(ehem_attestation_info *info);
 
 /* ==========================================================================
+ * TLS recovery (attestation-authenticated cloud ceremony + config install).
+ * implements: REQ-SYS-013
+ * ========================================================================== */
+
+/* Factory provisioning-cloud endpoint that issues a TLS bundle for the
+ * default `my.ence.do` identity. Devices on custom domains pass their own
+ * register endpoint to ehem_tls_recover(). */
+#define EHEM_DEFAULT_REGISTER_URL "https://api.encedo.com/domain/register/my"
+
+/*
+ * Restore the device's TLS material from the Encedo provisioning cloud:
+ * a device wipe deletes the stored TLS key + certificate, after which the
+ * device serves plain HTTP only (httpsd cannot start) and
+ * ehem_system_config_install_cert() cannot help — that path installs a
+ * cert against an EXISTING key. This binding closes the gap:
+ *
+ *   1. fetch the device attestation (ehem_system_attestation) and present
+ *      its `genuine` token to `register_url` (NULL →
+ *      EHEM_DEFAULT_REGISTER_URL) — a cloud call, always fully
+ *      TLS-verified regardless of the context's TLS mode;
+ *   2. the cloud replies with a bundle {emp, key, crt, ...} in which the
+ *      fresh TLS PRIVATE key is encrypted to the device's secure element
+ *      (the firmware performs an ATECC ECDH against `emp` to decrypt it —
+ *      the SDK relays the bundle VERBATIM and can never read the key);
+ *   3. install it via POST /api/system/config {"tls": <bundle>} (scope
+ *      "system:config").
+ *
+ * On success writes *out (the ehem_cert_install_info flags; free with
+ * ehem_cert_install_free; `out` may be NULL) — `reboot_required` is
+ * normally true: follow with ehem_system_reboot(), after which the device
+ * serves HTTPS again. Use this against the device's http:// URL — that is
+ * the state the device is in when recovery is needed.
+ *
+ * A cloud response that is not a JSON object carrying `crt` is
+ * EHEM_ERR_PROTOCOL ("no usable bundle"); cloud/device failures map per
+ * the shared path with the payload retrievable. DISRUPTIVE in effect:
+ * installs key material (and the caller reboots).
+ */
+EHEM_API ehem_rc ehem_tls_recover(ehem_ctx *ctx, const char *register_url,
+                                  ehem_cert_install_info **out);
+
+/* ==========================================================================
  * Shutdown (authenticated, scope "system:shutdown").
  * implements: REQ-SYS-008
  * ========================================================================== */
