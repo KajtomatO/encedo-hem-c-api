@@ -80,6 +80,7 @@ set(EHEM_SOURCES
   src/proto_auth.c
   src/proto_keymgmt.c
   src/proto_crypto.c
+  src/proto_ext.c
   src/proto_logger.c
   src/proto_storage.c
   src/keytype.c

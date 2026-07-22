@@ -50,6 +50,16 @@ target_compile_options(test_wrap_live PRIVATE ${EHEM_WARNING_FLAGS})
 add_test(NAME test_wrap_live COMMAND test_wrap_live)
 set_tests_properties(test_wrap_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
 
+# REQ-AUTH-006, REQ-TEST-006: live ExtAuth pairing via the simulated
+# authenticator (init → reply → validate → code check → dedup 406 → mac).
+# Internal-linking (crypto shim + ext_sim).
+add_executable(test_ext_pair_live test_ext_pair_live.c)
+target_link_libraries(test_ext_pair_live PRIVATE ehem_test_support cmocka::cmocka)
+target_include_directories(test_ext_pair_live PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
+target_compile_options(test_ext_pair_live PRIVATE ${EHEM_WARNING_FLAGS})
+add_test(NAME test_ext_pair_live COMMAND test_ext_pair_live)
+set_tests_properties(test_ext_pair_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
+
 # REQ-SYS-009: live logger — key triple + shim Ed25519 nonce verification,
 # list → get round-trip. Internal-linking (crypto shim verify).
 add_executable(test_logger_live test_logger_live.c)

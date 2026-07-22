@@ -28,6 +28,9 @@ ehem_add_unit_test(test_cert SOURCES test_cert.c)
 # HS256 JWT build/open/peek (M8).
 ehem_add_unit_test(test_ext_sim SOURCES test_ext_sim.c)
 
+# REQ-AUTH-006: ExtAuth pairing bindings init/validate/mac (M8).
+ehem_add_unit_test(test_ext SOURCES test_ext.c)
+
 # REQ-TOOL-003: hem-tool cert-install orchestration via the fake transport.
 # Links hem-tool-core (the shared tool code) alongside the test support lib.
 if(TARGET hem-tool-core)
