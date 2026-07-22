@@ -79,7 +79,9 @@ endfunction()
 # warning flags; PUBLIC-includes the internal src/ headers (transport.h,
 # context.h) and the support dir, and pulls the static lib transitively so
 # tests linking it resolve the internal symbols the fake calls.
-add_library(ehem_test_support STATIC support/fake_transport.c)
+add_library(ehem_test_support STATIC
+  support/fake_transport.c
+  support/ext_sim.c)
 target_link_libraries(ehem_test_support PUBLIC encedo-hem::encedo-hem-static)
 target_include_directories(ehem_test_support PUBLIC
   ${PROJECT_SOURCE_DIR}/src

@@ -26,6 +26,7 @@
 #include <wolfssl/wolfcrypt/ed448.h>        /* local Ed448 verify */
 #include <wolfssl/wolfcrypt/signature.h>    /* wc_SignatureVerify */
 #include <wolfssl/wolfcrypt/error-crypt.h>  /* SIG_VERIFY_E, ASN_PARSE_E */
+#include <wolfssl/wolfcrypt/aes.h>          /* AES-128-CBC (scheme A, M8) */
 
 ehem_rc ehem_kdf_pbkdf2_sha256(const uint8_t *passwd, size_t passwd_len,
                                const uint8_t *salt, size_t salt_len,
@@ -396,6 +397,46 @@ ehem_rc ehem_ed448_verify(const uint8_t pub[EHEM_ED448_PUB_SIZE],
     }
     wc_ed448_free(&key);
     return result;
+}
+
+/* --- AES-128-CBC (scheme A, REQ-TEST-006) --------------------------------- */
+
+static ehem_rc aes128_cbc_run(const uint8_t key[EHEM_AES128_KEY_SIZE],
+                              const uint8_t iv[EHEM_AES_BLOCK_SIZE],
+                              const uint8_t *in, size_t len, uint8_t *out,
+                              int dir)
+{
+    if (key == NULL || iv == NULL || in == NULL || out == NULL ||
+        len == 0 || (len % EHEM_AES_BLOCK_SIZE) != 0) {
+        return EHEM_ERR_ARG;
+    }
+
+    Aes aes;
+    if (wc_AesInit(&aes, NULL, INVALID_DEVID) != 0) {
+        return EHEM_ERR_PROTOCOL;
+    }
+    int rc = wc_AesSetKey(&aes, key, EHEM_AES128_KEY_SIZE, iv, dir);
+    if (rc == 0) {
+        rc = (dir == AES_ENCRYPTION)
+                 ? wc_AesCbcEncrypt(&aes, out, in, (word32)len)
+                 : wc_AesCbcDecrypt(&aes, out, in, (word32)len);
+    }
+    wc_AesFree(&aes);
+    return (rc == 0) ? EHEM_OK : EHEM_ERR_PROTOCOL;
+}
+
+ehem_rc ehem_aes128_cbc_encrypt(const uint8_t key[EHEM_AES128_KEY_SIZE],
+                                const uint8_t iv[EHEM_AES_BLOCK_SIZE],
+                                const uint8_t *in, size_t len, uint8_t *out)
+{
+    return aes128_cbc_run(key, iv, in, len, out, AES_ENCRYPTION);
+}
+
+ehem_rc ehem_aes128_cbc_decrypt(const uint8_t key[EHEM_AES128_KEY_SIZE],
+                                const uint8_t iv[EHEM_AES_BLOCK_SIZE],
+                                const uint8_t *in, size_t len, uint8_t *out)
+{
+    return aes128_cbc_run(key, iv, in, len, out, AES_DECRYPTION);
 }
 
 ehem_rc ehem_crypto_backend_global_init(void)

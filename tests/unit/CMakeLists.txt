@@ -23,6 +23,11 @@ ehem_add_unit_test(test_checkin SOURCES test_checkin.c)
 # REQ-SYS-006, REQ-TOOL-003: public cert-inspection helper (serial + validity).
 ehem_add_unit_test(test_cert SOURCES test_cert.c)
 
+# REQ-TEST-006: simulated ExtAuth authenticator — shim AES-128-CBC vector,
+# scheme-A codec (round-trip, firmware-construction cross-check, tamper),
+# HS256 JWT build/open/peek (M8).
+ehem_add_unit_test(test_ext_sim SOURCES test_ext_sim.c)
+
 # REQ-TOOL-003: hem-tool cert-install orchestration via the fake transport.
 # Links hem-tool-core (the shared tool code) alongside the test support lib.
 if(TARGET hem-tool-core)

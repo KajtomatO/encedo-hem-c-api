@@ -172,6 +172,33 @@ ehem_rc ehem_ed448_verify(const uint8_t pub[EHEM_ED448_PUB_SIZE],
                           const uint8_t *sig, size_t sig_len,
                           int *valid_out);
 
+/* --------------------------------------------------------------------------
+ * AES-128-CBC — the ExtAuth scheme-A payload cipher (REQ-TEST-006).
+ *
+ * implements: REQ-TEST-006 (the simulated authenticator's scheme-A codec —
+ *             fw api_auth.c encrypts each authreq scope entry with
+ *             AES-128-CBC under a per-authenticator key derived as
+ *             HMAC-SHA256(key=ECDH secret, msg=jti); tests reproduce and
+ *             invert that construction locally)
+ *
+ * Raw block-aligned CBC: `len` must be a nonzero multiple of 16 — padding is
+ * the CALLER's job (scheme A uses the firmware's pad-byte=pad-count scheme,
+ * applied in the test-support codec, not here). `in`/`out` may alias.
+ * Returns EHEM_ERR_ARG on NULL buffers or a bad length, EHEM_ERR_PROTOCOL if
+ * the engine rejects the operation.
+ * -------------------------------------------------------------------------- */
+
+#define EHEM_AES128_KEY_SIZE 16
+#define EHEM_AES_BLOCK_SIZE  16
+
+ehem_rc ehem_aes128_cbc_encrypt(const uint8_t key[EHEM_AES128_KEY_SIZE],
+                                const uint8_t iv[EHEM_AES_BLOCK_SIZE],
+                                const uint8_t *in, size_t len, uint8_t *out);
+
+ehem_rc ehem_aes128_cbc_decrypt(const uint8_t key[EHEM_AES128_KEY_SIZE],
+                                const uint8_t iv[EHEM_AES_BLOCK_SIZE],
+                                const uint8_t *in, size_t len, uint8_t *out);
+
 /*
  * Process-global wolfCrypt init/cleanup (REQ-API-002). Idempotency is the
  * caller's (ehem_global_init/cleanup); these run the raw wolfCrypt_Init /
