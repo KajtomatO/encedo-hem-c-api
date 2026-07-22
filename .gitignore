@@ -59,3 +59,6 @@ build*/
 
 # Local secrets (device credentials)
 hem.env
+
+# other
+tmp/
