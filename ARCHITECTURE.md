@@ -342,7 +342,15 @@ sequenceDiagram
   `--kid` is not given), and `hem-tool keys update` / `hem-tool logs` /
   `hem-tool selftest` (M7, user decision 2026-07-17 — REQ-TOOL-011/012/
   013; a `hem-tool fw-upgrade` orchestrator is deferred to M9 with the
-  upgrade endpoints).
+  upgrade endpoints), and the `hem-tool ext` family — `ext pair` /
+  `ext list` / `ext login` (M8, user decision 2026-07-22 —
+  REQ-TOOL-016; `ext pair` renders the pairing QR **in the terminal**
+  via a vendored single-file MIT QR encoder (Nayuki qrcodegen, tool-only
+  linkage, cJSON-style vendoring) rather than any web service — the
+  tester's quickchart.io approach leaks user/email/hostname to a third
+  party and is rejected; unpairing is plain `keys rm`, where real
+  phones' `(iPhone)`/`(Android)` labels already land in the
+  protected-key policy below).
 - **`cert-install`** (REQ-TOOL-003): harvests the cloud certificate
   (REQ-SYS-006), skips if the device already serves it (leg-1 `csn` vs the
   harvested leaf serial, or the broker suppressing the chain), else
@@ -498,7 +506,31 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   uninitialized-`sub`, logger pipe-delimited format).
 - **M8 — mobile-app authentication:** push-confirm auth flow (`ext-*`
   endpoints), blocking wait with timeout + pollable variant; distinct
-  rejected/timeout results.
+  rejected/timeout results. *Decomposition (user-approved 2026-07-22,
+  REQ-AUTH-006..010, REQ-TEST-006, REQ-TOOL-016):* device bindings for
+  the pairing trio (`init`/`validate`/`mac`, scope `auth:ext:pair`) and
+  the unauthenticated login pair (`request`/`token`); a client for the
+  **undocumented** cloud notification broker (`api.encedo.com/notify/*`
+  — no doc page exists; shapes reconstructed from hem-api-tester +
+  Manager, every one an open criterion until live-pinned); a pollable
+  begin/poll/cancel confirm engine with a blocking wait on top;
+  `ehem_login_mobile` + `ehem_options.confirm_timeout_ms` routing the
+  whole thing through the existing `ensure_token` chokepoint; and
+  `hem-tool ext pair|list|login` with terminal QR (vendored qrcodegen).
+  Testing splits three ways (user decisions 2026-07-22): a
+  **simulated authenticator** in test support (shim AES-128-CBC +
+  scheme-A codec) covers the entire device surface unattended with zero
+  broker traffic; broker-touching live tests are `disruptive`-labeled
+  (never push to the user's phone unattended); real-phone
+  approve/reject/timeout is one attended step (M8-080 — the user has
+  the Encedo app). Source findings recorded up front: the fw ignores
+  the tester's `request`-body `exp` (lifetime is fixed 60 min, or
+  15 min for rewritten `keymgmt:use:` scopes); the documented
+  anti-bruteforce delay on `ext/token` is dead code; ExtAuth bearers
+  carry `sub`=base64(kid), so pairing management always needs a
+  passphrase login. **Gate:** simulated pair+login cycle green
+  unattended; all three login terminals demonstrated on the real phone;
+  §12 risk 6 resolved.
 - **M9 — full-spec conformance (1.0):** sweep of encedo-hem-api-doc for
   uncovered endpoints/fields; the `system/upgrade` family deferred from
   M7 (fw upload/check/install triad, ui triad, bootloader upload,

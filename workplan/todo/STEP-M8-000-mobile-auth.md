@@ -11,7 +11,7 @@ evidence:
   tests: []
   notes: null
 reopened: []
-cancelled: null
+cancelled: "M8 decomposed 2026-07-22 (user-approved) — replaced by STEP-M8-010..090 per §5.3 step 5"
 ---
 
 **Goal:** Milestone M8 per ARCHITECTURE.md §11: push-confirm auth flow

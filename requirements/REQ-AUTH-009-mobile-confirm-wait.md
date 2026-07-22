@@ -1,0 +1,76 @@
+---
+id: REQ-AUTH-009
+title: Mobile confirmation wait — pollable state machine with blocking wrapper, distinct rejected/timeout results
+status: approved
+priority: must
+revision: 1
+source: user decision 2026-07-22 (M8 decomposition); ARCHITECTURE.md §5 mobile-app confirmation bullet; start_point HEM-SDK-8/HEM-AUTH-2 (distinct rejection vs timeout, blocking with confirm_timeout)
+depends_on: ["REQ-AUTH-002", "REQ-AUTH-007", "REQ-AUTH-008"]
+supersedes: null
+superseded_by: null
+traces:
+  architecture: ["ARCHITECTURE.md#5-auth--session", "ARCHITECTURE.md#4-public-api--conventions"]
+---
+
+# Mobile confirmation wait — pollable state machine with blocking wrapper, distinct rejected/timeout results
+
+The SDK SHALL provide a push-confirm acquisition engine: a non-blocking
+pollable primitive (`begin` / `poll` / `cancel`) over the
+request→push→check→token sequence, plus a blocking wrapper with a
+caller-supplied timeout, yielding `EHEM_ERR_USER_REJECTED` when the user
+denies on the phone and `EHEM_ERR_CONFIRM_TIMEOUT` when the deadline
+passes unanswered.
+
+- **begin(ctx, scope, ctx_str, note, &confirm):** broker `session` (the
+  credential-free GET form — mobile mode holds no passphrase and needs
+  no eid; the device's identity arrives in the authreq it signs) →
+  `ehem_ext_request` → broker `event/new`; returns an opaque in-progress
+  handle owning the `eventid`. One device round-trip + two cloud legs;
+  no waiting. Every leg is unauthenticated by construction.
+- **poll(ctx, confirm):** ONE broker `event/check`:
+  - 202 → returns "still pending" (a non-error status out-param — poll
+    itself never sleeps and applies no deadline; cadence and deadline
+    belong to the caller or the blocking wrapper);
+  - 200+`authreply` → `ehem_ext_token`, seed the REQ-AUTH-002 token
+    cache under the REQUESTED scope (the pre-rewrite string the caller
+    passed — that is the cache key bindings look up; entry expiry from
+    the bearer's own `exp` claim as usual), return terminal success;
+  - 200+`deny` → terminal `EHEM_ERR_USER_REJECTED`;
+  - transport/broker/device errors → their normal mapping, terminal.
+- **cancel(ctx, confirm):** frees the handle; no broker/device call (the
+  event simply expires server-side with the authreq `exp`). Safe after
+  terminal poll; `confirm` is single-use.
+- **Blocking wrapper `wait(ctx, confirm, timeout_ms)`:** polls at a
+  bounded default interval (5 s, the tester's cadence; interval capped
+  so short timeouts still poll at least once) until terminal or
+  `timeout_ms` elapses → `EHEM_ERR_CONFIRM_TIMEOUT`. Timeout does NOT
+  invalidate the handle's memory (caller still frees via cancel), and a
+  push answered on the phone after the SDK gave up has no effect — no
+  `/ext/token` call ever happens.
+- The two mobile-specific errors are already in the ABI enum
+  (`ehem.h`, reserved since M1) — no enum change. HEM-SDK-8's
+  distinguishable-conditions contract is the driver: PKCS#11 maps
+  rejected AND timeout to `CKR_FUNCTION_CANCELED` but logs them apart;
+  other consumers may branch.
+
+**Rationale:** ARCHITECTURE §5 commits to "blocking wait with
+caller-supplied timeout; the API reserves a pollable variant for
+consumers that cannot block" — implementing blocking ON TOP of the
+pollable machine gives both for one state machine and lets unit tests
+drive every terminal through a scripted fake broker with zero sleeping
+(pace/interval injectable via a hidden test seam, the
+`ehem_auth_test_set_clock` precedent).
+
+**Acceptance criteria:**
+- [ ] Unit (fake transport, scripted broker): pending→approved seeds the
+      cache under the requested scope and a subsequent binding call uses
+      the bearer with NO new acquisition; pending→deny →
+      `EHEM_ERR_USER_REJECTED` (terminal, no `/ext/token` call);
+      perpetual-202 + wrapper deadline → `EHEM_ERR_CONFIRM_TIMEOUT`;
+      cancel leaks nothing (ASan) in every state.
+- [ ] Unit: wrapper poll cadence honors the interval seam; a timeout
+      shorter than one interval still performs ≥1 poll.
+- [ ] Live (attended, STEP-M8-080): one approved and one rejected
+      round-trip on the real phone produce EHEM_OK-with-working-bearer
+      and `EHEM_ERR_USER_REJECTED` respectively; an unanswered push
+      times out with `EHEM_ERR_CONFIRM_TIMEOUT`.
