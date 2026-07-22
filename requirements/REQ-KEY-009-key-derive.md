@@ -1,7 +1,7 @@
 ---
 id: REQ-KEY-009
 title: Binding for /api/keymgmt/derive — ECDH+HKDF derived key stored on device
-status: approved
+status: verified
 priority: must
 revision: 2
 source: ARCHITECTURE.md §11 (M7: keymgmt derive); encedo-hem-api-doc keymgmt/derive.md + discrepancies/DISCREPANCIES-OFFICIAL-DOCS.md §"derive vs ecdh"; encedo_firmware api_keymgmt.c:1285 api_post_keymgmt_derive (fw v1.2.2 — NOT prototyped in api.h; hem-api-tester test_10.php runs it green on real hardware); encedo-hem-python-api keymgmt.py derive (OQ-23: keymgmt:gen scope reuse); approved 2026-07-17
@@ -57,7 +57,7 @@ ECDH secret is shorter than the target (e.g. X25519 32 B → SECP521R1
 doc's determinism claim false for those combos.
 
 **Acceptance criteria:**
-- [ ] Unit (fake transport): body carries `{kid, label, type}` + exactly
+- [x] Unit (fake transport): body carries `{kid, label, type}` + exactly
       one peer field + `mode`/`descr` only when given; `{"kid"}` parsed;
       error mapping; `EHEM_ERR_ARG` pre-validation (incl. both-peers)
       with zero transport calls.

@@ -1,7 +1,7 @@
 ---
 id: REQ-TOOL-013
 title: hem-tool selftest — run the device self-test and report health
-status: approved
+status: verified
 priority: should
 revision: 1
 source: user decision 2026-07-17 (M7 decomposition tool set); REQ-SYS-007; approved 2026-07-17

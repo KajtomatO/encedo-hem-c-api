@@ -1,7 +1,7 @@
 ---
 id: REQ-TOOL-012
 title: hem-tool logs — audit log listing, download, and signing-key display
-status: approved
+status: verified
 priority: should
 revision: 1
 source: user decision 2026-07-17 (M7 decomposition tool set); REQ-SYS-009; approved 2026-07-17

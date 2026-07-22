@@ -1,7 +1,7 @@
 ---
 id: REQ-AUTH-005
 title: Opt-in proactive check-in at first token acquisition (checkin_on_login)
-status: approved
+status: verified
 priority: should
 revision: 1
 source: user decision 2026-07-17 (M7 decomposition; user note 2026-07-17 recorded in KNOWN-ISSUES.md clock-drift entry — "encedo-pkcs11 should perhaps always run a check-in when a new session starts; maybe that belongs in the SDK as an option")
@@ -37,13 +37,13 @@ REQ-AUTH-004 alone still costs one failed login round-trip when drift has
 accumulated. Kept separate from REQ-AUTH-004 per the one-behavior rule.
 
 **Acceptance criteria:**
-- [ ] Unit (fake transport): option set → exactly one check-in before the
+- [x] Unit (fake transport): option set → exactly one check-in before the
       first challenge GET, none on later token acquisitions (call-count
       asserted); option clear → zero check-ins.
-- [ ] Unit: check-in failure with the option set → login still proceeds
+- [x] Unit: check-in failure with the option set → login still proceeds
       and succeeds; failure detail retrievable via `ehem_last_error`.
-- [ ] Live: with `checkin_on_login` set, first authed call on a fresh
+- [x] Live: with `checkin_on_login` set, first authed call on a fresh
       context performs checkin + login + request against my.ence.do and
       succeeds; device clock verified resynced (status `ts` sane).
-- [ ] ABI: existing zero-initialized `ehem_options` users compile and run
+- [x] ABI: existing zero-initialized `ehem_options` users compile and run
       unchanged (append-only check in test_context).

@@ -1,7 +1,7 @@
 ---
 id: REQ-SYS-013
 title: TLS recovery binding — obtain and install a full key+cert bundle from the provisioning cloud
-status: approved
+status: verified
 priority: should
 revision: 1
 source: user decision 2026-07-22 ("add a recovery function to hem-tool so it will be easier in future" — after the wipe recovery performed manually the same day); Encedo provisioning tool (tmp/provis2.htm getFactoryCert); encedo_firmware api_system.c:1345 (tls emp/key/crt bundle install path); live-proven flow 2026-07-22

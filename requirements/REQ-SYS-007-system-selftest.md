@@ -1,7 +1,7 @@
 ---
 id: REQ-SYS-007
 title: Binding for /api/system/selftest — run the self-test battery and read repo stats
-status: approved
+status: verified
 priority: must
 revision: 2
 source: ARCHITECTURE.md §11 (M7: system group); encedo-hem-api-doc system/selftest.md; encedo_firmware api_system.c:260 api_get_system_selftest (fw v1.2.2); approved 2026-07-17
@@ -39,7 +39,7 @@ slot exhaustion — both feed the hem-tool selftest subcommand
 (REQ-TOOL-013) and give integration suites a device-health probe.
 
 **Acceptance criteria:**
-- [ ] Unit (fake transport): full-shape fixture parsed into the struct;
+- [x] Unit (fake transport): full-shape fixture parsed into the struct;
       minimal fixture (no kat_busy/se_state) → defaults false/−1;
       missing `fls_state` → `EHEM_ERR_PROTOCOL`; error mapping.
 - [x] Live (my.ence.do fw v1.2.2-DIAG, 2026-07-18): fls_state == 0,

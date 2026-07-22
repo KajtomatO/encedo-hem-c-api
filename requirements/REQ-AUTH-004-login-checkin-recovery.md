@@ -1,7 +1,7 @@
 ---
 id: REQ-AUTH-004
 title: Automatic check-in recovery on clock-drift login failure
-status: approved
+status: verified
 priority: must
 revision: 1
 source: user decision 2026-07-17 (M7 decomposition; raised from the M6-010 finding — device RTC runs ~8% fast, logins 401 once drift exceeds the requested TTL, `hem-tool checkin` resyncs the clock; KNOWN-ISSUES.md "Device clock runs ~8% fast"); encedo_firmware api_auth.c api_post_auth_token (fw v1.2.2 — rejects an eJWT whose `exp` is already past device time with 401)
@@ -47,17 +47,17 @@ keeps wrong-passphrase latency unchanged and avoids hammering the cloud
 relay on genuine auth failures.
 
 **Acceptance criteria:**
-- [ ] Unit (fake transport, pinned clock): drifted challenge `exp` +
+- [x] Unit (fake transport, pinned clock): drifted challenge `exp` +
       401 POST → exactly one check-in, one challenge re-GET, one POST
       retry, success; second 401 after recovery → `EHEM_ERR_AUTH_FAILED`
       with no further check-in.
-- [ ] Unit: 401 with un-drifted challenge `exp` (wrong passphrase
+- [x] Unit: 401 with un-drifted challenge `exp` (wrong passphrase
       scenario) → `EHEM_ERR_AUTH_FAILED` with zero check-in calls.
-- [ ] Unit: `no_auto_checkin` set → no check-in, plain failure; recovery
+- [x] Unit: `no_auto_checkin` set → no check-in, plain failure; recovery
       composes with the 403-RTC-unset and expired-cert paths (≤ 1
       check-in total per ensure_token call, transport-call count
       asserted).
-- [ ] Live: login green against my.ence.do; if the device happens to be
+- [x] Live: login green against my.ence.do; if the device happens to be
       drifted at run time, the recovery path is exercised and logged
       (opportunistic — drift cannot be fabricated remotely; the unit
       seam carries the proof).

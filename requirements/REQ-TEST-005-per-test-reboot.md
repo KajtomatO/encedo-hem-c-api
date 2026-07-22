@@ -1,7 +1,7 @@
 ---
 id: REQ-TEST-005
 title: Opt-in device reboot before each integration test (stall mitigation)
-status: approved
+status: verified
 priority: should
 revision: 2
 source: user decision 2026-07-18 ("the full sweep fails around test_pqc_live — as a temporary measure, add a reboot for every IT test, enabled by some flag"); KNOWN-ISSUES.md "Device stalls/hangs under sustained load" (watchdog firmware-disabled)

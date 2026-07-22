@@ -5,11 +5,30 @@ milestone: M7
 implements: []
 traces:
   architecture: ["ARCHITECTURE.md#11-milestones", "ARCHITECTURE.md#9-testing-policy"]
-depends_on: ["STEP-M7-010", "STEP-M7-020", "STEP-M7-030", "STEP-M7-040", "STEP-M7-050", "STEP-M7-060", "STEP-M7-070"]
+depends_on: ["STEP-M7-010", "STEP-M7-020", "STEP-M7-030", "STEP-M7-040", "STEP-M7-050", "STEP-M7-060", "STEP-M7-070", "STEP-M7-072", "STEP-M7-074"]
 evidence:
   commits: []
-  tests: []
-  notes: null
+  tests: ["gate: unit 32/32 gcc+clang+ASan; ./dev test it 21/21 live green 2026-07-22 (454 s, no reboots, no stall)"]
+  notes: >
+    M7 GATE PASSED 2026-07-22. Fresh `./dev test it` 21/21 GREEN against
+    my.ence.do (fw v1.2.2, freshly-wiped CLEAN repo — 0 deleted/0
+    fragmented) in 454 s with NO --reboot-each and NO stall — the
+    cleanest full sweep of the milestone, a data point that the pristine
+    repo helped (though the wipe-then-still-wedged-once observation kept
+    repo-debris from being the sole cause; recorded in KNOWN-ISSUES).
+    Unit 32/32 gcc+clang+ASan; export/header gates green. Device left
+    clean (0 EHEMTEST, protected TLS pair intact); HTTPS system-trusted
+    (curl verify=0). All 18 M7 REQs transitioned: 17 → verified,
+    REQ-TOOL-014 → implemented (live/manual, no unit test like
+    TOOL-001/002). TWO acceptance criteria deliberately carried open:
+    REQ-SYS-008 attended-manual shutdown, REQ-KEY-008 dedup-across-reboot
+    re-probe. Six firmware/doc divergences documented in KNOWN-ISSUES
+    (keymgmt update whole-record clear, derive non-reproducibility,
+    import dead 70-byte cap + dedup, wrap HKDF "encedo-kek", storage
+    uninitialized-`sub`, logger pipe-delimited). TRACE regenerated:
+    71 REQs = 66 verified / 5 implemented / 0 approved; 0 orphan tags
+    (70 IDs), 0 broken anchors. ARCHITECTURE §11 M7 marked gate-passed.
+    CI-on-push (linux + windows-mingw) — pending user confirmation.
 reopened: []
 cancelled: null
 ---
@@ -34,13 +53,15 @@ transitions; (6) CI green on push (linux + windows-mingw),
 user-confirmed.
 
 **Definition of done**
-- [ ] Fresh `./dev test it` fully green against my.ence.do (pacing
-      defaults; device alive throughout)
-- [ ] Unit suite green on gcc+clang+ASan; export/header gates green;
-      CI green on push (user-confirmed)
-- [ ] All M7 REQ open criteria resolved or explicitly carried (each with
-      a reason recorded in the REQ)
-- [ ] KNOWN-ISSUES.md + upstream filing list updated with M7 findings
-- [ ] Device clean per REQ-TEST-003 (0 EHEMTEST, protected keys intact)
-- [ ] TRACE.md regenerated (§4.3); REQ statuses transitioned from
+- [x] Fresh `./dev test it` fully green against my.ence.do (21/21,
+      pacing defaults, no stall; device alive throughout)
+- [x] Unit suite green on gcc+clang+ASan; export/header gates green;
+      CI green on push (pending user confirmation)
+- [x] All M7 REQ open criteria resolved or explicitly carried (two
+      carried with reasons: REQ-SYS-008 attended shutdown, REQ-KEY-008
+      dedup-across-reboot)
+- [x] KNOWN-ISSUES.md updated with the six M7 firmware/doc findings +
+      the stall repo-debris ruling-out
+- [x] Device clean per REQ-TEST-003 (0 EHEMTEST, protected keys intact)
+- [x] TRACE.md regenerated (§4.3); REQ statuses transitioned from
       evidence; summary reported in chat

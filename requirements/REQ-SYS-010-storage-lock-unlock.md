@@ -1,7 +1,7 @@
 ---
 id: REQ-SYS-010
 title: Bindings for /api/storage/unlock and /api/storage/lock — USB-MSC partition visibility
-status: approved
+status: verified
 priority: must
 revision: 2
 source: ARCHITECTURE.md §11 (M7: storage group); encedo-hem-api-doc storage/unlock.md, storage/lock.md, discrepancies/DISCREPANCIES-HEM-TEST.md §5; encedo_firmware api_storage.c (fw v1.2.2 — including the uninitialized `sub` read in both handlers' scope checks, api_storage.c:44-46/132-134); encedo-hem-python-api storage.py (OQ-24 no-op observation); approved 2026-07-17
@@ -54,7 +54,7 @@ unique on this device and worth pinning in SDK code + tests before a
 consumer trips over it.
 
 **Acceptance criteria:**
-- [ ] Unit (fake transport): unlock(0,false) requests scope
+- [x] Unit (fake transport): unlock(0,false) requests scope
       `storage:disk0`, unlock(1,true) → `storage:disk1:rw`, lock(1) →
       `storage:disk1` (scope asserted via the recorded challenge/eJWT or
       the auth seam); plain paths; empty-200 → OK; 403/406/409/404

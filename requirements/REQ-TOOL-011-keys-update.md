@@ -1,7 +1,7 @@
 ---
 id: REQ-TOOL-011
 title: hem-tool keys update — rename LABEL / set DESCR with protected-key guard
-status: approved
+status: verified
 priority: should
 revision: 2
 source: user decision 2026-07-17 (M7 decomposition tool set); REQ-KEY-007; REQ-TOOL-005 (protected-key policy); approved 2026-07-17

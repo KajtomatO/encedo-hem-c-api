@@ -1,7 +1,7 @@
 ---
 id: REQ-TOOL-015
 title: hem-tool tls-recover — one-command HTTPS restoration after TLS loss
-status: approved
+status: verified
 priority: should
 revision: 1
 source: user decision 2026-07-22; REQ-SYS-013 (the binding); the 2026-07-22 manual recovery sequence

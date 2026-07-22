@@ -1,7 +1,7 @@
 ---
 id: REQ-SYS-008
 title: Binding for /api/system/shutdown — stop network and USB services
-status: approved
+status: verified
 priority: must
 revision: 1
 source: ARCHITECTURE.md §11 (M7: system group), §1 (dangerous operations API-complete but test-gated); encedo-hem-api-doc system/shutdown.md; encedo_firmware api_system.c:2230 api_get_system_shutdown (fw v1.2.2); approved 2026-07-17
@@ -41,11 +41,11 @@ test-gated per the fixed architecture decision (§1) — same rationale as
 reboot, with an even stronger gate because recovery is physical.
 
 **Acceptance criteria:**
-- [ ] Unit (fake transport): GET to the right path with the
+- [x] Unit (fake transport): GET to the right path with the
       `system:shutdown` scope; empty-200 → `EHEM_OK` AND the whole token
       cache invalidated (next authed call re-logins — call-count
       asserted); 409/403 mapping.
-- [ ] Export/header gates green; binding documented with the
+- [x] Export/header gates green; binding documented with the
       physical-recovery warning.
 - [ ] OPEN (attended manual only — may remain unchecked indefinitely):
       live shutdown observed to stop the device until power-cycle;

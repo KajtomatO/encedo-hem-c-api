@@ -44,6 +44,23 @@ The exact exhausted resource (heap fragmentation, a blocking flash/audit-log
 write, a task stall) could not be pinned from the client — it needs the
 device's debug UART captured during a hang.
 
+### Update (M7, 2026-07-18 → 22): repo debris NOT the cause
+
+Two more data points weaken the "sustained load / heap fragmentation" reading:
+
+- **2026-07-18:** a full `--reboot-each` sweep (device rebooted before every
+  test binary) still wedged — per-binary reboots reset the firmware state yet
+  the hang recurred. At that point the key repo was heavily churned (repo_stats:
+  ~1560 logically-deleted slots, 99 fragmented), so "repo debris" was the
+  leading hypothesis.
+- **2026-07-22:** after a full device **wipe + re-init** (repo pristine: 0 keys,
+  0 deleted, 0 fragmented) the device *still* wedged once, with near-zero
+  traffic. That **rules repo debris out** as the primary driver. The remaining
+  suspects are firmware-internal (the disabled watchdog + missing FreeRTOS hooks
+  still turn any internal fault into a spin) and possibly plain-HTTP operation /
+  missing TLS material during recovery windows. Root cause still needs the
+  device UART.
+
 ### Mitigation (client-side, shipped)
 
 - **Stall-retry:** `./dev test it` runs the integration suite with
@@ -53,6 +70,10 @@ device's debug UART captured during a hang.
 - **Pacing:** `ehem_options.request_pace_ms` (REQ-NET-006) throttles requests;
   the test harness sets it from `EHEM_TEST_PACE_MS`, defaulted to 150 ms for
   `./dev test it`. `EHEM_TEST_PACE_MS=0` disables it.
+- **Per-test reboot (opt-in, M7 / REQ-TEST-005):** `EHEM_TEST_REBOOT_EACH=1`
+  (or `./dev test it --reboot-each`) reboots the device before each test binary.
+  A heavier hammer than pacing; it did NOT defeat the 2026-07-18 hang (see
+  above), so it is a diagnostic aid, not a fix.
 
 Neither prevents a rare hard hang (only the firmware can), but together they let
 the suite pass reliably on the flaky device instead of failing on the first
@@ -141,6 +162,84 @@ mldsa-verify.md promises 406). **SDK handling:** `ehem_mldsa_verify` maps
 ANY completed non-200/non-auth status — including out-of-range ones — to
 `EHEM_ERR_DEVICE` with the raw status retrievable (REQ-OPS-008; unit tests
 pin 65307/−229/100). **Upstream fix:** add the missing 406 mapping.
+
+## OPEN — M7 firmware/doc divergences (fw v1.2.2): keymgmt + wrap + storage + logger
+
+**Status:** open (firmware/doc bugs; the SDK ships correct behavior grounded in
+the real device). **Affected:** the M7 keymgmt, cipher-wrap, storage, and logger
+groups. All found + confirmed live 2026-07-18; upstream-doc / firmware filings.
+
+### 1. `keymgmt/update` is a whole-record rewrite — an omitted `descr` CLEARS it
+
+`api_post_keymgmt_update` rewrites the key's entire metadata record, so a body
+with `label` but no `descr` wipes any stored DESCR — NOT "left unchanged" as
+`keymgmt/update.md` claims. **SDK/tool handling:** the binding passes the
+semantics through verbatim (documented in `ehem_key_update`); `hem-tool keys
+update` re-sends the stored descr when `--descr` is omitted so the CLI is
+least-surprise (REQ-KEY-007 rev2, REQ-TOOL-011 rev2). **Fix:** correct the doc,
+or make the firmware merge omitted fields.
+
+### 2. `keymgmt/derive` output is not externally reproducible
+
+The derived key is NOT `HKDF-SHA256(ECDH-secret, "encedo-<type>")` as
+`keymgmt/derive.md` describes: the repo's key-generation step applies an
+undisclosed extra transformation to the seed (source `REPO_GenKey_*` absent from
+the checkout). 85 candidate local reconstructions — including the doc-exact RFC
+5869 pipeline over the raw wolfCrypt X25519 secret `CRYPTO_DeriveKey` provably
+outputs — all mismatched the device MAC. Derivation IS deterministic on-device
+(a repeat derive dedup-406s), so device↔device agreement holds; external
+implementations cannot converge. Also: the doc's `keymgmt:derive` scope works,
+but so does `keymgmt:gen` (the SDK uses gen for token sharing); and a
+short-secret→long-key derive (e.g. X25519→SECP521R1) is rejected 406, so the
+stale-stack HKDF-input quirk noted in the REQ is unreachable for cross-family
+derives. **SDK handling:** `ehem_key_derive` documents "device-side agreement
+only"; `test_derive_live` pins the mismatch so a doc-conformant firmware change
+surfaces (REQ-KEY-009 rev2). **Fix:** document the real derivation, or make it
+match the spec.
+
+### 3. `keymgmt/import` — the 70-byte pubkey cap is dead code
+
+The handler validates `pubkey` with `isvalid_base64(.., 66+4)`, nominally
+capping decoded length at 70 bytes — but that length check never fires (the
+misc.c `isvalid_base64` counter bug, same one that lets an over-long DESCR
+through, STEP-M5-010). Live, an **800-byte MLKEM512** pubkey imported fine, and
+the repo did not validate the ML-KEM material either. **SDK handling:**
+`ehem_key_import` imposes no client-side pubkey cap; the device arbitrates
+(REQ-KEY-008 rev3). Also observed: import dedup (406 on a duplicate pubkey)
+appears to match material from keys that were imported AND DELETED once the
+device reboots in between — the boot-time repo scan seems to index
+non-compacted deleted slots. Recorded as a REQ-KEY-008 open criterion (the tests
+now use per-run-unique material); confirm at leisure. **Fix:** repair the
+length check; make delete+compaction drop the dedup index entry.
+
+### 4. `cipher/wrap` HKDF info string is `"encedo-kek"`, not the documented `"encedo"`
+
+`CRYPTO_Wrap`'s ECDH-derived-KEK HKDF uses info = `"encedo-kek"` ‖ ctx
+(crypto.c:57 `CRYPTO_HKDF_CONTEXT_KEK`) — a THIRD literal, distinct from both
+the doc/handler-comment's `"encedo"` and encrypt's `"encedo-aes"`. Proven by a
+byte-exact match between the device wrap and a local `wc_AesKeyWrap` under
+HKDF(shim ECDH secret) with that info. Unlike derive, this HKDF uses the
+secret's real length, so wrap IS externally reproducible. **SDK handling:** the
+`ehem_wrap` header documents `"encedo-kek"`; `test_wrap_live` pins it
+(REQ-OPS-009 rev2). **Fix:** correct the doc.
+
+### 5. `storage/unlock` + `storage/lock` read an uninitialized `sub` pointer
+
+Both handlers evaluate `strcmp(sub, "M")` before `sub` is assigned (it is only
+set inside the audit-log branch — api_storage.c:44-46 / :132-134): undefined
+behavior on the scope-prefix-match path. It happened to be benign on this build
+(two clean attended runs), but UB can shift with any firmware change. **SDK
+handling:** the live test stays `disruptive`-labeled (UB + the unlock exposes
+the microSD to the USB host) — REQ-SYS-010 rev2. **Fix:** assign `sub` before
+the scope check.
+
+### 6. `logger/{id}` files are pipe-delimited, not "JSON-like"
+
+Downloaded audit-log files are a `# Encedo nGINE FW <ver>` header line followed
+by pipe-delimited records (`seq|ts|type|result|…|sig|chain`, base64url fields),
+not the "one JSON-like record per line" `logger/get.md` states. **SDK
+handling:** `ehem_logger_get` returns the body verbatim (never parses it); the
+header documents the real shape (REQ-SYS-009). **Fix:** correct the doc.
 
 ## RESOLVED — Windows (MinGW) X25519 crash: missing wolfCrypt_Init()
 

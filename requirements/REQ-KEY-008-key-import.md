@@ -1,7 +1,7 @@
 ---
 id: REQ-KEY-008
 title: Binding for /api/keymgmt/import — import an external public key
-status: approved
+status: verified
 priority: must
 revision: 3
 source: ARCHITECTURE.md §11 (M7: keymgmt import); encedo-hem-api-doc keymgmt/import.md; encedo_firmware api_keymgmt.c:1123 api_post_keymgmt_import (fw v1.2.2; REPO_ImportKey body not in the source checkout); encedo-hem-python-api keymgmt.py import_key (406 = dedup finding); approved 2026-07-17
@@ -49,7 +49,7 @@ is decided by `REPO_ImportKey`, whose source is not in the checkout —
 the device arbitrates.
 
 **Acceptance criteria:**
-- [ ] Unit (fake transport): body carries `{type, label, pubkey(b64)}` +
+- [x] Unit (fake transport): body carries `{type, label, pubkey(b64)}` +
       `mode`/`descr` only when given (bytes asserted); `{"kid"}` parsed
       to out_kid; 400/403/406 mapping; `EHEM_ERR_ARG` pre-validation
       with zero transport calls.

@@ -1,7 +1,7 @@
 ---
 id: REQ-SYS-011
 title: Binding for /api/system/config/attestation — device attestation material
-status: approved
+status: verified
 priority: should
 revision: 2
 source: ARCHITECTURE.md §11 (M7: system group); encedo-hem-api-doc system/config-attestation.md, system/config-provisioning.md (provisioning EXCLUDED — factory-only, 403 once initialised); encedo_firmware api_system.c:2285 api_get_system_config_attestation (fw v1.2.2); approved 2026-07-17
@@ -45,7 +45,7 @@ path reuses the REQ-SYS-006 inspection surface rather than growing a new
 ASN.1 seam.
 
 **Acceptance criteria:**
-- [ ] Unit (fake transport): both shapes parsed (crt-variant,
+- [x] Unit (fake transport): both shapes parsed (crt-variant,
       csr-variant); absent `genuine` → `EHEM_ERR_PROTOCOL`; 500 body
       `"atecc_1"` lands in last-error detail; 404/409 mapping.
 - [x] Live (2026-07-18): `crt` variant returned (provisioned device,

@@ -1,7 +1,7 @@
 ---
 id: REQ-OPS-009
 title: Bindings for /api/crypto/cipher/wrap and /api/crypto/cipher/unwrap — AES key wrap by KID
-status: approved
+status: verified
 priority: must
 revision: 2
 source: user decision 2026-07-17 (pulled into M7 from the M6 "(M7/M9 sweep)" note); encedo-hem-api-doc crypto/cipher-wrap.md, crypto/cipher-unwrap.md; encedo_firmware api_crypto.c:721 api_post_crypto_cipher_wrap / :947 api_post_crypto_cipher_unwrap + crypto.c CRYPTO_Wrap/CRYPTO_Unwrap (fw v1.2.2); approved 2026-07-17
@@ -56,7 +56,7 @@ use ("as the recipient in cipher-wrap"). Pulled into M7 while the M6
 cipher/peer-arg helpers are fresh (user decision 2026-07-17).
 
 **Acceptance criteria:**
-- [ ] Unit (fake transport): wrap body carries `{kid, msg(b64)}` +
+- [x] Unit (fake transport): wrap body carries `{kid, msg(b64)}` +
       `alg`/`ext_kid`/`pubkey`/`ctx`/`iv` only when given; unwrap
       mirrors; `{"wrapped"}` and the unwrap response decoded into
       caller-owned buffers (unwrapped zeroized on free); error mapping

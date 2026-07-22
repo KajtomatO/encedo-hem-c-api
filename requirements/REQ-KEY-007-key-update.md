@@ -1,7 +1,7 @@
 ---
 id: REQ-KEY-007
 title: Binding for /api/keymgmt/update — rewrite LABEL/DESCR by KID
-status: approved
+status: verified
 priority: must
 revision: 2
 source: ARCHITECTURE.md §11 (M7: keymgmt update — LABEL/DESCR); encedo-hem-api-doc keymgmt/update.md; encedo_firmware api_keymgmt.c:999 api_post_keymgmt_update (fw v1.2.2); approved 2026-07-17
@@ -46,7 +46,7 @@ DESCR-prefix search implies writable DESCR). The firmware updates
 whichever fields are sent and leaves omitted ones untouched.
 
 **Acceptance criteria:**
-- [ ] Unit (fake transport): body carries exactly `{kid, label}` +
+- [x] Unit (fake transport): body carries exactly `{kid, label}` +
       `descr` only when given (base64, asserted bytes); empty-200 →
       `EHEM_OK`; 406→NOT_FOUND / 400→DEVICE / 403→SCOPE_DENIED mapping;
       `EHEM_ERR_ARG` pre-validation with zero transport calls.

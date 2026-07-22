@@ -1,7 +1,7 @@
 ---
 id: REQ-TOOL-014
 title: hem-tool reboot — reboot the device from the CLI
-status: approved
+status: implemented
 priority: should
 revision: 1
 source: user decision 2026-07-18 ("add reboot command to hem-tool"); REQ-SYS-005 (the binding)

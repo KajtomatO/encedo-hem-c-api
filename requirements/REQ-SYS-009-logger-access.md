@@ -1,7 +1,7 @@
 ---
 id: REQ-SYS-009
 title: Bindings for /api/logger — audit-log signing key, file list, file download
-status: approved
+status: verified
 priority: must
 revision: 1
 source: ARCHITECTURE.md §11 (M7: logger group); encedo-hem-api-doc logger/key.md, logger/list.md, logger/get.md, logger/delete.md (DELETE not dispatched), discrepancies/DISCREPANCIES-HEM-TEST.md §"log chain verification"; encedo_firmware api_logger.c (fw v1.2.2 — api_get_logger_key outside the USB_MSC_AVAILABLE guard, list/get inside it); approved 2026-07-17
@@ -48,17 +48,17 @@ chain offline (tester lib.php implements full chain verification —
 future consumer work, not SDK scope; the SDK delivers the material).
 
 **Acceptance criteria:**
-- [ ] Unit (fake transport): key triple base64-decoded with length
+- [x] Unit (fake transport): key triple base64-decoded with length
       enforcement (32/32/64) and PROTOCOL on deviation; list page
       parsed (total + ids, empty page OK); get returns raw bytes
       verbatim (binary-safe, not JSON-parsed) with length; error
       mapping per endpoint.
-- [ ] Live: `ehem_logger_key` → nonce_signed verifies over nonce with
+- [x] Live: `ehem_logger_key` → nonce_signed verifies over nonce with
       the crypto shim's `ehem_ed25519_verify` against `key` (test-only
       shim use, static-lib link like test_auth_live).
-- [ ] Live (PPA path): list page 0 → total ≥ 1 (the suite's own audit
+- [x] Live (PPA path): list page 0 → total ≥ 1 (the suite's own audit
       events exist), fetch the first id → non-empty text body whose
       first line looks like a log record; on an EPA device both skip
       with the 404 recorded.
-- [ ] OPEN (live probe): dev-device PPA/EPA determination (list/get
+- [x] OPEN (live probe): dev-device PPA/EPA determination (list/get
       routed or 404) + observed page size and id format recorded here.

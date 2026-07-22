@@ -484,11 +484,18 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   `hem-tool fw-upgrade` orchestrator. *Recorded absent in fw v1.2.2:*
   `system/health` (declared, never implemented), `DELETE /api/logger`
   (dispatch commented out), `config/provisioning` (factory-only —
-  deliberately unbound, REQ-SYS-011). **Gate:** every new binding green
-  live; the decomposition's firmware-conflict probes (import type
-  support vs the dead 70-byte cap, derive determinism for short-secret
-  combos, wrap HKDF info string, storage uninitialized-`sub` behavior,
-  PPA/EPA determination) resolved and recorded in their REQs.
+  deliberately unbound, REQ-SYS-011). *Mid-milestone additions (user
+  decisions 2026-07-18/22):* opt-in per-test device reboot (REQ-TEST-005)
+  and `hem-tool reboot` (REQ-TOOL-014) for the stall workflow, and TLS
+  recovery — `ehem_tls_recover` + `hem-tool tls-recover` (REQ-SYS-013 /
+  REQ-TOOL-015) — restoring HTTPS after a device wipe via the
+  provisioning cloud. **Gate PASSED (2026-07-22):** all 18 M7 REQs
+  verified/implemented; `./dev test it` 21/21 green live (fw v1.2.2,
+  freshly-wiped clean repo) with no stall; the firmware-conflict probes
+  resolved and recorded in their REQs + KNOWN-ISSUES (keymgmt update
+  whole-record clear, derive non-reproducibility, import dead cap +
+  dedup-across-reboot, wrap HKDF `encedo-kek`, storage
+  uninitialized-`sub`, logger pipe-delimited format).
 - **M8 — mobile-app authentication:** push-confirm auth flow (`ext-*`
   endpoints), blocking wait with timeout + pollable variant; distinct
   rejected/timeout results.
