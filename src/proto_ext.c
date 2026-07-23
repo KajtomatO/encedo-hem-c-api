@@ -100,6 +100,15 @@ ehem_rc ehem_ext_init(ehem_ctx *ctx, const char *epk_b64,
     *out = NULL;
     ehem_ctx_clear_error(ctx);
 
+    /* REQ-AUTH-010: fail fast instead of firing a doomed push. */
+    if (ehem_auth_is_mobile(ctx)) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_SCOPE_DENIED, 0, NULL,
+                             "ext/init: pairing requires a passphrase "
+                             "session — the device demands sub=\"U\" and "
+                             "mobile bearers carry the authenticator kid; "
+                             "call ehem_login() (no push was sent)");
+    }
+
     if (!is_b64_of_32(epk_b64)) {
         return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
                              "ext/init: epk must be standard base64 of "
@@ -163,6 +172,15 @@ ehem_rc ehem_ext_validate(ehem_ctx *ctx, const char *pid_b64,
     }
     *out = NULL;
     ehem_ctx_clear_error(ctx);
+
+    /* REQ-AUTH-010: fail fast instead of firing a doomed push. */
+    if (ehem_auth_is_mobile(ctx)) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_SCOPE_DENIED, 0, NULL,
+                             "ext/validate: pairing requires a passphrase "
+                             "session — the device demands sub=\"U\" and "
+                             "mobile bearers carry the authenticator kid; "
+                             "call ehem_login() (no push was sent)");
+    }
 
     if (!is_b64_of_32(pid_b64)) {
         return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
@@ -247,6 +265,15 @@ ehem_rc ehem_ext_mac(ehem_ctx *ctx, const char *epk_b64,
     }
     *out = NULL;
     ehem_ctx_clear_error(ctx);
+
+    /* REQ-AUTH-010: fail fast instead of firing a doomed push. */
+    if (ehem_auth_is_mobile(ctx)) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_SCOPE_DENIED, 0, NULL,
+                             "ext/mac: pairing requires a passphrase "
+                             "session — the device demands sub=\"U\" and "
+                             "mobile bearers carry the authenticator kid; "
+                             "call ehem_login() (no push was sent)");
+    }
 
     if (!is_b64_of_32(epk_b64)) {
         return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,

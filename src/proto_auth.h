@@ -51,6 +51,11 @@ void ehem_auth_invalidate(ehem_ctx *ctx, const char *scope);
 ehem_rc ehem_auth_cache_seed(ehem_ctx *ctx, const char *scope,
                              const char *token);
 
+/* True iff the context's session is in mobile (push-confirm) mode
+ * (REQ-AUTH-010). Bindings the device restricts to sub=="U" (the pairing
+ * trio) use this to fail fast instead of firing a doomed push. */
+bool ehem_auth_is_mobile(const ehem_ctx *ctx);
+
 /*
  * Scrub and free the session state behind `ctx->auth` (zeroizing the retained
  * passphrase and every cached token). NULL-safe. Used by ehem_logout() and

@@ -50,6 +50,7 @@ struct ehem_auth {
     size_t  passphrase_len;   /* length excluding the NUL */
     bool    retain;           /* false → scrub passphrase after first use */
     char   *username;         /* last challenge `lbl`, or NULL (debug only) */
+    bool    mobile;           /* REQ-AUTH-010: acquire via push-confirm */
     struct token_entry *cache;
 };
 
@@ -506,6 +507,45 @@ ehem_rc ehem_auth_ensure_token(ehem_ctx *ctx, const char *scope,
         }
     }
 
+    /*
+     * Mobile mode (REQ-AUTH-010): a miss acquires via the push-confirm
+     * engine — the user answers on their phone within confirm_timeout_ms and
+     * the minted bearer lands in this same cache; rejection/timeout surface
+     * from whatever binding triggered the acquisition. The proactive
+     * session-start check-in applies here exactly as it does below (the
+     * ext endpoints need the RTC set just like the challenge GET).
+     */
+    if (a != NULL && a->mobile) {
+        ehem_ext_confirm *confirm = NULL;
+
+        if (ctx->checkin_on_login && !ctx->checkin_on_login_done &&
+            !ctx->in_checkin) {
+            ctx->checkin_on_login_done = true;
+            proactive_failed =
+                (ehem_checkin_run(ctx, /*relax_device_tls=*/1, NULL)
+                 != EHEM_OK);
+            (void)proactive_failed;   /* breadcrumb below is passphrase-path */
+        }
+
+        rc = ehem_ext_confirm_begin(ctx, NULL, scope, NULL, NULL, &confirm);
+        if (rc != EHEM_OK) {
+            return rc;
+        }
+        rc = ehem_ext_confirm_wait(ctx, confirm, ctx->confirm_timeout_ms);
+        ehem_ext_confirm_cancel(confirm);
+        if (rc != EHEM_OK) {
+            return rc;   /* USER_REJECTED / CONFIRM_TIMEOUT / broker error */
+        }
+        e = cache_find(a, scope);
+        if (e == NULL) {
+            return ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 0, NULL,
+                                 "mobile login: confirmation succeeded but "
+                                 "no bearer was cached for scope '%s'", scope);
+        }
+        *token_out = e->token;
+        return EHEM_OK;
+    }
+
     /* Need to acquire; only possible while a credential is retained. */
     if (a == NULL || a->passphrase == NULL) {
         return ehem_ctx_fail(ctx, EHEM_ERR_AUTH_EXPIRED, 0, NULL,
@@ -650,7 +690,49 @@ ehem_rc ehem_login(ehem_ctx *ctx, const char *passphrase)
     a->passphrase     = copy;
     a->passphrase_len = n;
     a->retain         = !ctx->no_credential_retention;
+    a->mobile         = false;   /* last login call wins (REQ-AUTH-010) */
     return EHEM_OK;
+}
+
+/*
+ * Mobile login mode (REQ-AUTH-010): same lazy contract as ehem_login, but
+ * the recorded "credential" is the MODE — ensure_token acquires bearers via
+ * the push-confirm engine instead of the passphrase exchange. Mutually
+ * exclusive with a passphrase session: switching scrubs the loser.
+ */
+ehem_rc ehem_login_mobile(ehem_ctx *ctx)
+{
+    struct ehem_auth *a;
+
+    if (ctx == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    ehem_ctx_clear_error(ctx);
+
+    if (ctx->auth == NULL) {
+        ctx->auth = calloc(1, sizeof *ctx->auth);
+        if (ctx->auth == NULL) {
+            return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL,
+                                 "out of memory");
+        }
+    }
+    a = ctx->auth;
+
+    /* Re-login: drop cached tokens and any retained passphrase. */
+    cache_clear(a);
+    free(a->username);
+    a->username = NULL;
+    scrub_passphrase(a);
+
+    a->mobile = true;
+    return EHEM_OK;
+}
+
+/* Internal (proto_auth.h): mode query for bindings that must fail fast in
+ * mobile mode (the pairing trio demands sub=="U", REQ-AUTH-010). */
+bool ehem_auth_is_mobile(const ehem_ctx *ctx)
+{
+    return ctx != NULL && ctx->auth != NULL && ctx->auth->mobile;
 }
 
 ehem_rc ehem_logout(ehem_ctx *ctx)

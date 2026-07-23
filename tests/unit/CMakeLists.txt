@@ -37,6 +37,9 @@ ehem_add_unit_test(test_notify SOURCES test_notify.c)
 # REQ-AUTH-009: mobile confirmation engine — pollable + blocking wait (M8).
 ehem_add_unit_test(test_confirm SOURCES test_confirm.c)
 
+# REQ-AUTH-010: mobile login mode via the ensure-token chokepoint (M8).
+ehem_add_unit_test(test_mobile SOURCES test_mobile.c)
+
 # REQ-TOOL-003: hem-tool cert-install orchestration via the fake transport.
 # Links hem-tool-core (the shared tool code) alongside the test support lib.
 if(TARGET hem-tool-core)

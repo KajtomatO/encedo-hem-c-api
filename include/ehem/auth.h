@@ -10,12 +10,14 @@
  * against the device's session key, and submits an HMAC-SHA256-signed compact
  * JWT to obtain a scoped bearer token (ARCHITECTURE.md §5).
  *
- * This header exposes only the two lifecycle calls a consumer makes directly:
- * ehem_login() to establish a session and ehem_logout() to end it. Token
- * acquisition itself is lazy and automatic — the authenticated protocol
- * bindings (added from M2 on) acquire and cache a token for the scope they
- * need on first use, and silently refresh it before it expires. There is no
- * public "get token" call; a bearer token never crosses the public API.
+ * Session lifecycle: ehem_login() (passphrase) or ehem_login_mobile()
+ * (push-confirm, REQ-AUTH-010) establish a session; ehem_logout() ends it.
+ * Token acquisition itself is lazy and automatic — the authenticated
+ * protocol bindings acquire and cache a token for the scope they need on
+ * first use, and silently refresh it before it expires. There is no public
+ * "get token" call for the session engine; the one deliberate exception is
+ * ehem_ext_token(), where returning the minted bearer to the broker-driving
+ * caller is the point.
  */
 #ifndef EHEM_AUTH_H
 #define EHEM_AUTH_H
@@ -57,6 +59,30 @@ EHEM_API ehem_rc ehem_login(ehem_ctx *ctx, const char *passphrase);
  * EHEM_ERR_ARG on a NULL ctx, otherwise EHEM_OK (a no-op if never logged in).
  */
 EHEM_API ehem_rc ehem_logout(ehem_ctx *ctx);
+
+/*
+ * Mobile login mode (REQ-AUTH-010): establish a session whose bearers are
+ * acquired by PUSH CONFIRMATION on a paired phone instead of a passphrase.
+ * Same lazy contract as ehem_login() — no network here. Afterwards, any
+ * binding needing a token for a scope not in the cache fires one push
+ * (ehem_ext_confirm machinery, all legs credential-free) and blocks up to
+ * ehem_options.confirm_timeout_ms (0 → 60 s): the user's answer surfaces
+ * from that binding call as success, EHEM_ERR_USER_REJECTED, or
+ * EHEM_ERR_CONFIRM_TIMEOUT — the pinpad-reader UX.
+ *
+ * Consequences to know:
+ *   - one push per SCOPE on first use; per-KID scopes (keymgmt:use:<kid>)
+ *     mean one push per key and a 15-minute bearer (firmware rewrite) — a
+ *     consumer wanting fewer pushes requests broader scopes;
+ *   - the minted bearers carry the authenticator kid as `sub`, so the
+ *     pairing endpoints (which demand sub="U") reject them — pairing
+ *     management always needs a passphrase session; the SDK fails those
+ *     calls fast in mobile mode without firing a push;
+ *   - mutually exclusive with ehem_login(): the last call wins and the
+ *     loser's credential material is scrubbed. ehem_logout() ends either
+ *     kind of session.
+ */
+EHEM_API ehem_rc ehem_login_mobile(ehem_ctx *ctx);
 
 /* --------------------------------------------------------------------------
  * ExtAuth pairing (REQ-AUTH-006) — register an external authenticator

@@ -52,6 +52,9 @@ struct ehem_ctx {
     bool  checkin_on_login;
     bool  checkin_on_login_done;
 
+    /* Mobile confirmation timeout (REQ-AUTH-010), per token acquisition. */
+    long  confirm_timeout_ms;
+
     /* Auth / session (REQ-AUTH-001, REQ-AUTH-002). `auth` is lazily allocated
      * by ehem_login() and torn down (zeroizing credentials) by ehem_logout() /
      * ehem_ctx_destroy(). no_credential_retention mirrors the option. */

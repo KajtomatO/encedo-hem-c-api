@@ -115,6 +115,7 @@ typedef enum ehem_tls_mode {
 /* Documented defaults applied by ehem_options_init() / a NULL options arg. */
 #define EHEM_DEFAULT_CONNECT_TIMEOUT_MS 10000L   /* 10 s to establish a connection */
 #define EHEM_DEFAULT_TOTAL_TIMEOUT_MS   30000L   /* 30 s for the whole request */
+#define EHEM_DEFAULT_CONFIRM_TIMEOUT_MS 60000L   /* 60 s for a mobile confirmation */
 
 /* Default cloud endpoint for the check-in handshake (see ehem_system_checkin
  * in <ehem/system.h> and the automatic recovery notes below). */
@@ -180,6 +181,16 @@ typedef struct ehem_options {
      * is an explicit request. 0 (the default) disables it.
      */
     int            checkin_on_login;    /* 0 = no proactive check-in (default) */
+
+    /*
+     * Mobile confirmation timeout (REQ-AUTH-010). How long, in milliseconds,
+     * a mobile-mode token acquisition (see ehem_login_mobile in
+     * <ehem/auth.h>) blocks waiting for the user to answer the push on their
+     * phone before failing with EHEM_ERR_CONFIRM_TIMEOUT. Applies per
+     * acquisition (per scope needing a bearer), not per API call. 0 (the
+     * default, per the abi_size discipline) selects the built-in 60 000 ms.
+     */
+    long           confirm_timeout_ms;  /* 0 = default 60 s */
 } ehem_options;
 
 /*

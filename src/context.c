@@ -99,6 +99,7 @@ void ehem_options_init(ehem_options *opts)
     opts->checkin_url        = NULL;   /* NULL → EHEM_DEFAULT_CHECKIN_URL */
     opts->no_credential_retention = 0; /* retain the passphrase for silent refresh */
     opts->checkin_on_login   = 0;      /* no proactive session-start check-in */
+    opts->confirm_timeout_ms = 0;      /* 0 = built-in 60 s (REQ-AUTH-010) */
 }
 
 /* Copy options into the context, applying defaults for absent/zero fields.
@@ -119,6 +120,8 @@ static ehem_rc apply_options(ehem_ctx *ctx, const ehem_options *opts)
     /* implements: REQ-AUTH-005 (option plumbing; behavior in proto_auth.c) */
     ctx->checkin_on_login      = false;
     ctx->checkin_on_login_done = false;
+    /* implements: REQ-AUTH-010 (option plumbing; behavior in proto_auth.c) */
+    ctx->confirm_timeout_ms    = EHEM_DEFAULT_CONFIRM_TIMEOUT_MS;
 
     if (opts == NULL) {
         ctx->checkin_url = ehem_strdup(EHEM_DEFAULT_CHECKIN_URL);
@@ -153,6 +156,9 @@ static ehem_rc apply_options(ehem_ctx *ctx, const ehem_options *opts)
     }
     if (EHEM_OPT_HAS(opts, no_credential_retention)) {
         ctx->no_credential_retention = (opts->no_credential_retention != 0);
+    }
+    if (EHEM_OPT_HAS(opts, confirm_timeout_ms) && opts->confirm_timeout_ms > 0) {
+        ctx->confirm_timeout_ms = opts->confirm_timeout_ms;
     }
     if (EHEM_OPT_HAS(opts, checkin_on_login)) {
         ctx->checkin_on_login = (opts->checkin_on_login != 0);
