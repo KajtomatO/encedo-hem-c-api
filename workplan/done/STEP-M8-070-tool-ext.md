@@ -7,9 +7,9 @@ traces:
   architecture: ["ARCHITECTURE.md#8-hem-tool-cli"]
 depends_on: ["STEP-M8-050", "STEP-M8-060"]
 evidence:
-  commits: []
-  tests: []
-  notes: null
+  commits: ["c91df5e"]
+  tests: ["verifies: REQ-TOOL-016 — tests/unit/test_ext_tool.c (4 cases: QR v1 matrix — 15 lines, all-light quiet rows, NULL/oversize refusal incl. the 80-col width fallback; pair happy/scan-timeout/406-refused with verbatim {kid,code} finalise pass-through and TWO login exchanges scripted (config + auth:ext:pair scopes); list EXTAID filter + [PROTECTED] + pid; login approved/rejected/timeout/NOAUTH exit-code matrix)"]
+  notes: "qrcodegen v1.8.0 vendored VERBATIM (SHA-256 pinned in VENDORED.md) under src/tools/hem-tool/vendor/ — TOOL-ONLY linkage (hem-tool-core), export/header gates prove the SDK stays clean. ext_cmd.{h,c} in hem-tool-core: pair (checkin→login→config[eid/user/email/hostname]→session-POST-eid per the REQ-AUTH-008 binding finding→ext/init→register/init→INVERTED UTF-8 half-block QR w/ 4-module quiet zone→poll→validate→finalise; JSON-escaped payload composer), list (search_all EXTAID + keys.h protected classifier), login (config demo for system:config, confirm engine for custom scopes, optional NOAUTH pre-check). main.c: ext dispatch + --no-qr/--scope/--note/--timeout/--notify-url; --timeout also feeds ehem_options.confirm_timeout_ms. Unit 38/38 gcc+clang+ASan; gates green; MinGW cross-syntax clean (ext_cmd.c, qrcodegen.c). LIVE smoke: `ext list` → '0 paired authenticators' on the real device. Attended pair/login = M8-080."
 reopened: []
 cancelled: null
 ---
@@ -34,11 +34,11 @@ care per the M7-070 lessons. `ext pair` cannot complete unattended —
 its unit tests script the broker; the attended completion is M8-080.
 
 **Definition of done**
-- [ ] Unit (hem-tool-core): pair leg order + verbatim finalise
+- [x] Unit (hem-tool-core): pair leg order + verbatim finalise
       pass-through + exit codes; list filter + protected marks; login
       exit-code matrix (scripted broker)
-- [ ] Unit: QR matrix matches a qrcodegen reference fixture; width
+- [x] Unit: QR matrix matches a qrcodegen reference fixture; width
       fallback exercised
-- [ ] `./dev ci` + asan green on gcc+clang; export/header gates green
+- [x] `./dev ci` + asan green on gcc+clang; export/header gates green
       (qrcodegen tool-only); MinGW cross-syntax check clean
-- [ ] Tags placed; evidence filled
+- [x] Tags placed; evidence filled
