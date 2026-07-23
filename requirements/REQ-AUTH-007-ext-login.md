@@ -3,7 +3,7 @@ id: REQ-AUTH-007
 title: ExtAuth login bindings — request and token (push-confirm bearer issuance)
 status: approved
 priority: must
-revision: 1
+revision: 2
 source: user decision 2026-07-22 (M8 decomposition); encedo-hem-api-doc auth/ext-request.md, ext-token.md; encedo_firmware api_auth.c:1289 (alter_requested_scope), :1329 (request), :1588 (token), crypto.c:3177 (grant_ext_jwt_auth_token); hem-api-tester test_6.php
 depends_on: ["REQ-AUTH-004", "REQ-AUTH-006", "REQ-SYS-003"]
 supersedes: null
@@ -24,9 +24,11 @@ authenticator can decrypt) and `ehem_ext_token` (exchange a countersigned
   this is confirmed by tester/Manager usage + live probe). Preconditions
   in order: RTC set (else **403**), initialised (else 409), `fls_state==0`
   (else 409). On 403 the SDK SHALL run the single
-  check-in-and-retry recovery exactly once, sharing the per-context
-  recovery budget of REQ-AUTH-004 (the wiped dev device boots with RTC
-  unset — KNOWN-ISSUES).
+  check-in-and-retry recovery exactly once per binding call — the
+  REQ-AUTH-004 recovery pattern (whose budget is likewise per
+  acquisition call, not per context; rev 2 wording fix), honoring
+  `no_auto_checkin` and the check-in recursion guard (the wiped dev
+  device boots with RTC unset — KNOWN-ISSUES).
 - **`ehem_ext_request(ctx, epk_b64, scope, ctx_str, note, &out)`** →
   POST `/api/auth/ext/request` `{"epk", "scope", "ctx"?, "note"?}`;
   200 → `{authreq, epk}` (`ehem_ext_request_info`). Firmware facts:
@@ -84,17 +86,28 @@ client (REQ-AUTH-008), and REQ-TEST-006's simulated authenticator drives
 them device-locally.
 
 **Acceptance criteria:**
-- [ ] Unit (fake transport): request/token shapes; arg pre-validation
-      (scope length, ctx/note bounds, epk length); 403-RTC single
-      checkin+retry sharing the AUTH-004 budget; 401/406 →
-      `EHEM_ERR_AUTH_FAILED`; 409 → `EHEM_ERR_DEVICE`.
-- [ ] Live (simulated authenticator, REQ-TEST-006): pair → request →
-      decrypt own scheme-A entry → build authreply → token; bearer used
-      on `GET /api/system/config` successfully; bearer `sub` =
-      base64(kid) recorded.
-- [ ] Live: `keymgmt:use:<kid>` scope rewrite observed (`#`-suffix in
-      the decrypted entry, 15-min `exp` in authreq and issued bearer);
-      60-min lifetime for a plain scope.
-- [ ] Open (live probe): both endpoints confirmed reachable with no
-      Authorization header (routing source missing); empty-`scope`
-      object shape with zero paired authenticators captured.
+- [x] Unit (fake transport, tests/unit/test_ext.c, 2026-07-23):
+      request/token shapes; arg pre-validation (scope length, ctx/note
+      bounds, epk length); 403-RTC exactly-one checkin+retry (second
+      403 terminal; `no_auto_checkin` suppresses); 401/406 →
+      `EHEM_ERR_AUTH_FAILED` with distinguishing detail; token returned
+      verbatim; no Authorization header and no login exchange on the
+      wire.
+- [x] Live (test_ext_login_live, 2026-07-23): pair → request → decrypt
+      own scheme-A entry → build authreply → token; the bearer
+      AUTHENTICATED a real `GET /api/system/config` (200, devid); bearer
+      `sub` = base64(kid), `exp` = the authreply's exp, `ctx` echoed —
+      all asserted; a tampered authreply → 401 `EHEM_ERR_AUTH_FAILED`.
+- [x] Live (same run): `keymgmt:use:<kid>` rewrite observed — decrypted
+      entry = `<scope>#<base64 {"t":…,"l":…}>` (label matched), authreq
+      `exp−iat` = 900 s; plain scope = 3600 s.
+- [x] Live probes (2026-07-23): both endpoints answered 200 on a
+      NEVER-logged-in context with no Authorization header (bypass
+      confirmed despite the missing routing source); zero-pairing
+      authreq captured — 200 with `"scope": {}` (curl probe). A REAL
+      authreq + opening keys frozen as
+      tests/support/fixtures/ext_authreq_fixture.h; the unit suite
+      verifies + decrypts it offline. NB the firmware's JWT header key
+      order is `{"ecdh","typ","alg"}` (libjwt), differing from the
+      login builder's — irrelevant to verification, recorded for
+      parser-writers.

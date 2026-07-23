@@ -56,14 +56,19 @@ ordinary unattended `-L integration` coverage on every run, exactly like
 the rest of the suite, and keeps the user's phone out of CI.
 
 **Acceptance criteria:**
-- [ ] Unit: scheme-A round-trip (encrypt→decrypt→HMAC verify) plus
-      tamper cases (bad pad, bad trailer, wrong K) against fixture
-      vectors; reply/authreq JWT build/verify round-trip.
-- [ ] Live (`integration` label): full simulated cycle — pair (init→
-      reply→validate, code verified) → login (request→decrypt own
-      entry→authreply→token) → bearer exercised → EXTAID key deleted —
-      green unattended with zero broker traffic.
-- [ ] Live: cleanup proven pass-or-fail (the REQ-TEST-003 pattern);
-      device left with no EHEMTEST/EXTAID test residue.
+- [x] Unit (test_ext_sim, 2026-07-23): scheme-A round-trip + tamper
+      cases (flipped ct, wrong scheme, truncation, wrong K) + a
+      hand-decrypt against the firmware construction; JWT
+      build/open/peek round-trip; AND a REAL captured device authreq
+      (fixtures/ext_authreq_fixture.h) verified + decrypted offline.
+- [x] Live (`integration` label, 2026-07-23): full simulated cycle —
+      pair (init→reply→validate, code verified, test_ext_pair_live) →
+      login (request→decrypt own entry→authreply→token→bearer used on
+      config, test_ext_login_live) — green unattended, zero broker
+      traffic.
+- [x] Live: cleanup via the tracked-keyreg teardown (runs pass or
+      fail); both tests leave no EHEMTEST/EXTAID residue (dedup-probe
+      406 creates no key).
 - [ ] Grep-check: no test outside the `disruptive` label references the
-      broker register/event paths.
+      broker register/event paths — vacuously true until STEP-M8-040
+      adds broker tests; checked for real at the M8 gate.

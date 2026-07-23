@@ -19,6 +19,7 @@
 #include "ejwt.h"
 #include "ext_sim.h"
 #include "json.h"
+#include "fixtures/ext_authreq_fixture.h"
 
 /* strdup is POSIX, not C99 — local copy so strict -std=c99 stays clean. */
 static char *dup_str(const char *s)
@@ -342,6 +343,42 @@ static void test_scheme_a_tamper(void **state)
     free(value);
 }
 
+/* The frozen REAL-device authreq (ext_authreq_fixture.h): verify its HS256
+ * signature with ECDH(request ephemeral, EIDkey) and decrypt the paired
+ * authenticator's scheme-A scope entry — genuine firmware bytes, offline. */
+static void test_live_authreq_fixture(void **state)
+{
+    (void)state;
+    uint8_t id_priv[32], eph_priv[32], eid[32], vkey[32], jti[32], ecdh[32];
+    unhex(EXT_FX_IDENTITY_PRIV_HEX, id_priv);
+    unhex(EXT_FX_REQ_EPH_PRIV_HEX, eph_priv);
+    unhex(EXT_FX_EID_HEX, eid);
+
+    /* Signature: the device signed with ECDH(EIDkey, our ephemeral). */
+    assert_int_equal(ehem_x25519_shared(eph_priv, eid, vkey), EHEM_OK);
+    ehem_json *payload = ehem_sim_jwt_open(EXT_FX_AUTHREQ, vkey);
+    assert_non_null(payload);
+
+    const char *sv = NULL;
+    assert_true(ehem_json_get_string(payload, "ctx", &sv));
+    assert_string_equal(sv, EXT_FX_CTX);
+    assert_true(ehem_json_get_string(payload, "jti", &sv));
+    assert_int_equal(ehem_sim_b64_key(sv, jti), 0);
+
+    /* Our entry, keyed by base64(pid), decrypts to the requested scope. */
+    const ehem_json *scope_obj = ehem_json_get(payload, "scope");
+    assert_true(ehem_json_is_object(scope_obj));
+    const char *value = NULL;
+    assert_true(ehem_json_as_string(ehem_json_get(scope_obj, EXT_FX_PID_B64),
+                                    &value));
+    assert_int_equal(ehem_x25519_shared(id_priv, eid, ecdh), EHEM_OK);
+    char *plain = NULL;
+    assert_int_equal(ehem_sim_scheme_a_decrypt(value, jti, ecdh, &plain), 0);
+    assert_string_equal(plain, EXT_FX_SCOPE);
+    free(plain);
+    ehem_json_free(payload);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -353,6 +390,7 @@ int main(void)
         cmocka_unit_test(test_scheme_a_roundtrip),
         cmocka_unit_test(test_scheme_a_matches_firmware_construction),
         cmocka_unit_test(test_scheme_a_tamper),
+        cmocka_unit_test(test_live_authreq_fixture),
     };
     /* wolfCrypt process-global init — required on Windows (RNG mutex). */
     if (ehem_global_init() != EHEM_OK) {

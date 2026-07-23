@@ -149,6 +149,74 @@ EHEM_API ehem_rc ehem_ext_mac(ehem_ctx *ctx, const char *epk_b64,
 /* Release a mac result. NULL is a no-op. */
 EHEM_API void ehem_ext_mac_free(ehem_ext_mac_info *info);
 
+/* --------------------------------------------------------------------------
+ * ExtAuth login (REQ-AUTH-007) — the push-confirm bearer issuance pair.
+ *
+ * Both endpoints are UNAUTHENTICATED by design (no Bearer parsed): security
+ * comes from the ECDH-keyed JWTs. Device preconditions, checked in order:
+ * RTC set (else HTTP 403 — the SDK reacts with ONE automatic check-in +
+ * retry per call, the REQ-AUTH-004 recovery pattern keyed on 403, unless
+ * ehem_options.no_auto_checkin), initialised and failure-state clear (else
+ * 409 → EHEM_ERR_DEVICE).
+ *
+ * Unlike the passphrase flow — where a bearer never crosses the public API —
+ * ehem_ext_token() RETURNS the issued bearer: the caller (typically the
+ * confirm engine, REQ-AUTH-009, or a consumer driving its own broker) is the
+ * one holding the conversation with the authenticator.
+ * -------------------------------------------------------------------------- */
+
+/* Result of ehem_ext_request(). */
+typedef struct ehem_ext_request_info {
+    char *authreq;   /* JWT for the broker/authenticators (opaque to the SDK) */
+    char *epk;       /* the caller's epk echoed back (standard base64) */
+} ehem_ext_request_info;
+
+/*
+ * Ask the device for an `authreq` every paired authenticator can decrypt:
+ * POST /api/auth/ext/request. `epk_b64` — a one-shot transport public key
+ * (standard base64 of exactly 32 bytes, validated client-side; it need not
+ * match any paired authenticator). `scope` — the scope the resulting token
+ * shall have, ≤ 1023 bytes. `ctx_str` (1–64 chars) and `note` (1–128 chars)
+ * are optional (NULL to omit): `ctx_str` is echoed into the issued token,
+ * `note` is free text for the authenticator UI. Out-of-range lengths are
+ * EHEM_ERR_ARG client-side (the firmware would silently DROP them).
+ *
+ * Firmware facts (fw v1.2.2, api_auth.c): a scope of exactly
+ * "keymgmt:use:<32-hex-kid>" is rewritten server-side — "#<base64 {type,
+ * label}>" is appended (so the phone can show which key) and the token
+ * lifetime drops from 60 to 15 minutes. The authreq's `scope` claim is an
+ * OBJECT with one encrypted entry per paired authenticator (possibly empty —
+ * zero pairings still return 200; /ext/token then has nothing to accept).
+ * A request-body `exp` field is IGNORED by the firmware (the hem-api-tester
+ * sends one to no effect) — the SDK does not offer it.
+ */
+EHEM_API ehem_rc ehem_ext_request(ehem_ctx *ctx, const char *epk_b64,
+                                  const char *scope, const char *ctx_str,
+                                  const char *note,
+                                  ehem_ext_request_info **out);
+
+/* Release a request result. NULL is a no-op. */
+EHEM_API void ehem_ext_request_free(ehem_ext_request_info *info);
+
+/*
+ * Exchange an authenticator's countersigned `authreply` for a bearer:
+ * POST /api/auth/ext/token. On success *token_out is the issued bearer JWT
+ * (free with ehem_ext_token_free): `sub` = base64 of the approving
+ * authenticator's kid (NOT "U"/"M"), `scope` = the approved scope with any
+ * "#"-metadata stripped, `exp` = the authreply's own exp claim. On the wire
+ * it is indistinguishable from a password-login bearer.
+ *
+ * 401 (JWT decode/validate/nonce failure — includes an expired or replayed
+ * reply) and 406 (unknown authenticator, unsupported scheme, or a scope
+ * ciphertext that fails to decrypt/authenticate) both map to
+ * EHEM_ERR_AUTH_FAILED with the distinction in the error detail.
+ */
+EHEM_API ehem_rc ehem_ext_token(ehem_ctx *ctx, const char *authreply_jwt,
+                                char **token_out);
+
+/* Release a token returned by ehem_ext_token. NULL is a no-op. */
+EHEM_API void ehem_ext_token_free(char *token);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

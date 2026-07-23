@@ -8,7 +8,13 @@
  *           network I/O, required response fields → typed structs, missing
  *           fields → PROTOCOL, 403 → SCOPE_DENIED, 406 on validate →
  *           EHEM_ERR_DEVICE naming slots-full/dedup, 409 → DEVICE, frees
- *           NULL-safe)
+ *           NULL-safe),
+ *           REQ-AUTH-007 (request/token: UNAUTHENTICATED wire shape — no
+ *           Authorization header, no login exchange; scope/ctx/note bounds
+ *           pre-validated EHEM_ERR_ARG; RTC-403 → exactly one check-in +
+ *           retry honoring no_auto_checkin; 401/406 on token →
+ *           EHEM_ERR_AUTH_FAILED with distinguishing detail; issued token
+ *           returned verbatim)
  */
 #include <stdarg.h>
 #include <stddef.h>
@@ -284,12 +290,230 @@ static void test_mac_happy_and_missing(void **state)
     fake_transport_free(fake);
 }
 
+/* -------------------------------------------------------------------------- */
+/* login pair: request / token (REQ-AUTH-007)                                 */
+/* -------------------------------------------------------------------------- */
+
+/* Check-in canned bodies (three legs) for the RTC-403 recovery. */
+static const char CI_CHALLENGE[] = "{\"check\":\"CHALLENGE-BLOB\"}";
+static const char CI_VERIFIED[]  = "{\"checked\":\"CLOUD-VERIFIED-BLOB\"}";
+static const char CI_OK[]        = "{\"status\":\"ok\",\"newcrt\":\"\"}";
+
+static void test_request_happy_unauthenticated(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    /* Deliberately NO login on this context — the endpoint needs none. */
+    ehem_ctx *ctx = ctx_with(fake);
+
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"authreq\":\"a.b.c\",\"epk\":\"" B64_32 "\"}"), 0);
+
+    ehem_ext_request_info *info = NULL;
+    assert_int_equal(ehem_ext_request(ctx, B64_32, "system:config",
+                                      "my-ctx", "Approve please", &info),
+                     EHEM_OK);
+    assert_non_null(info);
+    assert_string_equal(info->authreq, "a.b.c");
+    assert_string_equal(info->epk, B64_32);
+    ehem_ext_request_free(info);
+
+    /* ONE request total: no challenge, no token POST, no bearer. */
+    assert_int_equal(fake_transport_request_count(fake), 1);
+    const fake_captured_request *req = fake_transport_request(fake, 0);
+    assert_string_equal(req->path, "/api/auth/ext/request");
+    assert_int_equal(req->method, EHEM_HTTP_POST);
+    assert_null(fake_transport_request_header(fake, 0, "Authorization"));
+    assert_non_null(strstr((const char *)req->body, "\"epk\":\"" B64_32 "\""));
+    assert_non_null(strstr((const char *)req->body,
+                           "\"scope\":\"system:config\""));
+    assert_non_null(strstr((const char *)req->body, "\"ctx\":\"my-ctx\""));
+    assert_non_null(strstr((const char *)req->body,
+                           "\"note\":\"Approve please\""));
+
+    /* Optional fields omitted from the body when NULL. */
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"authreq\":\"a.b.c\",\"epk\":\"" B64_32 "\"}"), 0);
+    assert_int_equal(ehem_ext_request(ctx, B64_32, "keymgmt:list", NULL, NULL,
+                                      &info), EHEM_OK);
+    ehem_ext_request_free(info);
+    req = fake_transport_request(fake, 1);
+    assert_null(strstr((const char *)req->body, "\"ctx\""));
+    assert_null(strstr((const char *)req->body, "\"note\""));
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+static void test_request_arg_bounds(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    ehem_ctx *ctx = ctx_with(fake);
+    ehem_ext_request_info *info = NULL;
+
+    char big_scope[1025], big_ctx[66], big_note[130];
+    memset(big_scope, 's', sizeof big_scope - 1);
+    big_scope[sizeof big_scope - 1] = '\0';       /* 1024 chars */
+    memset(big_ctx, 'c', sizeof big_ctx - 1);
+    big_ctx[sizeof big_ctx - 1] = '\0';           /* 65 chars */
+    memset(big_note, 'n', sizeof big_note - 1);
+    big_note[sizeof big_note - 1] = '\0';         /* 129 chars */
+
+    assert_int_equal(ehem_ext_request(ctx, B64_32, NULL, NULL, NULL, &info),
+                     EHEM_ERR_ARG);
+    assert_int_equal(ehem_ext_request(ctx, "bad", "s", NULL, NULL, &info),
+                     EHEM_ERR_ARG);
+    assert_int_equal(ehem_ext_request(ctx, B64_32, big_scope, NULL, NULL,
+                                      &info), EHEM_ERR_ARG);
+    assert_int_equal(ehem_ext_request(ctx, B64_32, "s", big_ctx, NULL, &info),
+                     EHEM_ERR_ARG);
+    assert_int_equal(ehem_ext_request(ctx, B64_32, "s", "", NULL, &info),
+                     EHEM_ERR_ARG);   /* empty ctx: fw would drop it */
+    assert_int_equal(ehem_ext_request(ctx, B64_32, "s", NULL, big_note,
+                                      &info), EHEM_ERR_ARG);
+    assert_int_equal(fake_transport_request_count(fake), 0);
+    assert_null(info);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+static void test_request_rtc_403_recovery(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    ehem_ctx *ctx = ctx_with(fake);
+
+    /* 403 (RTC unset) → three check-in legs → retried request succeeds. */
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 403, NULL), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+                                                  CI_CHALLENGE), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+                                                  CI_VERIFIED), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200, CI_OK),
+                     0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"authreq\":\"a.b.c\",\"epk\":\"" B64_32 "\"}"), 0);
+
+    ehem_ext_request_info *info = NULL;
+    assert_int_equal(ehem_ext_request(ctx, B64_32, "system:config", NULL,
+                                      NULL, &info), EHEM_OK);
+    ehem_ext_request_free(info);
+
+    assert_int_equal(fake_transport_request_count(fake), 5);
+    assert_string_equal(fake_transport_request(fake, 0)->path,
+                        "/api/auth/ext/request");
+    assert_string_equal(fake_transport_request(fake, 1)->path,
+                        "/api/system/checkin");
+    assert_string_equal(fake_transport_request(fake, 3)->path,
+                        "/api/system/checkin");
+    assert_string_equal(fake_transport_request(fake, 4)->path,
+                        "/api/auth/ext/request");
+
+    /* A SECOND 403 after recovery is terminal (one check-in per call). */
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 403, NULL), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+                                                  CI_CHALLENGE), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+                                                  CI_VERIFIED), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200, CI_OK),
+                     0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 403, NULL), 0);
+    assert_int_equal(ehem_ext_request(ctx, B64_32, "system:config", NULL,
+                                      NULL, &info), EHEM_ERR_SCOPE_DENIED);
+    assert_null(info);
+    assert_int_equal(fake_transport_request_count(fake), 10);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+static void test_request_403_no_auto_checkin(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+
+    ehem_options opts;
+    ehem_ctx *ctx = NULL;
+    ehem_options_init(&opts);
+    opts.transport = fake;
+    opts.no_auto_checkin = 1;
+    assert_int_equal(ehem_ctx_create("https://hem.local", &opts, &ctx),
+                     EHEM_OK);
+
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 403, NULL), 0);
+    ehem_ext_request_info *info = NULL;
+    assert_int_equal(ehem_ext_request(ctx, B64_32, "s", NULL, NULL, &info),
+                     EHEM_ERR_SCOPE_DENIED);
+    assert_int_equal(fake_transport_request_count(fake), 1);   /* no legs */
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+static void test_token_happy_and_failures(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    ehem_ctx *ctx = ctx_with(fake);
+
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"token\":\"h.p.s\"}"), 0);
+    char *token = NULL;
+    assert_int_equal(ehem_ext_token(ctx, "reply.j.wt", &token), EHEM_OK);
+    assert_non_null(token);
+    assert_string_equal(token, "h.p.s");
+    ehem_ext_token_free(token);
+    token = NULL;
+
+    const fake_captured_request *req = fake_transport_request(fake, 0);
+    assert_string_equal(req->path, "/api/auth/ext/token");
+    assert_null(fake_transport_request_header(fake, 0, "Authorization"));
+    assert_non_null(strstr((const char *)req->body,
+                           "\"authreply\":\"reply.j.wt\""));
+
+    /* 401 and 406 both AUTH_FAILED, distinguished in the detail. */
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 401, NULL), 0);
+    assert_int_equal(ehem_ext_token(ctx, "reply.j.wt", &token),
+                     EHEM_ERR_AUTH_FAILED);
+    assert_non_null(strstr(ehem_last_error(ctx)->message, "401"));
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 406, NULL), 0);
+    assert_int_equal(ehem_ext_token(ctx, "reply.j.wt", &token),
+                     EHEM_ERR_AUTH_FAILED);
+    assert_non_null(strstr(ehem_last_error(ctx)->message, "406"));
+
+    /* Missing token field → PROTOCOL; empty reply → ARG (no I/O). */
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200, "{}"), 0);
+    assert_int_equal(ehem_ext_token(ctx, "reply.j.wt", &token),
+                     EHEM_ERR_PROTOCOL);
+    size_t before = fake_transport_request_count(fake);
+    assert_int_equal(ehem_ext_token(ctx, "", &token), EHEM_ERR_ARG);
+    assert_int_equal(fake_transport_request_count(fake), before);
+    assert_null(token);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
 static void test_frees_null_safe(void **state)
 {
     (void)state;
     ehem_ext_init_free(NULL);
     ehem_ext_validate_free(NULL);
     ehem_ext_mac_free(NULL);
+    ehem_ext_request_free(NULL);
+    ehem_ext_token_free(NULL);
 }
 
 int main(void)
@@ -301,6 +525,11 @@ int main(void)
         cmocka_unit_test(test_validate_happy),
         cmocka_unit_test(test_validate_406_and_args),
         cmocka_unit_test(test_mac_happy_and_missing),
+        cmocka_unit_test(test_request_happy_unauthenticated),
+        cmocka_unit_test(test_request_arg_bounds),
+        cmocka_unit_test(test_request_rtc_403_recovery),
+        cmocka_unit_test(test_request_403_no_auto_checkin),
+        cmocka_unit_test(test_token_happy_and_failures),
         cmocka_unit_test(test_frees_null_safe),
     };
     if (ehem_global_init() != EHEM_OK) {

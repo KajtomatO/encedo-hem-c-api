@@ -1,9 +1,9 @@
 /*
  * proto_ext.c — bindings for the ExtAuth (auth/ext) API group: the pairing
- * trio init / validate / mac. The unauthenticated login pair (request /
- * token) joins this file at STEP-M8-030.
+ * trio init / validate / mac and the unauthenticated login pair request /
+ * token.
  *
- * implements: REQ-AUTH-006, REQ-API-005
+ * implements: REQ-AUTH-006, REQ-AUTH-007, REQ-API-005
  *
  * Firmware ground truth (encedo_firmware api_auth.c): all three endpoints
  * check fls_state==0 and initialised (else 409) before auth; auth is a
@@ -15,6 +15,7 @@
  */
 #include "ehem/auth.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -292,4 +293,198 @@ void ehem_ext_mac_free(ehem_ext_mac_info *info)
     free(info->mac);
     free(info->eid);
     free(info);
+}
+
+/* -------------------------------------------------------------------------- */
+/* login pair: request / token (REQ-AUTH-007)                                 */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * POST an unauthenticated ext-login request with the RTC-403 recovery: the
+ * firmware checks "RTC set" before anything else on these endpoints and 403s
+ * a device whose clock is unset (fresh boot — KNOWN-ISSUES). Mirror the
+ * fetch_challenge pattern (proto_auth.c, REQ-AUTH-004): at most ONE recovery
+ * check-in + one retry per binding call, honoring no_auto_checkin and the
+ * in_checkin recursion guard.
+ */
+static ehem_rc ext_login_post(ehem_ctx *ctx, const char *path,
+                              const char *body, ehem_json **root_out)
+{
+    ehem_rc rc = ehem_proto_request_json(ctx, EHEM_HTTP_POST, path, body,
+                                         NULL, EHEM_TLS_REQ_DEFAULT, root_out);
+    if (rc == EHEM_OK) {
+        return EHEM_OK;
+    }
+    if (ehem_last_error(ctx)->http_status == 403 &&
+        !ctx->no_auto_checkin && !ctx->in_checkin) {
+        /* Device legs run relaxed: an RTC-broken device's view of its own
+         * certificate validity is unreliable (same posture as the login
+         * challenge recovery). */
+        ehem_rc crc = ehem_checkin_run(ctx, /*relax_device_tls=*/1, NULL);
+        if (crc != EHEM_OK) {
+            /* Copy the check-in's message out before ehem_ctx_fail overwrites
+             * the shared last-error buffer it lives in (no aliasing). */
+            char checkin_detail[EHEM_ERR_MSG_MAX];
+            snprintf(checkin_detail, sizeof checkin_detail, "%s",
+                     ehem_last_error(ctx)->message);
+            return ehem_ctx_fail(ctx, rc, 403, NULL,
+                                 "%s: HTTP 403 (device RTC not set; automatic "
+                                 "check-in failed: %s)", path, checkin_detail);
+        }
+        rc = ehem_proto_request_json(ctx, EHEM_HTTP_POST, path, body,
+                                     NULL, EHEM_TLS_REQ_DEFAULT, root_out);
+    }
+    return rc;
+}
+
+ehem_rc ehem_ext_request(ehem_ctx *ctx, const char *epk_b64, const char *scope,
+                         const char *ctx_str, const char *note,
+                         ehem_ext_request_info **out)
+{
+    ehem_json *root = NULL, *obj;
+    ehem_ext_request_info *info;
+    char *body = NULL;
+    size_t n;
+    ehem_rc rc;
+
+    if (ctx == NULL || epk_b64 == NULL || scope == NULL || out == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    *out = NULL;
+    ehem_ctx_clear_error(ctx);
+
+    if (!is_b64_of_32(epk_b64)) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                             "ext/request: epk must be standard base64 of "
+                             "exactly 32 bytes");
+    }
+    if (strlen(scope) > 1023) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                             "ext/request: scope exceeds 1023 bytes");
+    }
+    n = (ctx_str != NULL) ? strlen(ctx_str) : 1;
+    if (n < 1 || n > 64) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                             "ext/request: ctx must be 1..64 chars (the "
+                             "firmware silently drops out-of-range values)");
+    }
+    n = (note != NULL) ? strlen(note) : 1;
+    if (n < 1 || n > 128) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                             "ext/request: note must be 1..128 chars (the "
+                             "firmware silently drops out-of-range values)");
+    }
+
+    obj = ehem_json_new_object();
+    if (obj != NULL && ehem_json_add_string(obj, "epk", epk_b64) &&
+        ehem_json_add_string(obj, "scope", scope) &&
+        (ctx_str == NULL || ehem_json_add_string(obj, "ctx", ctx_str)) &&
+        (note == NULL || ehem_json_add_string(obj, "note", note))) {
+        body = ehem_json_print(obj);
+    }
+    ehem_json_free(obj);
+    if (body == NULL) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+
+    rc = ext_login_post(ctx, "/api/auth/ext/request", body, &root);
+    ehem_json_string_free(body);
+    if (rc != EHEM_OK) {
+        return rc;
+    }
+
+    info = calloc(1, sizeof *info);
+    if (info == NULL) {
+        ehem_json_free(root);
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    rc = req_str(ctx, root, "auth/ext/request", "authreq", &info->authreq);
+    if (rc == EHEM_OK) {
+        rc = req_str(ctx, root, "auth/ext/request", "epk", &info->epk);
+    }
+    ehem_json_free(root);
+    if (rc != EHEM_OK) {
+        ehem_ext_request_free(info);
+        return rc;
+    }
+    *out = info;
+    return EHEM_OK;
+}
+
+void ehem_ext_request_free(ehem_ext_request_info *info)
+{
+    if (info == NULL) {
+        return;
+    }
+    free(info->authreq);
+    free(info->epk);
+    free(info);
+}
+
+ehem_rc ehem_ext_token(ehem_ctx *ctx, const char *authreply_jwt,
+                       char **token_out)
+{
+    ehem_json *root = NULL, *obj;
+    char *body = NULL;
+    const char *s;
+    ehem_rc rc;
+
+    if (ctx == NULL || authreply_jwt == NULL || token_out == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    *token_out = NULL;
+    ehem_ctx_clear_error(ctx);
+
+    if (authreply_jwt[0] == '\0') {
+        return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                             "ext/token: authreply JWT is empty");
+    }
+
+    obj = ehem_json_new_object();
+    if (obj != NULL && ehem_json_add_string(obj, "authreply", authreply_jwt)) {
+        body = ehem_json_print(obj);
+    }
+    ehem_json_free(obj);
+    if (body == NULL) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+
+    rc = ext_login_post(ctx, "/api/auth/ext/token", body, &root);
+    ehem_json_string_free(body);
+    if (rc != EHEM_OK) {
+        /* 401 = JWT decode/validate/jti failure (incl. an expired or replayed
+         * reply); 406 = the reply is well-signed but not acceptable (unknown
+         * authenticator, non-"A" scheme, ciphertext fails decrypt/HMAC). Both
+         * are "the authenticator's reply did not authenticate" to a caller. */
+        long status = ehem_last_error(ctx)->http_status;
+        if (status == 401) {
+            return ehem_ctx_fail(ctx, EHEM_ERR_AUTH_FAILED, 401, NULL,
+                                 "auth/ext/token: reply JWT rejected (401 — "
+                                 "bad signature, expired, or replayed nonce)");
+        }
+        if (status == 406) {
+            return ehem_ctx_fail(ctx, EHEM_ERR_AUTH_FAILED, 406, NULL,
+                                 "auth/ext/token: reply not acceptable (406 — "
+                                 "unknown authenticator, unsupported scheme, "
+                                 "or scope ciphertext failed to authenticate)");
+        }
+        return rc;
+    }
+
+    if (!ehem_json_get_string(root, "token", &s)) {
+        ehem_json_free(root);
+        return ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 200, NULL,
+                             "auth/ext/token: response missing 'token'");
+    }
+    *token_out = dup_str(s);
+    ehem_json_free(root);
+    if (*token_out == NULL) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    return EHEM_OK;
+}
+
+void ehem_ext_token_free(char *token)
+{
+    free(token);
 }
