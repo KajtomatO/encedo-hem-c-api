@@ -17,3 +17,14 @@ target_include_directories(test_storage_live PRIVATE ${PROJECT_SOURCE_DIR}/tests
 target_compile_options(test_storage_live PRIVATE ${EHEM_WARNING_FLAGS})
 add_test(NAME test_storage_live COMMAND test_storage_live)
 set_tests_properties(test_storage_live PROPERTIES LABELS disruptive SKIP_RETURN_CODE 77)
+
+# REQ-AUTH-008: broker registration probe — register/init + pending polls.
+# Disruptive per REQ-TEST-006 broker gating (creates a dangling broker
+# registration; never touches a phone). Public API + cmocka, so declared
+# directly (the hem-tool-core macro links no cmocka), like test_storage_live.
+add_executable(test_notify_register_live test_notify_register_live.c)
+target_link_libraries(test_notify_register_live PRIVATE ehem_test_support cmocka::cmocka)
+target_include_directories(test_notify_register_live PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
+target_compile_options(test_notify_register_live PRIVATE ${EHEM_WARNING_FLAGS})
+add_test(NAME test_notify_register_live COMMAND test_notify_register_live)
+set_tests_properties(test_notify_register_live PROPERTIES LABELS disruptive SKIP_RETURN_CODE 77)

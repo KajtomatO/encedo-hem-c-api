@@ -3,7 +3,7 @@ id: REQ-AUTH-008
 title: Notification-broker client — cloud legs for ExtAuth pairing and login
 status: approved
 priority: must
-revision: 1
+revision: 2
 source: user decision 2026-07-22 (M8 decomposition); hem-api-tester test_5.php/test_6.php (notify flows); Encedo Manager encedo.js:335/1316, build.js:383/1438 (per doc-repo citations); NO doc page exists for the broker API — shapes are reconstructed, all pinned by live probes
 depends_on: ["REQ-NET-001", "REQ-NET-003", "REQ-AUTH-006", "REQ-AUTH-007"]
 supersedes: null
@@ -69,16 +69,26 @@ update, hence the everything-is-an-open-criterion posture and the
 2026-07-22: never push to the user's real phone unattended).
 
 **Acceptance criteria:**
-- [ ] Unit (fake transport): each leg's request shape, 202-pending
-      surfacing, approved/deny/pending discrimination on `event/check`,
-      verbatim body pass-through on `register/finalise` and `event/new`,
-      TLS mode always VERIFY, base-URL override honored.
-- [ ] Open (live, `disruptive`-labeled): `notify/session` POST-with-eid
-      returns `{epk}` — record status codes and shape.
-- [ ] Open (live, `disruptive`-labeled or attended): `register/init` →
-      202-polling → phone leg → `{pid, reply}`; `register/finalise`
-      status; expired/unknown `rid` behavior recorded.
+- [x] Unit (fake transport, tests/unit/test_notify.c, 2026-07-23): each
+      leg's request shape, 202-pending surfacing, approved/deny/pending
+      discrimination on `event/check` (+ 200-with-neither → PROTOCOL),
+      verbatim pass-through bodies, TLS always VERIFY on the wire,
+      base-URL override honored, broker error payload preserved.
+- [x] Live (test_notify_session_live, `integration`, 2026-07-23): BOTH
+      session forms return 200 `{epk}` with a standard-base64 32-byte
+      key (GET credential-free; POST with the eid harvested from an
+      unauthenticated authreq's `iss`).
+- [x] Live (test_notify_register_live, `disruptive`, 2026-07-23):
+      `register/init` → 200 `{rid, link}` (64-char rid; link =
+      `<base>/register/challenge/<rid>`), two `register/check` polls →
+      202 pending. **Broker finding (rev 2): register/init REQUIRES an
+      eid-BOUND session epk — one from the bodyless GET form is rejected
+      HTTP 401 (payload not captured), so the pairing flow MUST use
+      session-POST-with-eid.** Registration left dangling
+      (expires broker-side). Phone leg → `{pid, reply}`, `finalise`
+      status, and expired-`rid` behavior remain for STEP-M8-080.
 - [ ] Open (attended, real phone — STEP-M8-080): `event/new` → poll →
       the THREE terminal shapes captured verbatim (approved `authreply`,
       `deny` on reject, and what the broker returns after the authreq
-      `exp` passes); recorded here and in KNOWN-ISSUES if surprising.
+      `exp` passes); the phone-completed `register/check` 200 and
+      `finalise` leg; recorded here and in KNOWN-ISSUES if surprising.

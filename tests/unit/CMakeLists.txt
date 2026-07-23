@@ -31,6 +31,9 @@ ehem_add_unit_test(test_ext_sim SOURCES test_ext_sim.c)
 # REQ-AUTH-006: ExtAuth pairing bindings init/validate/mac (M8).
 ehem_add_unit_test(test_ext SOURCES test_ext.c)
 
+# REQ-AUTH-008: notification-broker client (M8).
+ehem_add_unit_test(test_notify SOURCES test_notify.c)
+
 # REQ-TOOL-003: hem-tool cert-install orchestration via the fake transport.
 # Links hem-tool-core (the shared tool code) alongside the test support lib.
 if(TARGET hem-tool-core)

@@ -217,6 +217,130 @@ EHEM_API ehem_rc ehem_ext_token(ehem_ctx *ctx, const char *authreply_jwt,
 /* Release a token returned by ehem_ext_token. NULL is a no-op. */
 EHEM_API void ehem_ext_token_free(char *token);
 
+/* --------------------------------------------------------------------------
+ * Notification-broker client (REQ-AUTH-008) — the cloud legs that carry the
+ * ExtAuth flows to and from phones: `session` (ephemeral key), the
+ * registration triple (pairing via QR), and the event pair (push-confirm
+ * login).
+ *
+ * NO documentation exists for this API — every shape here is reconstructed
+ * from the Encedo Manager and hem-api-tester and pinned by live probes
+ * (broker behavior can change server-side at any time; failures preserve
+ * the broker payload in ehem_last_error). All calls are unauthenticated,
+ * ALWAYS fully TLS-verified regardless of the context's device trust mode,
+ * and take `notify_url` as the broker base (NULL → EHEM_DEFAULT_NOTIFY_URL,
+ * the REQ-SYS-013 register_url precedent).
+ *
+ * The polling calls surface "still pending" (HTTP 202) as EHEM_OK with the
+ * result's `pending` flag set — polling cadence and deadlines are the
+ * caller's (or the confirm engine's, REQ-AUTH-009); these bindings never
+ * sleep.
+ * -------------------------------------------------------------------------- */
+
+#define EHEM_DEFAULT_NOTIFY_URL "https://api.encedo.com/notify"
+
+/*
+ * Obtain a broker ephemeral Curve25519 public key for one exchange:
+ * POST /session {"eid": …} when `eid_b64` is given (the pairing flow — the
+ * caller is authenticated device-side and knows the eid), or a bodyless GET
+ * when `eid_b64` is NULL (the login flow — deliberately credential-free).
+ * On success *epk_out is the base64 key (free with ehem_notify_string_free).
+ */
+EHEM_API ehem_rc ehem_notify_session(ehem_ctx *ctx, const char *notify_url,
+                                     const char *eid_b64, char **epk_out);
+
+/* Result of ehem_notify_register_init(). */
+typedef struct ehem_notify_register_info {
+    char *rid;    /* registration id — poll register/check with it */
+    char *link;   /* URL the phone app consumes (the QR payload's `link`) */
+} ehem_notify_register_info;
+
+/*
+ * Start a registration at the broker: POST /register/init with the device's
+ * `eid` and `request` (from ehem_ext_init) and the broker `epk` (from
+ * ehem_notify_session). The returned `link` goes into the QR payload the
+ * phone scans; composing/rendering that payload is the caller's (REQ-TOOL-016
+ * puts `{link, hash, user, email, hostname}` behind a terminal QR).
+ */
+EHEM_API ehem_rc ehem_notify_register_init(ehem_ctx *ctx,
+                                           const char *notify_url,
+                                           const char *epk_b64,
+                                           const char *eid_b64,
+                                           const char *request_jwt,
+                                           ehem_notify_register_info **out);
+
+/* Release a register-init result. NULL is a no-op. */
+EHEM_API void ehem_notify_register_info_free(ehem_notify_register_info *info);
+
+/* Result of ehem_notify_register_check(). */
+typedef struct ehem_notify_pairing_reply {
+    int   pending;   /* nonzero: the phone has not completed its side (202) */
+    char *pid;       /* set when !pending: forward to ehem_ext_validate */
+    char *reply;     /* set when !pending: forward to ehem_ext_validate */
+} ehem_notify_pairing_reply;
+
+/*
+ * Poll one registration: GET /register/check/<rid>. 202 → EHEM_OK with
+ * `pending` set; 200 → EHEM_OK with the `{pid, reply}` the phone produced.
+ */
+EHEM_API ehem_rc ehem_notify_register_check(ehem_ctx *ctx,
+                                            const char *notify_url,
+                                            const char *rid,
+                                            ehem_notify_pairing_reply **out);
+
+/* Release a register-check result. NULL is a no-op. */
+EHEM_API void ehem_notify_pairing_reply_free(ehem_notify_pairing_reply *r);
+
+/*
+ * Complete a registration at the broker: POST /register/finalise/<rid> with
+ * the device's /ext/validate result passed through VERBATIM ({"kid","code"}
+ * — the phone verifies `code` to learn the device accepted it).
+ */
+EHEM_API ehem_rc ehem_notify_register_finalise(ehem_ctx *ctx,
+                                               const char *notify_url,
+                                               const char *rid,
+                                               const char *kid_hex,
+                                               const char *code_b64);
+
+/*
+ * Push a confirmation request to every paired phone: POST /event/new with
+ * the device's /ext/request result passed through VERBATIM ({"authreq",
+ * "epk"}). On success *eventid_out names the event for polling (free with
+ * ehem_notify_string_free). NEVER call this casually against a device whose
+ * owner has a real phone paired — it rings it (REQ-TEST-006 gates live
+ * tests accordingly).
+ */
+EHEM_API ehem_rc ehem_notify_event_new(ehem_ctx *ctx, const char *notify_url,
+                                       const char *authreq_jwt,
+                                       const char *epk_b64,
+                                       char **eventid_out);
+
+/* Result of ehem_notify_event_check(). Exactly one of the three states:
+ * pending, denied, or approved (authreply set). */
+typedef struct ehem_notify_event_result {
+    int   pending;     /* 202: no answer yet */
+    int   denied;      /* 200 with `deny` set: rejected on the phone — the
+                        * app sends NO authreply on deny (tester T-6 note) */
+    char *authreply;   /* 200 approved: forward to ehem_ext_token */
+} ehem_notify_event_result;
+
+/*
+ * Poll one event: GET /event/check/<eventid>. 202 → pending; 200 with
+ * `deny` → denied; 200 with `authreply` → approved. A 200 carrying neither
+ * is EHEM_ERR_PROTOCOL (an unknown broker shape — recorded with the body).
+ */
+EHEM_API ehem_rc ehem_notify_event_check(ehem_ctx *ctx,
+                                         const char *notify_url,
+                                         const char *eventid,
+                                         ehem_notify_event_result **out);
+
+/* Release an event-check result. NULL is a no-op. */
+EHEM_API void ehem_notify_event_result_free(ehem_notify_event_result *r);
+
+/* Release a string returned by this family (session epk, event id).
+ * NULL is a no-op. */
+EHEM_API void ehem_notify_string_free(char *s);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

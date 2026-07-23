@@ -82,6 +82,7 @@ set(EHEM_SOURCES
   src/proto_crypto.c
   src/proto_ext.c
   src/proto_logger.c
+  src/proto_notify.c
   src/proto_storage.c
   src/keytype.c
   src/crypto_shim.c
