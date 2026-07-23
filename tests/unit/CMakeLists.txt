@@ -73,6 +73,10 @@ if(TARGET hem-tool-core)
   # REQ-TOOL-015: `tls-recover` orchestration (M7).
   ehem_add_unit_test(test_recover SOURCES test_recover.c)
   target_link_libraries(test_recover PRIVATE hem-tool-core)
+
+  # REQ-TOOL-016: `ext` pair/list/login + terminal QR (M8).
+  ehem_add_unit_test(test_ext_tool SOURCES test_ext_tool.c)
+  target_link_libraries(test_ext_tool PRIVATE hem-tool-core)
 endif()
 
 # REQ-SYS-004, REQ-SYS-005: config GET / cert install / reboot bindings.

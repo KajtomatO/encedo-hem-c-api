@@ -36,6 +36,7 @@
 #include "ehem/system.h"
 
 #include "cert_install.h"
+#include "ext_cmd.h"
 #include "keys.h"
 #include "logs.h"
 #include "random.h"
@@ -79,6 +80,13 @@ typedef struct {
     /* logs get output (REQ-TOOL-012). */
     const char *out_path;     /* --out (write the log file here; NULL → stdout) */
 
+    /* ext family (REQ-TOOL-016). */
+    int         no_qr;        /* --no-qr (print the QR payload JSON instead) */
+    const char *scope;        /* --scope (ext login; NULL → system:config) */
+    const char *note;         /* --note (free text for the phone UI) */
+    long        timeout_sec;  /* --timeout (ext login confirmation, seconds) */
+    const char *notify_url;   /* --notify-url (broker base override) */
+
     /* reboot behavior (REQ-TOOL-014). */
     int         wait_back;    /* --wait: poll until the device answers again */
 } cli_opts;
@@ -115,6 +123,11 @@ static void usage(FILE *f)
         "  --mode MODE      keys gen: ECDH | ExDSA | ECDH,ExDSA (NIST-P/K only;\n"
         "                   default ECDH,ExDSA so the key can sign)\n"
         "  --out FILE       logs get: write the log file here (default: stdout)\n"
+        "  --no-qr          ext pair: print the QR payload JSON, no terminal QR\n"
+        "  --scope S        ext login: scope to confirm (default system:config)\n"
+        "  --note STR       ext login: free text shown in the phone's push UI\n"
+        "  --timeout SEC    ext login: wait this long for the answer (default 60)\n"
+        "  --notify-url URL notification-broker base override (ext family)\n"
         "  --wait           reboot: block until the device answers again (~180 s max)\n"
         "  -h, --help       show this help\n"
         "\n"
@@ -141,6 +154,13 @@ static void usage(FILE *f)
         "  logs key         print the Ed25519 log-signing key + signed nonce\n"
         "  selftest         run the device self-test battery; exit 0 = healthy,\n"
         "                   3 = device reports a fail state\n"
+        "  ext pair         pair the Encedo mobile app: renders the QR to scan in\n"
+        "                   the terminal and completes the registration (needs a\n"
+        "                   passphrase; --no-qr prints the payload instead)\n"
+        "  ext list         list paired authenticators (needs a passphrase)\n"
+        "  ext login        demo of the push-confirm login: sends a push and\n"
+        "                   blocks for the answer; exit 0 approved, 3 timeout,\n"
+        "                   4 rejected, 5 nothing paired\n"
         "  reboot           reboot the device (DISRUPTIVE — interrupts every\n"
         "                   user); --wait polls until it answers again\n"
         "  tls-recover      restore HTTPS after a wipe: fetch a key+cert bundle\n"
@@ -197,6 +217,10 @@ static int make_ctx(const cli_opts *o, ehem_ctx **out)
     }
 
     ehem_options_init(&opts);
+    if (o->timeout_sec > 0) {
+        /* implements: REQ-TOOL-016 (ext login --timeout → confirm wait) */
+        opts.confirm_timeout_ms = o->timeout_sec * 1000L;
+    }
     if (o->insecure) {
         opts.tls_mode = EHEM_TLS_INSECURE;
     } else if (o->cacert != NULL) {
@@ -711,6 +735,49 @@ static int cmd_reboot(const cli_opts *o, int wait_back)
 }
 
 /* `tls-recover [--force]` — REQ-TOOL-015. */
+/* `ext pair|list|login` (REQ-TOOL-016). */
+static int cmd_ext(const cli_opts *o, const char *subcmd)
+{
+    ehem_ctx *ctx = NULL;
+    int ret;
+
+    if (subcmd == NULL) {
+        fprintf(stderr, "error: ext needs a subcommand (pair | list | login)\n");
+        usage(stderr);
+        return 2;
+    }
+    ret = make_ctx(o, &ctx);
+    if (ret != 0) {
+        return ret;
+    }
+
+    if (strcmp(subcmd, "pair") == 0) {
+        hem_ext_pair_opts po;
+        memset(&po, 0, sizeof po);
+        po.passphrase = o->passphrase;
+        po.notify_url = o->notify_url;
+        po.no_qr      = o->no_qr;
+        ret = hem_ext_pair_run(ctx, &po);
+    } else if (strcmp(subcmd, "list") == 0) {
+        ret = hem_ext_list_run(ctx, o->passphrase, NULL, NULL);
+    } else if (strcmp(subcmd, "login") == 0) {
+        hem_ext_login_opts lo;
+        memset(&lo, 0, sizeof lo);
+        lo.scope      = o->scope;
+        lo.note       = o->note;
+        lo.passphrase = o->passphrase;
+        lo.timeout_ms = (o->timeout_sec > 0) ? o->timeout_sec * 1000L : 0;
+        ret = hem_ext_login_run(ctx, &lo);
+    } else {
+        fprintf(stderr, "error: unknown ext subcommand '%s'\n", subcmd);
+        usage(stderr);
+        ret = 2;
+    }
+
+    ehem_ctx_destroy(ctx);
+    return ret;
+}
+
 static int cmd_tls_recover(const cli_opts *o)
 {
     ehem_ctx *ctx = NULL;
@@ -817,6 +884,24 @@ int main(int argc, char **argv)
             o.out_path = argv[++i];
         } else if (strncmp(a, "--out=", 6) == 0) {
             o.out_path = a + 6;
+        } else if (strcmp(a, "--no-qr") == 0) {
+            o.no_qr = 1;
+        } else if (strcmp(a, "--scope") == 0 && i + 1 < argc) {
+            o.scope = argv[++i];
+        } else if (strncmp(a, "--scope=", 8) == 0) {
+            o.scope = a + 8;
+        } else if (strcmp(a, "--note") == 0 && i + 1 < argc) {
+            o.note = argv[++i];
+        } else if (strncmp(a, "--note=", 7) == 0) {
+            o.note = a + 7;
+        } else if (strcmp(a, "--timeout") == 0 && i + 1 < argc) {
+            o.timeout_sec = atol(argv[++i]);
+        } else if (strncmp(a, "--timeout=", 10) == 0) {
+            o.timeout_sec = atol(a + 10);
+        } else if (strcmp(a, "--notify-url") == 0 && i + 1 < argc) {
+            o.notify_url = argv[++i];
+        } else if (strncmp(a, "--notify-url=", 13) == 0) {
+            o.notify_url = a + 13;
         } else if (strcmp(a, "--sigctx") == 0 && i + 1 < argc) {
             o.sigctx = argv[++i];
         } else if (strncmp(a, "--sigctx=", 9) == 0) {
@@ -884,6 +969,8 @@ int main(int argc, char **argv)
         ret = cmd_keys(&o, subcmd, arg);
     } else if (strcmp(cmd, "logs") == 0) {
         ret = cmd_logs(&o, subcmd, arg);
+    } else if (strcmp(cmd, "ext") == 0) {
+        ret = cmd_ext(&o, subcmd);
     } else if (strcmp(cmd, "reboot") == 0) {
         if (subcmd != NULL) {
             fprintf(stderr, "error: unexpected argument '%s'\n", subcmd);

@@ -1,0 +1,458 @@
+/*
+ * ext_cmd.c — hem-tool `ext` family (see ext_cmd.h).
+ *
+ * implements: REQ-TOOL-016
+ */
+#define _POSIX_C_SOURCE 199309L   /* nanosleep / struct timespec under -std=c99 */
+
+#include "ext_cmd.h"
+
+#include <stdlib.h>
+#include <string.h>
+
+#include "ehem/auth.h"
+#include "ehem/keymgmt.h"
+#include "ehem/system.h"
+
+#include "keys.h"     /* hem_key_is_protected, hem_tool_fprint_b64 */
+#include "vendor/qrcodegen/qrcodegen.h"
+
+#ifdef _WIN32
+#  include <windows.h>            /* Sleep() — MinGW has no POSIX nanosleep */
+#else
+#  include <time.h>               /* nanosleep / struct timespec */
+#endif
+
+static void sleep_ms(unsigned ms)
+{
+    if (ms == 0) {
+        return;
+    }
+#ifdef _WIN32
+    Sleep(ms);
+#else
+    {
+        struct timespec ts;
+        ts.tv_sec  = (time_t)(ms / 1000u);
+        ts.tv_nsec = (long)(ms % 1000u) * 1000000L;
+        (void)nanosleep(&ts, NULL);
+    }
+#endif
+}
+
+static FILE *or_stdout(FILE *f) { return f != NULL ? f : stdout; }
+static FILE *or_stderr(FILE *f) { return f != NULL ? f : stderr; }
+
+/* Append `s` JSON-escaped to a malloc'd buffer via fputs-style growth. The
+ * QR payload embeds device-configured strings (hostname, user, email) that
+ * the tool must not let break the JSON. */
+static int json_append_escaped(char **buf, size_t *len, size_t *cap,
+                               const char *s)
+{
+    for (; *s != '\0'; s++) {
+        char piece[8];
+        size_t n;
+        unsigned char c = (unsigned char)*s;
+        if (c == '"' || c == '\\') {
+            piece[0] = '\\'; piece[1] = (char)c; n = 2;
+        } else if (c < 0x20) {
+            n = (size_t)snprintf(piece, sizeof piece, "\\u%04x", c);
+        } else {
+            piece[0] = (char)c; n = 1;
+        }
+        if (*len + n + 1 > *cap) {
+            size_t ncap = (*cap == 0) ? 256 : *cap * 2;
+            char *nb;
+            while (*len + n + 1 > ncap) {
+                ncap *= 2;
+            }
+            nb = realloc(*buf, ncap);
+            if (nb == NULL) {
+                return -1;
+            }
+            *buf = nb;
+            *cap = ncap;
+        }
+        memcpy(*buf + *len, piece, n);
+        *len += n;
+        (*buf)[*len] = '\0';
+    }
+    return 0;
+}
+
+static int json_append_raw(char **buf, size_t *len, size_t *cap,
+                           const char *s)
+{
+    size_t n = strlen(s);
+    if (*len + n + 1 > *cap) {
+        size_t ncap = (*cap == 0) ? 256 : *cap * 2;
+        char *nb;
+        while (*len + n + 1 > ncap) {
+            ncap *= 2;
+        }
+        nb = realloc(*buf, ncap);
+        if (nb == NULL) {
+            return -1;
+        }
+        *buf = nb;
+        *cap = ncap;
+    }
+    memcpy(*buf + *len, s, n);
+    *len += n;
+    (*buf)[*len] = '\0';
+    return 0;
+}
+
+/* The payload the phone scans (hem-api-tester test_5.php:90 shape; `hash`
+ * is literally "not_implemented_yet" until upstream defines it). Malloc'd. */
+static char *compose_qr_payload(const char *link, const char *user,
+                                const char *email, const char *hostname)
+{
+    char *buf = NULL;
+    size_t len = 0, cap = 0;
+    int rc = 0;
+
+    rc |= json_append_raw(&buf, &len, &cap, "{\"link\":\"");
+    rc |= json_append_escaped(&buf, &len, &cap, link);
+    rc |= json_append_raw(&buf, &len, &cap,
+                          "\",\"hash\":\"not_implemented_yet\",\"user\":\"");
+    rc |= json_append_escaped(&buf, &len, &cap, user != NULL ? user : "");
+    rc |= json_append_raw(&buf, &len, &cap, "\",\"email\":\"");
+    rc |= json_append_escaped(&buf, &len, &cap, email != NULL ? email : "");
+    rc |= json_append_raw(&buf, &len, &cap, "\",\"hostname\":\"");
+    rc |= json_append_escaped(&buf, &len, &cap,
+                              hostname != NULL ? hostname : "");
+    rc |= json_append_raw(&buf, &len, &cap, "\"}");
+    if (rc != 0) {
+        free(buf);
+        return NULL;
+    }
+    return buf;
+}
+
+/* -------------------------------------------------------------------------- */
+/* terminal QR                                                                */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * UTF-8 half-block rendering, two module rows per terminal line, 4-module
+ * quiet zone. INVERTED for the common dark-background terminal: a DARK QR
+ * module prints as background (space), a light module as a block — the
+ * quiet zone comes out bright, which is what the scanner needs. On a
+ * light-background terminal, scan apps still cope (QR orientation/polarity
+ * detection); `--no-qr` prints the payload for anything exotic.
+ */
+int hem_ext_qr_render(const char *text, FILE *out)
+{
+    uint8_t qr[qrcodegen_BUFFER_LEN_MAX];
+    uint8_t tmp[qrcodegen_BUFFER_LEN_MAX];
+    int size, x, y;
+
+    if (text == NULL || out == NULL) {
+        return -1;
+    }
+    if (!qrcodegen_encodeText(text, tmp, qr, qrcodegen_Ecc_LOW,
+                              qrcodegen_VERSION_MIN, qrcodegen_VERSION_MAX,
+                              qrcodegen_Mask_AUTO, true)) {
+        return -1;
+    }
+    size = qrcodegen_getSize(qr);
+    if (size + 8 > 80) {
+        /* Wider than a standard terminal — an overflowing QR wraps into
+         * unscannable noise; the caller prints the payload instead. The
+         * observed pairing payloads land around version 10-13 (≤ 77 cols). */
+        return -1;
+    }
+
+    /* Rows -4 .. size+3 (quiet zone), two per line. Module reads outside
+     * the symbol return false (light) from qrcodegen_getModule. */
+    for (y = -4; y < size + 4; y += 2) {
+        for (x = -4; x < size + 4; x++) {
+            bool top    = qrcodegen_getModule(qr, x, y);
+            bool bottom = (y + 1 < size + 4)
+                              ? qrcodegen_getModule(qr, x, y + 1) : false;
+            /* Inverted: light module → lit block half. */
+            const char *glyph = (!top && !bottom) ? "\xe2\x96\x88"   /* █ */
+                              : (!top &&  bottom) ? "\xe2\x96\x80"   /* ▀ */
+                              : ( top && !bottom) ? "\xe2\x96\x84"   /* ▄ */
+                              : " ";
+            fputs(glyph, out);
+        }
+        fputc('\n', out);
+    }
+    return 0;
+}
+
+/* -------------------------------------------------------------------------- */
+/* ext pair                                                                   */
+/* -------------------------------------------------------------------------- */
+
+int hem_ext_pair_run(ehem_ctx *ctx, const hem_ext_pair_opts *o)
+{
+    FILE *out, *err;
+    unsigned attempts, delay_ms, i;
+    ehem_config_info *cfg = NULL;
+    ehem_checkin_info *ci = NULL;
+    char *epk = NULL, *payload = NULL;
+    ehem_ext_init_info *init = NULL;
+    ehem_notify_register_info *reg = NULL;
+    ehem_notify_pairing_reply *pr = NULL;
+    ehem_ext_validate_info *val = NULL;
+    ehem_rc rc;
+    int ret = HEM_EXT_RUNTIME;
+
+    if (ctx == NULL || o == NULL) {
+        return HEM_EXT_USAGE;
+    }
+    out = or_stdout(o->out);
+    err = or_stderr(o->err);
+    if (o->passphrase == NULL) {
+        fprintf(err, "error: ext pair needs a passphrase "
+                     "(--passphrase / EHEM_PASSPHRASE)\n");
+        return HEM_EXT_USAGE;
+    }
+    attempts = (o->poll_attempts != 0) ? o->poll_attempts
+                                       : HEM_EXT_PAIR_POLL_ATTEMPTS;
+    delay_ms = o->poll_delay_ms;
+    if (o->poll_attempts == 0 && delay_ms == 0) {
+        delay_ms = HEM_EXT_PAIR_POLL_DELAY_MS;
+    }
+
+    /* Clock sync first — the device clock drifts (KNOWN-ISSUES) and every
+     * JWT in the flow is time-checked. Best effort. */
+    if (ehem_system_checkin(ctx, &ci) != EHEM_OK) {
+        fprintf(err, "warning: check-in failed (%s) — continuing\n",
+                ehem_last_error(ctx)->message);
+    }
+    ehem_checkin_result_free(ci);
+
+    if (ehem_login(ctx, o->passphrase) != EHEM_OK ||
+        ehem_system_config(ctx, &cfg) != EHEM_OK) {
+        fprintf(err, "error: login/config failed: %s\n",
+                ehem_last_error(ctx)->message);
+        goto done;
+    }
+    if (cfg->eid == NULL) {
+        fprintf(err, "error: device config carries no eid\n");
+        goto done;
+    }
+
+    /* Broker session MUST be eid-bound for registration (REQ-AUTH-008). */
+    rc = ehem_notify_session(ctx, o->notify_url, cfg->eid, &epk);
+    if (rc == EHEM_OK) {
+        rc = ehem_ext_init(ctx, epk, &init);
+    }
+    if (rc == EHEM_OK) {
+        rc = ehem_notify_register_init(ctx, o->notify_url, epk, init->eid,
+                                       init->request, &reg);
+    }
+    if (rc != EHEM_OK) {
+        fprintf(err, "error: registration setup failed: %s\n",
+                ehem_last_error(ctx)->message);
+        goto done;
+    }
+
+    payload = compose_qr_payload(reg->link, cfg->user, cfg->email,
+                                 cfg->hostname);
+    if (payload == NULL) {
+        fprintf(err, "error: out of memory\n");
+        goto done;
+    }
+
+    fprintf(out, "Scan this with the Encedo app to pair "
+                 "(waiting up to %u s):\n\n",
+            attempts * (delay_ms / 1000u));
+    if (o->no_qr || hem_ext_qr_render(payload, out) != 0) {
+        if (!o->no_qr) {
+            fprintf(err, "warning: QR rendering failed — payload follows\n");
+        }
+        fprintf(out, "%s\n", payload);
+    }
+    fprintf(out, "\nlink: %s\n", reg->link);
+
+    /* Wait for the phone. */
+    for (i = 0; i < attempts; i++) {
+        rc = ehem_notify_register_check(ctx, o->notify_url, reg->rid, &pr);
+        if (rc != EHEM_OK) {
+            fprintf(err, "error: register/check failed: %s\n",
+                    ehem_last_error(ctx)->message);
+            goto done;
+        }
+        if (!pr->pending) {
+            break;
+        }
+        ehem_notify_pairing_reply_free(pr);
+        pr = NULL;
+        sleep_ms(delay_ms);
+    }
+    if (pr == NULL || pr->pending) {
+        fprintf(err, "error: QR not scanned in time — run ext pair again\n");
+        ret = HEM_EXT_TIMEOUT;
+        goto done;
+    }
+
+    /* Finish: device import, then tell the broker (and thus the phone). */
+    rc = ehem_ext_validate(ctx, pr->pid, pr->reply, &val);
+    if (rc != EHEM_OK) {
+        fprintf(err, "error: ext/validate failed: %s\n",
+                ehem_last_error(ctx)->message);
+        if (ehem_last_error(ctx)->http_status == 406) {
+            ret = HEM_EXT_REFUSED;
+        }
+        goto done;
+    }
+    rc = ehem_notify_register_finalise(ctx, o->notify_url, reg->rid,
+                                       val->kid, val->code);
+    if (rc != EHEM_OK) {
+        fprintf(err, "error: register/finalise failed: %s (the device HAS "
+                     "imported the key — remove kid %s with `keys rm` "
+                     "before retrying)\n",
+                ehem_last_error(ctx)->message, val->kid);
+        goto done;
+    }
+
+    fprintf(out, "\nPaired. kid: %s\n", val->kid);
+    ret = HEM_EXT_OK;
+
+done:
+    ehem_ext_validate_free(val);
+    ehem_notify_pairing_reply_free(pr);
+    ehem_notify_register_info_free(reg);
+    ehem_ext_init_free(init);
+    ehem_notify_string_free(epk);
+    free(payload);
+    ehem_system_config_free(cfg);
+    return ret;
+}
+
+/* -------------------------------------------------------------------------- */
+/* ext list                                                                   */
+/* -------------------------------------------------------------------------- */
+
+int hem_ext_list_run(ehem_ctx *ctx, const char *passphrase, FILE *out,
+                     FILE *err_in)
+{
+    FILE *err = or_stderr(err_in);
+    ehem_key_page *page = NULL;
+    size_t i, shown = 0;
+
+    out = or_stdout(out);
+    if (ctx == NULL) {
+        return HEM_EXT_USAGE;
+    }
+    if (passphrase == NULL) {
+        fprintf(err, "error: ext list needs a passphrase "
+                     "(--passphrase / EHEM_PASSPHRASE)\n");
+        return HEM_EXT_USAGE;
+    }
+    if (ehem_login(ctx, passphrase) != EHEM_OK ||
+        ehem_key_search_all(ctx, (const uint8_t *)"EXTAID", 6,
+                            EHEM_KEY_SEARCH_PREFIX, &page) != EHEM_OK) {
+        fprintf(err, "error: %s\n", ehem_last_error(ctx)->message);
+        return HEM_EXT_RUNTIME;
+    }
+
+    for (i = 0; i < page->listed; i++) {
+        const ehem_key_entry *e = &page->entries[i];
+        fprintf(out, "%s  %-32s%s\n", e->kid,
+                e->label != NULL ? e->label : "(no label)",
+                (e->label != NULL && hem_key_is_protected(e->label))
+                    ? "  [PROTECTED]" : "");
+        if (e->descr != NULL && e->descr_len > 6) {
+            fprintf(out, "  pid: ");
+            hem_tool_fprint_b64(out, e->descr + 6, e->descr_len - 6);
+            fputc('\n', out);
+        }
+        shown++;
+    }
+    fprintf(out, "%zu paired authenticator%s\n", shown,
+            shown == 1 ? "" : "s");
+    ehem_key_page_free(page);
+    return HEM_EXT_OK;
+}
+
+/* -------------------------------------------------------------------------- */
+/* ext login                                                                  */
+/* -------------------------------------------------------------------------- */
+
+int hem_ext_login_run(ehem_ctx *ctx, const hem_ext_login_opts *o)
+{
+    FILE *out, *err;
+    const char *scope;
+    ehem_rc rc;
+
+    if (ctx == NULL || o == NULL) {
+        return HEM_EXT_USAGE;
+    }
+    out = or_stdout(o->out);
+    err = or_stderr(o->err);
+    scope = (o->scope != NULL) ? o->scope : "system:config";
+
+    /* Optional pre-check: with a passphrase we can see whether ANY
+     * authenticator is paired — without one, an unanswerable push simply
+     * times out (the broker pushes to nobody). */
+    if (o->passphrase != NULL) {
+        ehem_key_page *page = NULL;
+        if (ehem_login(ctx, o->passphrase) == EHEM_OK &&
+            ehem_key_search_all(ctx, (const uint8_t *)"EXTAID", 6,
+                                EHEM_KEY_SEARCH_PREFIX, &page) == EHEM_OK) {
+            size_t n = page->listed;
+            ehem_key_page_free(page);
+            if (n == 0) {
+                fprintf(err, "error: no authenticator is paired — run "
+                             "`hem-tool ext pair` first\n");
+                return HEM_EXT_NOAUTH;
+            }
+        }
+        /* Pre-check trouble is not fatal — fall through to the real flow. */
+    }
+
+    if (ehem_login_mobile(ctx) != EHEM_OK) {
+        fprintf(err, "error: %s\n", ehem_last_error(ctx)->message);
+        return HEM_EXT_RUNTIME;
+    }
+
+    fprintf(out, "Push sent — approve scope \"%s\" on your phone...\n",
+            scope);
+
+    if (strcmp(scope, "system:config") == 0) {
+        /* The demo binding: the confirmation gates a real config read. */
+        ehem_config_info *cfg = NULL;
+        rc = ehem_system_config(ctx, &cfg);
+        if (rc == EHEM_OK) {
+            fprintf(out, "Approved. hostname: %s  user: %s\n",
+                    cfg->hostname != NULL ? cfg->hostname : "?",
+                    cfg->user != NULL ? cfg->user : "?");
+            ehem_system_config_free(cfg);
+        }
+    } else {
+        /* Arbitrary scope: drive the confirm engine directly and report
+         * the cached-bearer outcome. */
+        ehem_ext_confirm *confirm = NULL;
+        long timeout = (o->timeout_ms > 0) ? o->timeout_ms : 60000L;
+        rc = ehem_ext_confirm_begin(ctx, NULL, scope, NULL, o->note,
+                                    &confirm);
+        if (rc == EHEM_OK) {
+            rc = ehem_ext_confirm_wait(ctx, confirm, timeout);
+            ehem_ext_confirm_cancel(confirm);
+        }
+        if (rc == EHEM_OK) {
+            fprintf(out, "Approved. Bearer for \"%s\" acquired and cached.\n",
+                    scope);
+        }
+    }
+
+    if (rc == EHEM_OK) {
+        return HEM_EXT_OK;
+    }
+    fprintf(err, "error: %s\n", ehem_last_error(ctx)->message);
+    if (rc == EHEM_ERR_USER_REJECTED) {
+        fprintf(out, "Rejected on the phone.\n");
+        return HEM_EXT_REFUSED;
+    }
+    if (rc == EHEM_ERR_CONFIRM_TIMEOUT) {
+        fprintf(out, "No answer on the phone in time.\n");
+        return HEM_EXT_TIMEOUT;
+    }
+    return HEM_EXT_RUNTIME;
+}
