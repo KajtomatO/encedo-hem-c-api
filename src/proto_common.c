@@ -19,7 +19,7 @@
 #endif
 
 /* implements: REQ-NET-006 (client-side request pacing) */
-static void pace_sleep_ms(long ms)
+void ehem_proto_sleep_ms(long ms)
 {
     if (ms <= 0) {
         return;
@@ -116,7 +116,7 @@ static ehem_rc do_send(ehem_ctx *ctx, const ehem_transport *t,
     memset(resp, 0, sizeof *resp);
     /* Client-side pacing (REQ-NET-006): throttle back-to-back requests for
      * rate-sensitive devices. Applies to every dispatch, retries included. */
-    pace_sleep_ms(ctx->request_pace_ms);
+    ehem_proto_sleep_ms(ctx->request_pace_ms);
     return ehem_transport_send(t, &req, resp);
 }
 

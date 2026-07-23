@@ -213,6 +213,41 @@ static bool decode_bearer_exp(const char *token, int64_t *out)
     return ok;
 }
 
+/*
+ * Seed the cache with an externally-acquired bearer (the ExtAuth confirm
+ * engine, REQ-AUTH-009): the mobile flow mints its bearer via
+ * /api/auth/ext/token rather than the passphrase exchange, but the cache —
+ * and therefore every authenticated binding — treats it identically. Creates
+ * the auth state if the context has none (mobile mode holds no passphrase).
+ * Entry expiry honors the bearer's own exp claim minus skew, with the same
+ * fallback as the login path.
+ */
+ehem_rc ehem_auth_cache_seed(ehem_ctx *ctx, const char *scope,
+                             const char *token)
+{
+    struct ehem_auth *a;
+    int64_t real_exp;
+
+    if (ctx == NULL || scope == NULL || token == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    if (ctx->auth == NULL) {
+        ctx->auth = calloc(1, sizeof *ctx->auth);
+        if (ctx->auth == NULL) {
+            return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL,
+                                 "out of memory");
+        }
+    }
+    a = ctx->auth;
+    if (!decode_bearer_exp(token, &real_exp)) {
+        real_exp = auth_now() + AUTH_TOKEN_LIFETIME;
+    }
+    if (cache_put(a, scope, token, real_exp - AUTH_TOKEN_SKEW) == NULL) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    return EHEM_OK;
+}
+
 /* Serialize the login POST body: {"auth":"<ejwt>"}. Returns a cJSON-allocated
  * string (free with ehem_json_string_free), or NULL on allocation failure. */
 static char *build_auth_body(const char *ejwt)

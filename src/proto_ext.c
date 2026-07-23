@@ -1,9 +1,9 @@
 /*
  * proto_ext.c — bindings for the ExtAuth (auth/ext) API group: the pairing
- * trio init / validate / mac and the unauthenticated login pair request /
- * token.
+ * trio init / validate / mac, the unauthenticated login pair request /
+ * token, and the confirm engine composing them with the broker client.
  *
- * implements: REQ-AUTH-006, REQ-AUTH-007, REQ-API-005
+ * implements: REQ-AUTH-006, REQ-AUTH-007, REQ-AUTH-009, REQ-API-005
  *
  * Firmware ground truth (encedo_firmware api_auth.c): all three endpoints
  * check fls_state==0 and initialised (else 409) before auth; auth is a
@@ -20,9 +20,12 @@
 #include <string.h>
 
 #include "context.h"
+#include "crypto_shim.h"   /* ehem_zeroize — bearers are sensitive material */
 #include "ejwt.h"          /* standard-base64 decoder for arg validation */
 #include "json.h"
+#include "proto_auth.h"    /* ehem_auth_cache_seed — confirm engine */
 #include "proto_common.h"
+#include "proto_ext.h"     /* poll-interval test seam */
 #include "transport.h"
 
 #define EXT_PAIR_SCOPE "auth:ext:pair"
@@ -487,4 +490,167 @@ ehem_rc ehem_ext_token(ehem_ctx *ctx, const char *authreply_jwt,
 void ehem_ext_token_free(char *token)
 {
     free(token);
+}
+
+/* -------------------------------------------------------------------------- */
+/* confirm engine (REQ-AUTH-009)                                              */
+/* -------------------------------------------------------------------------- */
+
+#define CONFIRM_POLL_INTERVAL_MS 5000L   /* the tester's cadence */
+
+static long g_poll_interval_ms = CONFIRM_POLL_INTERVAL_MS;
+
+void ehem_ext_test_set_poll_interval(long ms)
+{
+    g_poll_interval_ms = (ms > 0) ? ms : CONFIRM_POLL_INTERVAL_MS;
+}
+
+struct ehem_ext_confirm {
+    char *notify_url;   /* owned copy, or NULL for the default base */
+    char *scope;        /* the cache key the bearer will be seeded under */
+    char *eventid;
+    int   terminal;     /* approved, denied, or token-redemption failed */
+};
+
+ehem_rc ehem_ext_confirm_begin(ehem_ctx *ctx, const char *notify_url,
+                               const char *scope, const char *ctx_str,
+                               const char *note, ehem_ext_confirm **out)
+{
+    ehem_ext_confirm *c;
+    ehem_ext_request_info *reqi = NULL;
+    char *epk = NULL;
+    ehem_rc rc;
+
+    if (ctx == NULL || scope == NULL || out == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    *out = NULL;
+
+    c = calloc(1, sizeof *c);
+    if (c == NULL) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    c->scope = dup_str(scope);
+    if (c->scope == NULL ||
+        (notify_url != NULL && (c->notify_url = dup_str(notify_url)) == NULL)) {
+        ehem_ext_confirm_cancel(c);
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+
+    /* session (credential-free GET) → device authreq → broker push. */
+    rc = ehem_notify_session(ctx, c->notify_url, NULL, &epk);
+    if (rc == EHEM_OK) {
+        rc = ehem_ext_request(ctx, epk, scope, ctx_str, note, &reqi);
+    }
+    if (rc == EHEM_OK) {
+        rc = ehem_notify_event_new(ctx, c->notify_url, reqi->authreq,
+                                   reqi->epk, &c->eventid);
+    }
+    ehem_ext_request_free(reqi);
+    ehem_notify_string_free(epk);
+    if (rc != EHEM_OK) {
+        ehem_ext_confirm_cancel(c);
+        return rc;
+    }
+    *out = c;
+    return EHEM_OK;
+}
+
+ehem_rc ehem_ext_confirm_poll(ehem_ctx *ctx, ehem_ext_confirm *c,
+                              ehem_confirm_status *status_out)
+{
+    ehem_notify_event_result *r = NULL;
+    char *token = NULL;
+    ehem_rc rc;
+
+    if (ctx == NULL || c == NULL || status_out == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    *status_out = EHEM_CONFIRM_PENDING;
+    if (c->terminal) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL,
+                             "confirm: handle already finished (single-use)");
+    }
+
+    rc = ehem_notify_event_check(ctx, c->notify_url, c->eventid, &r);
+    if (rc != EHEM_OK) {
+        return rc;   /* transient: NOT terminal, the caller may poll again */
+    }
+
+    if (r->pending) {
+        ehem_notify_event_result_free(r);
+        return EHEM_OK;
+    }
+
+    if (r->denied) {
+        ehem_notify_event_result_free(r);
+        c->terminal = 1;
+        return ehem_ctx_fail(ctx, EHEM_ERR_USER_REJECTED, 0, NULL,
+                             "confirm: rejected on the authenticator");
+    }
+
+    /* Approved: redeem the authreply and seed the ordinary token cache under
+     * the scope the caller asked to confirm (the pre-rewrite string — the
+     * cache key bindings look up). */
+    rc = ehem_ext_token(ctx, r->authreply, &token);
+    ehem_notify_event_result_free(r);
+    if (rc != EHEM_OK) {
+        c->terminal = 1;   /* re-redeeming the same reply cannot succeed */
+        return rc;
+    }
+    rc = ehem_auth_cache_seed(ctx, c->scope, token);
+    ehem_zeroize(token, strlen(token));
+    ehem_ext_token_free(token);
+    c->terminal = 1;
+    if (rc != EHEM_OK) {
+        return rc;
+    }
+    *status_out = EHEM_CONFIRM_APPROVED;
+    return EHEM_OK;
+}
+
+ehem_rc ehem_ext_confirm_wait(ehem_ctx *ctx, ehem_ext_confirm *c,
+                              long timeout_ms)
+{
+    long elapsed = 0;
+
+    if (ctx == NULL || c == NULL || timeout_ms <= 0) {
+        return EHEM_ERR_ARG;
+    }
+
+    for (;;) {
+        ehem_confirm_status status = EHEM_CONFIRM_PENDING;
+        ehem_rc rc = ehem_ext_confirm_poll(ctx, c, &status);
+        if (rc != EHEM_OK) {
+            return rc;   /* rejected (terminal) or a poll failure (retryable) */
+        }
+        if (status == EHEM_CONFIRM_APPROVED) {
+            return EHEM_OK;
+        }
+        if (elapsed >= timeout_ms) {
+            /* Deliberately NOT terminal: the caller may resume waiting. */
+            return ehem_ctx_fail(ctx, EHEM_ERR_CONFIRM_TIMEOUT, 0, NULL,
+                                 "confirm: not answered within %ld ms",
+                                 timeout_ms);
+        }
+        {
+            long step = g_poll_interval_ms;
+            if (step > timeout_ms - elapsed) {
+                step = timeout_ms - elapsed;
+            }
+            ehem_proto_sleep_ms(step);
+            elapsed += step;
+        }
+    }
+}
+
+void ehem_ext_confirm_cancel(ehem_ext_confirm *c)
+{
+    if (c == NULL) {
+        return;
+    }
+    free(c->notify_url);
+    free(c->scope);
+    free(c->eventid);
+    free(c);
 }

@@ -341,6 +341,77 @@ EHEM_API void ehem_notify_event_result_free(ehem_notify_event_result *r);
  * NULL is a no-op. */
 EHEM_API void ehem_notify_string_free(char *s);
 
+/* --------------------------------------------------------------------------
+ * Mobile confirmation engine (REQ-AUTH-009) — one push-confirm acquisition
+ * as a pollable state machine, with a blocking wrapper on top.
+ *
+ *   begin  fires the push: broker session (credential-free GET) →
+ *          /ext/request → broker event/new. Three network legs, no waiting.
+ *   poll   ONE broker event/check. Never sleeps, applies no deadline —
+ *          cadence and deadlines belong to the caller or to wait().
+ *          Terminal outcomes: approved (the authreply is redeemed via
+ *          /ext/token and the bearer lands in the ordinary scope-keyed
+ *          token cache, so the next binding call for `scope` just works) —
+ *          or EHEM_ERR_USER_REJECTED (denied on the phone; no token call).
+ *          Transport/broker errors are returned but are NOT terminal — a
+ *          flaky poll may simply be retried.
+ *   wait   poll at a bounded interval (default 5 s) until terminal or
+ *          `timeout_ms` elapses → EHEM_ERR_CONFIRM_TIMEOUT. A timeout does
+ *          not invalidate the handle: the caller may resume waiting or
+ *          cancel. A push answered on the phone after the caller gave up
+ *          has no effect — /ext/token is never called.
+ *   cancel frees the handle; no network (the broker event simply expires
+ *          with the authreq). Safe in every state; the handle is
+ *          single-use.
+ *
+ * The whole flow is credential-free by construction — this is HOW a context
+ * with no passphrase obtains bearers (see ehem_login_mobile, REQ-AUTH-010).
+ * -------------------------------------------------------------------------- */
+
+/* An in-progress confirmation (opaque). */
+typedef struct ehem_ext_confirm ehem_ext_confirm;
+
+typedef enum ehem_confirm_status {
+    EHEM_CONFIRM_PENDING = 0,   /* no answer from the phone yet */
+    EHEM_CONFIRM_APPROVED       /* approved; bearer acquired and cached */
+} ehem_confirm_status;
+
+/*
+ * Fire a push asking every paired authenticator to approve `scope`.
+ * `notify_url` NULL → EHEM_DEFAULT_NOTIFY_URL; `ctx_str`/`note` as in
+ * ehem_ext_request (the phone shows `note`; `ctx_str` is echoed into the
+ * token). On success *out is the in-progress handle. Remember the firmware
+ * scope rewrite: a `keymgmt:use:<kid>` scope shows the key's label on the
+ * phone and yields a 15-minute bearer.
+ */
+EHEM_API ehem_rc ehem_ext_confirm_begin(ehem_ctx *ctx, const char *notify_url,
+                                        const char *scope,
+                                        const char *ctx_str, const char *note,
+                                        ehem_ext_confirm **out);
+
+/*
+ * One poll. EHEM_OK + *status_out = PENDING (ask again later) or APPROVED
+ * (bearer cached under the begin() scope — terminal). EHEM_ERR_USER_REJECTED
+ * = denied on the phone (terminal). Other errors: the poll failed but the
+ * confirmation is still live — retry or cancel. Polling a terminal handle is
+ * EHEM_ERR_ARG.
+ */
+EHEM_API ehem_rc ehem_ext_confirm_poll(ehem_ctx *ctx, ehem_ext_confirm *c,
+                                       ehem_confirm_status *status_out);
+
+/*
+ * Block until the confirmation resolves or `timeout_ms` (> 0) elapses:
+ * EHEM_OK (approved + cached), EHEM_ERR_USER_REJECTED, or
+ * EHEM_ERR_CONFIRM_TIMEOUT (handle stays valid). A timeout shorter than one
+ * poll interval still polls at least once. Any other error aborts the wait
+ * (the handle stays valid for a retry).
+ */
+EHEM_API ehem_rc ehem_ext_confirm_wait(ehem_ctx *ctx, ehem_ext_confirm *c,
+                                       long timeout_ms);
+
+/* Free a confirmation handle in any state. NULL is a no-op. */
+EHEM_API void ehem_ext_confirm_cancel(ehem_ext_confirm *c);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

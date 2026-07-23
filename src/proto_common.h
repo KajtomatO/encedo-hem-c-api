@@ -28,6 +28,11 @@ struct ehem_checkin_info;
  * in later milestones; for M1 it covers the unauthenticated system endpoints. */
 ehem_rc ehem_proto_map_http_status(long status);
 
+/* Portable millisecond sleep (nanosleep / Sleep). <=0 is a no-op. Shared by
+ * request pacing (REQ-NET-006) and the confirm engine's poll cadence
+ * (REQ-AUTH-009) — the strict-C99 tree has exactly one sleep primitive. */
+void ehem_proto_sleep_ms(long ms);
+
 /* A key id on the wire is exactly 32 hex chars (16 bytes). Shared by every
  * binding that takes a kid (keymgmt, crypto). Stops at the first non-hex
  * byte, so a short string is safe. */

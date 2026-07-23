@@ -43,6 +43,15 @@ ehem_rc ehem_auth_ensure_token(ehem_ctx *ctx, const char *scope,
 void ehem_auth_invalidate(ehem_ctx *ctx, const char *scope);
 
 /*
+ * Seed the scope-keyed cache with an externally-acquired bearer (the ExtAuth
+ * confirm engine, REQ-AUTH-009). Entry expiry from the bearer's own exp claim
+ * minus skew (login-path fallback when unreadable). Creates the auth state if
+ * absent — mobile mode holds no passphrase. EHEM_ERR_ARG / EHEM_ERR_NOMEM.
+ */
+ehem_rc ehem_auth_cache_seed(ehem_ctx *ctx, const char *scope,
+                             const char *token);
+
+/*
  * Scrub and free the session state behind `ctx->auth` (zeroizing the retained
  * passphrase and every cached token). NULL-safe. Used by ehem_logout() and
  * ehem_ctx_destroy(); after it returns the pointer must not be reused.
