@@ -3,7 +3,7 @@ id: REQ-AUTH-006
 title: ExtAuth pairing bindings — init, validate, mac
 status: approved
 priority: must
-revision: 1
+revision: 2
 source: user decision 2026-07-22 (M8 decomposition); encedo-hem-api-doc auth/ext-init.md, ext-validate.md, ext-mac.md; encedo_firmware api_auth.c:838 (init), :980 (validate), :1174 (mac); hem-api-tester test_5.php
 depends_on: ["REQ-AUTH-003", "REQ-KEY-004"]
 supersedes: null
@@ -64,6 +64,14 @@ authenticated with scope `auth:ext:pair`.
   `nonce_validate_time_based` on this path).
 - Unpairing is NOT a new binding: paired authenticators are ordinary repo
   keys removed via `ehem_key_delete` (REQ-KEY-004).
+- **Firmware quirk (live-probed 2026-07-23, rev 2):** `/keymgmt/get` OMITS
+  `descr` for the ext-paired CURVE25519 key (`descr_len` 0) even though
+  BOTH list and search return the full 38-byte `"EXTAID"+pid` blob — and
+  get reports the bare type `CURVE25519` where list shows the flag-set
+  `ECDH,CURVE25519`. REPO_* source is absent from the fw checkout, so this
+  is pinned from device behavior (test_ext_pair_live). Inspecting a
+  pairing's pid therefore goes through search/list, never get. The
+  `/ext/request` enumeration reads the repo directly and is unaffected.
 
 **Rationale:** pairing is the precondition for the M8 push-confirm login
 flow (REQ-AUTH-007/009). Grouping the three endpoints in one REQ follows
@@ -72,17 +80,24 @@ uses for `code`/`nonce`/`mac`/`eid` values (`jwt_Base64encode`) must be
 pinned live — standard-vs-url alphabet is not obvious from source alone.
 
 **Acceptance criteria:**
-- [ ] Unit (fake transport): request/response shapes for all three
-      bindings; scope `auth:ext:pair` requested; 401/403/406/409 mapping;
-      epk argument validation (`EHEM_ERR_ARG` before any network I/O for
-      non-32-byte input).
-- [ ] Live: full simulated pairing (REQ-TEST-006) — init → locally-built
-      reply → validate returns `kid` + `code`, `code` verified locally
-      via the shim recipe; EXTAID key visible via `ehem_key_get` and
-      deleted in cleanup.
-- [ ] Live: `ehem_ext_mac` round-trip — `mac` verified locally against
-      `HMAC-SHA256(nonce, ECDH(our_ephemeral_priv, eid))`; base64
-      variant of `nonce`/`mac`/`code` recorded here.
-- [ ] Open (live probe): 406 on re-pairing an identical `iss` pubkey
-      (dedup) vs. slot exhaustion — record which is observable and the
-      response payloads.
+- [x] Unit (fake transport, tests/unit/test_ext.c, 2026-07-23):
+      request/response shapes for all three bindings; scope
+      `auth:ext:pair` requested (bearer on the wire); 401/403/406/409
+      mapping; epk/pid argument validation (`EHEM_ERR_ARG` before any
+      network I/O for non-32-byte input).
+- [x] Live (test_ext_pair_live, 2026-07-23, 2/2 stable): full simulated
+      pairing — init → locally-built reply → validate returns `kid` +
+      `code`, `code` verified locally via the shim recipe; the request
+      JWT's signature verifies with `ECDH(our_ephemeral, eid)`; EXTAID
+      key inspected via get (pubkey == our identity key) + SEARCH
+      (label + `"EXTAID"+pid` descriptor — get omits descr, see the
+      quirk above) and deleted in cleanup.
+- [x] Live (same run): `ehem_ext_mac` round-trip — `mac` verified
+      locally against `HMAC-SHA256(nonce, ECDH(our_ephemeral_priv,
+      eid))`; base64 variant of `code`/`nonce`/`mac`/`eid` = STANDARD
+      with padding (byte-equal to the shim's std-b64 output).
+- [x] Live probe (2026-07-23): re-pairing an identical `iss` pubkey
+      under a FRESH pid → HTTP 406 with an EMPTY payload (repo dedup) —
+      indistinguishable on the wire from slot exhaustion, as predicted;
+      the SDK detail names both causes. Slot-exhaustion (8 pairings) not
+      separately provoked — same wire shape, nothing more to learn.

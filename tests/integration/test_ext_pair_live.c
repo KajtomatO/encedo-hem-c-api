@@ -149,11 +149,36 @@ static void test_pair_validate_mac_cycle(void **state)
     assert_non_null(det->pubkey);
     assert_int_equal(det->pubkey_len, 32);
     assert_memory_equal(det->pubkey, identity.pub, 32);
-    /* descriptor = "EXTAID" + the decoded pid */
-    assert_int_equal(det->descr_len, 6 + 32);
-    assert_memory_equal(det->descr, "EXTAID", 6);
-    assert_memory_equal(det->descr + 6, pid_src.pub, 32);
+    /* FIRMWARE QUIRK (live-probed 2026-07-23, REQ-AUTH-006): /keymgmt/get
+     * OMITS `descr` for the ext-paired CURVE25519 key even though list and
+     * search both return the full "EXTAID"+pid blob (REPO source is absent
+     * from the fw checkout, so this is pinned from device behavior). Pinned
+     * so a firmware that starts returning it shows up as a diff. */
+    assert_int_equal(det->descr_len, 0);
     ehem_key_details_free(det);
+
+    /* descriptor = "EXTAID" + the decoded pid — via SEARCH (descr prefix),
+     * the same repo filter the /ext/request enumeration uses. */
+    ehem_key_page *page = NULL;
+    assert_int_equal(ehem_key_search(g_ctx, (const uint8_t *)"EXTAID", 6,
+                                     EHEM_KEY_SEARCH_PREFIX, 0, 15, &page),
+                     EHEM_OK);
+    assert_non_null(page);
+    size_t found = 0;
+    for (size_t i = 0; i < page->listed; i++) {
+        ehem_key_entry *e = &page->entries[i];
+        if (strcmp(e->kid, val->kid) != 0) {
+            continue;   /* other EXTAID pairings may exist on the device */
+        }
+        found++;
+        assert_non_null(e->label);
+        assert_string_equal(e->label, SIM_LABEL);
+        assert_int_equal(e->descr_len, 6 + 32);
+        assert_memory_equal(e->descr, "EXTAID", 6);
+        assert_memory_equal(e->descr + 6, pid_src.pub, 32);
+    }
+    assert_int_equal(found, 1);
+    ehem_key_page_free(page);
 
     /* --- dedup probe: same identity key again → 406 ----------------------- */
     ehem_ext_init_info *init2 = NULL;
