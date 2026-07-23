@@ -7,9 +7,9 @@ traces:
   architecture: ["ARCHITECTURE.md#5-auth--session", "ARCHITECTURE.md#4-public-api--conventions"]
 depends_on: ["STEP-M8-050"]
 evidence:
-  commits: []
-  tests: []
-  notes: null
+  commits: ["eaf67b9"]
+  tests: ["verifies: REQ-AUTH-010 — tests/unit/test_mobile.c (5 cases: binding-triggered confirm flow end-to-end + cache hit with zero broker traffic; rejected/timeout surfacing from the binding call with the confirm_timeout_ms override; passphrase↔mobile switching last-call-wins + logout ends the session; 401-retry composition — exactly one re-acquisition, 12 requests; pairing-trio fail-fast with zero requests)"]
+  notes: "ehem_login_mobile (proto_auth: mobile flag on ehem_auth, lazy, scrubs the passphrase on switch; ehem_login/ehem_logout clear the flag) + ehem_options.confirm_timeout_ms (append-only, EHEM_OPT_HAS-guarded, 0 → EHEM_DEFAULT_CONFIRM_TIMEOUT_MS 60000). ensure_token mobile branch: miss → confirm begin/wait/cancel with ctx->confirm_timeout_ms → re-lookup the seeded cache; checkin_on_login honored in mobile mode too. Internal ehem_auth_is_mobile drives the pairing-trio fail-fast (SCOPE_DENIED, 'no push was sent'). Unit 37/37 gcc+clang+ASan; export/header/ABI gates green; MinGW cross-syntax clean. Live attended demo = M8-080."
 reopened: []
 cancelled: null
 ---
@@ -30,9 +30,9 @@ first mobile acquisition as it does for passphrase. Header docs record
 the per-KID-scope one-push/15-min consequence.
 
 **Definition of done**
-- [ ] Unit: mode switch + scrub (ASan), binding-call-triggered confirm
+- [x] Unit: mode switch + scrub (ASan), binding-call-triggered confirm
       flow end-to-end (scripted broker), cache hit = no broker traffic,
       rejected/timeout surfaced from a binding call, timeout default +
       override, 401-retry composition, pairing-trio fail-fast
-- [ ] `./dev ci` + asan green; export/header/ABI gates green
+- [x] `./dev ci` + asan green; export/header/ABI gates green
       (options append-only); tags placed; evidence filled
