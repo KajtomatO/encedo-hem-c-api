@@ -3,7 +3,7 @@ id: REQ-AUTH-008
 title: Notification-broker client — cloud legs for ExtAuth pairing and login
 status: approved
 priority: must
-revision: 3
+revision: 4
 source: user decision 2026-07-22 (M8 decomposition); hem-api-tester test_5.php/test_6.php (notify flows); Encedo Manager encedo.js:335/1316, build.js:383/1438 (per doc-repo citations); NO doc page exists for the broker API — shapes are reconstructed, all pinned by live probes
 depends_on: ["REQ-NET-001", "REQ-NET-003", "REQ-AUTH-006", "REQ-AUTH-007"]
 supersedes: null
@@ -106,8 +106,16 @@ update, hence the everything-is-an-open-criterion posture and the
       session-POST-with-eid.** Registration left dangling
       (expires broker-side). Phone leg → `{pid, reply}`, `finalise`
       status, and expired-`rid` behavior remain for STEP-M8-080.
-- [ ] Open (attended, real phone — STEP-M8-080): `event/new` → poll →
-      the THREE terminal shapes captured verbatim (approved `authreply`,
-      `deny` on reject, and what the broker returns after the authreq
-      `exp` passes); the phone-completed `register/check` 200 and
-      `finalise` leg; recorded here and in KNOWN-ISSUES if surprising.
+- [x] Attended (real phone SM-S938B, STEP-M8-080, 2026-07-23): the
+      phone-completed `register/check` 200 + `finalise` leg green (`ext
+      pair` end-to-end via terminal QR); `event/check` shapes captured
+      VERBATIM — pending 202 (empty), approved 200 `{authreply, 
+      ipinfo_aid, ipinfo_eid}` (a consumed event keeps returning its
+      result; the authreply stays single-use device-side via jti),
+      denied 200 `{"deny":true}`, unknown/purged `rid`/`eventid` 404
+      (an EXPIRED event converges to 404 — indistinguishable from
+      unknown; the SDK's NOT_FOUND mapping is the sane terminal).
+      Phone-app finding: the authreply stamps `exp = iat + 900`, so
+      real-phone bearers live 15 min regardless of the authreq
+      lifetime (the device copies authreply exp verbatim,
+      REQ-AUTH-007).

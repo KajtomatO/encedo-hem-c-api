@@ -79,7 +79,9 @@ drive every terminal through a scripted fake broker with zero sleeping
       cancel leaks nothing (ASan) in every state.
 - [ ] Unit: wrapper poll cadence honors the interval seam; a timeout
       shorter than one interval still performs ≥1 poll.
-- [ ] Live (attended, STEP-M8-080): one approved and one rejected
-      round-trip on the real phone produce EHEM_OK-with-working-bearer
-      and `EHEM_ERR_USER_REJECTED` respectively; an unanswered push
-      times out with `EHEM_ERR_CONFIRM_TIMEOUT`.
+- [x] Live (attended, real phone, STEP-M8-080, 2026-07-23): approved →
+      EHEM_OK with a working bearer (config data printed); rejected →
+      `EHEM_ERR_USER_REJECTED`; unanswered → `EHEM_ERR_CONFIRM_TIMEOUT`
+      — all three BACK-TO-BACK, which also exercises the rev-2 drift
+      recovery live (the pre-fix run reproduced the broker 401 within
+      minutes of a clock sync).

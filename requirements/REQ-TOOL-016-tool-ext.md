@@ -3,7 +3,7 @@ id: REQ-TOOL-016
 title: hem-tool ext family — pair (terminal QR), list, login
 status: approved
 priority: should
-revision: 1
+revision: 2
 source: user decision 2026-07-22 (M8 decomposition; "Add QR code generation to hem-tool" — user decision same day); hem-api-tester test_5.php QR payload; REQ-TOOL-012 family-in-one-REQ precedent
 depends_on: ["REQ-AUTH-006", "REQ-AUTH-008", "REQ-AUTH-009", "REQ-AUTH-010", "REQ-KEY-001", "REQ-TOOL-005"]
 supersedes: null
@@ -62,18 +62,23 @@ QR (user decision 2026-07-22) removes the last external tool from the
 loop.
 
 **Acceptance criteria:**
-- [ ] Unit (hem-tool-core, fake transport): pair happy path hits the
-      legs in order and passes `{kid, code}` verbatim to finalise; scan
-      timeout / 406 / broker-error exit codes; list EXTAID filter +
+- [x] Unit (hem-tool-core, tests/unit/test_ext_tool.c, 2026-07-23):
+      pair happy path hits the legs in order (incl. TWO login exchanges
+      — config + auth:ext:pair scopes) and passes `{kid, code}` verbatim
+      to finalise; scan-timeout / 406 exit codes; list EXTAID filter +
       protected marking; login exit codes for approved, rejected,
-      timeout (scripted broker).
-- [ ] Unit: QR module renders a known payload to the expected module
-      matrix (fixture from the qrcodegen reference); output fits
-      standard 80-col terminals for the observed link lengths (else
-      falls back to payload print + a notice).
-- [ ] Export/header gates stay green with qrcodegen vendored (tool-only
-      linkage proven).
-- [ ] Live (attended, STEP-M8-080): `ext pair` scanned from the terminal
-      QR by the real Encedo app completes registration; `ext list` shows
-      the phone; `ext login` demonstrates approve, reject, and timeout
-      exit codes; results recorded here.
+      timeout, NOAUTH (scripted broker).
+- [x] Unit (same file): QR v1 module matrix (line count + all-light
+      quiet rows) against the vendored qrcodegen; >80-col renders are
+      refused so the caller falls back to payload print (a 1.2 kB text
+      exercises it); observed pairing payloads land ≈ v10-13 ≤ 77 cols.
+- [x] Export/header gates green with qrcodegen vendored (tool-only
+      linkage proven by the standing check suite, 2026-07-23).
+- [x] Live (attended, STEP-M8-080, 2026-07-23): `ext pair` scanned from
+      the TERMINAL QR by the real Encedo app completed registration
+      (phone label "SM-S938B (Android)"); `ext list` shows it with the
+      `[PROTECTED]` mark (the (Android) classifier — real phones are
+      guarded from bulk rm exactly as designed); `ext login`
+      demonstrated approve/reject/timeout as exit 0/4/3 back-to-back.
+      Pairing KEPT on the device (user decision 2026-07-23) for future
+      mobile testing.

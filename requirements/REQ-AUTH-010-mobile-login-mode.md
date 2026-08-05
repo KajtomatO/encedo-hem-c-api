@@ -3,7 +3,7 @@ id: REQ-AUTH-010
 title: Mobile login mode — ehem_login_mobile and confirm_timeout_ms option
 status: approved
 priority: must
-revision: 1
+revision: 2
 source: user decision 2026-07-22 (M8 decomposition); start_point REQUIREMENTS-hem.md HEM-SDK-2 (mobile base auth), HEM-AUTH-2 (block until confirmation or confirm_timeout), HEM-CFG-3 (confirm_timeout config key)
 depends_on: ["REQ-AUTH-001", "REQ-AUTH-002", "REQ-AUTH-009"]
 supersedes: null
@@ -65,6 +65,8 @@ bindings and one place where the two auth modes diverge.
 - [ ] Unit: pairing-trio call in mobile mode fails fast with the
       documented sub!=U outcome (no push fired for an endpoint that
       cannot accept the resulting token).
-- [ ] Live (attended, STEP-M8-080): `ehem_login_mobile` +
-      `ehem_system_config` → push approved on the real phone → config
-      data returned; the same with a deny → `EHEM_ERR_USER_REJECTED`.
+- [x] Live (attended, real phone, STEP-M8-080, 2026-07-23):
+      `ehem_login_mobile` + `ehem_system_config` (via `hem-tool ext
+      login`) → push approved → config data returned (hostname
+      my.ence.do, user Debug HSM); deny → `EHEM_ERR_USER_REJECTED`
+      (exit 4); unanswered → timeout (exit 3).

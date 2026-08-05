@@ -3,7 +3,7 @@ id: REQ-TEST-006
 title: Simulated authenticator — device-local ExtAuth testing and broker-test gating
 status: approved
 priority: must
-revision: 1
+revision: 2
 source: user decision 2026-07-22 (M8 decomposition; broker tests gated into the disruptive label — user decision same day); encedo_firmware api_auth.c scheme-A construction (:1511-1545, :1743-1801); REQ-TEST-003 EHEMTEST policy
 depends_on: ["REQ-TEST-002", "REQ-TEST-003", "REQ-AUTH-006", "REQ-AUTH-007"]
 supersedes: null
@@ -69,6 +69,8 @@ the rest of the suite, and keeps the user's phone out of CI.
 - [x] Live: cleanup via the tracked-keyreg teardown (runs pass or
       fail); both tests leave no EHEMTEST/EXTAID residue (dedup-probe
       406 creates no key).
-- [ ] Grep-check: no test outside the `disruptive` label references the
-      broker register/event paths — vacuously true until STEP-M8-040
-      adds broker tests; checked for real at the M8 gate.
+- [x] Grep-check (2026-07-23, with the full M8 broker test population):
+      no live test outside the `disruptive` label touches the broker
+      register/event paths — test_notify_session_live (integration)
+      touches only `/session`; register polling lives in
+      tests/disruptive/; event legs were attended-only (M8-080).
