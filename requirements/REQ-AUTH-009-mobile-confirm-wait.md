@@ -71,14 +71,15 @@ drive every terminal through a scripted fake broker with zero sleeping
 `ehem_auth_test_set_clock` precedent).
 
 **Acceptance criteria:**
-- [ ] Unit (fake transport, scripted broker): pending→approved seeds the
+- [x] Unit (tests/unit/test_confirm.c, 2026-07-23, STEP-M8-050 +
+      the rev-2 drift-recovery case at M8-080): pending→approved seeds the
       cache under the requested scope and a subsequent binding call uses
       the bearer with NO new acquisition; pending→deny →
       `EHEM_ERR_USER_REJECTED` (terminal, no `/ext/token` call);
       perpetual-202 + wrapper deadline → `EHEM_ERR_CONFIRM_TIMEOUT`;
       cancel leaks nothing (ASan) in every state.
-- [ ] Unit: wrapper poll cadence honors the interval seam; a timeout
-      shorter than one interval still performs ≥1 poll.
+- [x] Unit: wrapper poll cadence honors the interval seam; a timeout
+      shorter than one interval still performs ≥1 poll (2026-07-23).
 - [x] Live (attended, real phone, STEP-M8-080, 2026-07-23): approved →
       EHEM_OK with a working bearer (config data printed); rejected →
       `EHEM_ERR_USER_REJECTED`; unanswered → `EHEM_ERR_CONFIRM_TIMEOUT`

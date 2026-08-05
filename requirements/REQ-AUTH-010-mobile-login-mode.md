@@ -56,13 +56,13 @@ REQ-AUTH-003 design) means zero changes in the twenty-odd existing
 bindings and one place where the two auth modes diverge.
 
 **Acceptance criteria:**
-- [ ] Unit (fake transport + scripted broker): after
+- [x] Unit (tests/unit/test_mobile.c, 2026-07-23, STEP-M8-060): after
       `ehem_login_mobile`, a binding call on a cache miss runs the
       confirm flow and succeeds end-to-end; cache hit performs no
       broker traffic; rejected/timeout surface from the binding call;
       passphrase↔mobile switching scrubs the losing mode's material
       (ASan); `confirm_timeout_ms` default and override honored.
-- [ ] Unit: pairing-trio call in mobile mode fails fast with the
+- [x] Unit: pairing-trio call in mobile mode fails fast with the
       documented sub!=U outcome (no push fired for an endpoint that
       cannot accept the resulting token).
 - [x] Live (attended, real phone, STEP-M8-080, 2026-07-23):
