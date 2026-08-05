@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "context.h"
 #include "crypto_shim.h"   /* ehem_zeroize — bearers are sensitive material */
@@ -539,6 +540,71 @@ struct ehem_ext_confirm {
     int   terminal;     /* approved, denied, or token-redemption failed */
 };
 
+/* Local-vs-device clock disagreement (via the authreq's iat) beyond which a
+ * broker 401 on event/new is treated as drift, not refusal. The broker was
+ * observed rejecting +51 s; REQ-AUTH-004's skew is 60 s — this must sit
+ * well below the rejection threshold actually seen. */
+#define EXT_BROKER_IAT_SKEW 15
+
+/* Best-effort read of a compact JWT's payload `iat` claim (the device's
+ * clock as stamped into the authreq). */
+static bool peek_jwt_iat(const char *jwt, int64_t *iat_out)
+{
+    const char *d1, *d2;
+    uint8_t raw[1024];
+    size_t seg_len, n;
+    ehem_json *payload;
+    bool ok;
+
+    d1 = strchr(jwt, '.');
+    if (d1 == NULL || (d2 = strchr(d1 + 1, '.')) == NULL) {
+        return false;
+    }
+    seg_len = (size_t)(d2 - (d1 + 1));
+    if (seg_len == 0 || seg_len > sizeof raw) {
+        return false;
+    }
+    n = ehem_b64url_decode(d1 + 1, seg_len, raw, sizeof raw);
+    if (n == (size_t)-1) {
+        return false;
+    }
+    payload = ehem_json_parse((const char *)raw, n);
+    if (payload == NULL) {
+        return false;
+    }
+    ok = ehem_json_get_int64(payload, "iat", iat_out);
+    ehem_json_free(payload);
+    return ok;
+}
+
+/* One push attempt: anonymous broker session (event/new REJECTS eid-bound
+ * session keys with 404 — probed live) → device authreq → event/new. On
+ * success c->eventid is set; the request info and epk are handed back for
+ * the caller's drift inspection and freed by the caller either way. */
+static ehem_rc confirm_fire_push(ehem_ctx *ctx, struct ehem_ext_confirm *c,
+                                 const char *scope, const char *ctx_str,
+                                 const char *note,
+                                 ehem_ext_request_info **reqi_out,
+                                 char **epk_out)
+{
+    ehem_rc rc;
+
+    *reqi_out = NULL;
+    *epk_out = NULL;
+    ehem_notify_string_free(c->eventid);
+    c->eventid = NULL;
+
+    rc = ehem_notify_session(ctx, c->notify_url, NULL, epk_out);
+    if (rc == EHEM_OK) {
+        rc = ehem_ext_request(ctx, *epk_out, scope, ctx_str, note, reqi_out);
+    }
+    if (rc == EHEM_OK) {
+        rc = ehem_notify_event_new(ctx, c->notify_url, (*reqi_out)->authreq,
+                                   (*reqi_out)->epk, &c->eventid);
+    }
+    return rc;
+}
+
 ehem_rc ehem_ext_confirm_begin(ehem_ctx *ctx, const char *notify_url,
                                const char *scope, const char *ctx_str,
                                const char *note, ehem_ext_confirm **out)
@@ -565,14 +631,38 @@ ehem_rc ehem_ext_confirm_begin(ehem_ctx *ctx, const char *notify_url,
     }
 
     /* session (credential-free GET) → device authreq → broker push. */
-    rc = ehem_notify_session(ctx, c->notify_url, NULL, &epk);
-    if (rc == EHEM_OK) {
-        rc = ehem_ext_request(ctx, epk, scope, ctx_str, note, &reqi);
+    rc = confirm_fire_push(ctx, c, scope, ctx_str, note, &reqi, &epk);
+
+    /*
+     * Broker clock-drift recovery (REQ-AUTH-009 rev 2, found live at
+     * STEP-M8-080): the broker validates the authreq's `iat` against ITS
+     * clock with ~zero tolerance for the future — and the device RTC runs
+     * ~8% fast (KNOWN-ISSUES), so within minutes of the last sync every
+     * event/new 401s with "Cannot handle token prior to (iat …)". Evidence
+     * = the authreq's own iat vs local wall time; with drift in evidence,
+     * ONE check-in (the firmware resyncs its RTC as a side effect) and one
+     * full re-fire — a fresh authreq is mandatory, the old iat stays bad.
+     * Without evidence a 401 is a real broker refusal and stays terminal.
+     */
+    if (rc != EHEM_OK && ehem_last_error(ctx)->http_status == 401 &&
+        reqi != NULL && !ctx->no_auto_checkin && !ctx->in_checkin) {
+        int64_t iat = 0, drift = 0;
+        if (peek_jwt_iat(reqi->authreq, &iat)) {
+            drift = iat - (int64_t)time(NULL);
+        }
+        if (drift > EXT_BROKER_IAT_SKEW || drift < -EXT_BROKER_IAT_SKEW) {
+            if (ehem_checkin_run(ctx, /*relax_device_tls=*/1, NULL)
+                    == EHEM_OK) {
+                ehem_ext_request_free(reqi);
+                ehem_notify_string_free(epk);
+                reqi = NULL;
+                epk = NULL;
+                rc = confirm_fire_push(ctx, c, scope, ctx_str, note,
+                                       &reqi, &epk);
+            }
+        }
     }
-    if (rc == EHEM_OK) {
-        rc = ehem_notify_event_new(ctx, c->notify_url, reqi->authreq,
-                                   reqi->epk, &c->eventid);
-    }
+
     ehem_ext_request_free(reqi);
     ehem_notify_string_free(epk);
     if (rc != EHEM_OK) {

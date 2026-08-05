@@ -3,7 +3,7 @@ id: REQ-AUTH-009
 title: Mobile confirmation wait — pollable state machine with blocking wrapper, distinct rejected/timeout results
 status: approved
 priority: must
-revision: 1
+revision: 2
 source: user decision 2026-07-22 (M8 decomposition); ARCHITECTURE.md §5 mobile-app confirmation bullet; start_point HEM-SDK-8/HEM-AUTH-2 (distinct rejection vs timeout, blocking with confirm_timeout)
 depends_on: ["REQ-AUTH-002", "REQ-AUTH-007", "REQ-AUTH-008"]
 supersedes: null
@@ -27,6 +27,15 @@ passes unanswered.
   `ehem_ext_request` → broker `event/new`; returns an opaque in-progress
   handle owning the `eventid`. One device round-trip + two cloud legs;
   no waiting. Every leg is unauthenticated by construction.
+  **Drift recovery (rev 2, found live at M8-080):** the broker rejects
+  an authreq whose `iat` is in its future (REQ-AUTH-008 rev 3) and the
+  device RTC runs ~8% fast, so `begin` SHALL, on an `event/new` HTTP 401
+  WITH drift evidence (|authreq `iat` − local now| > 15 s), run ONE
+  check-in (the firmware resyncs its RTC) and re-fire all three legs
+  once — a fresh authreq is mandatory, the old `iat` stays bad. Honors
+  `no_auto_checkin` and the check-in recursion guard; without drift
+  evidence a 401 is a real broker refusal and stands. The
+  REQ-AUTH-004 pattern, keyed on the broker's clock check.
 - **poll(ctx, confirm):** ONE broker `event/check`:
   - 202 → returns "still pending" (a non-error status out-param — poll
     itself never sleeps and applies no deadline; cadence and deadline

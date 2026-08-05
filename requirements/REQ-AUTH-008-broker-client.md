@@ -3,7 +3,7 @@ id: REQ-AUTH-008
 title: Notification-broker client — cloud legs for ExtAuth pairing and login
 status: approved
 priority: must
-revision: 2
+revision: 3
 source: user decision 2026-07-22 (M8 decomposition); hem-api-tester test_5.php/test_6.php (notify flows); Encedo Manager encedo.js:335/1316, build.js:383/1438 (per doc-repo citations); NO doc page exists for the broker API — shapes are reconstructed, all pinned by live probes
 depends_on: ["REQ-NET-001", "REQ-NET-003", "REQ-AUTH-006", "REQ-AUTH-007"]
 supersedes: null
@@ -27,13 +27,20 @@ itself.
   leg — regardless of the device-URL trust mode.
 - **Endpoints** (reconstructed from tester + Manager; NO doc page —
   every shape below is an open criterion until live-pinned):
-  - `/notify/session` → 200 `{epk}` — broker ephemeral Curve25519 pub
-    for one pairing/login exchange. Two observed forms: POST `{"eid"}`
+  - `/notify/session` → 200 `{epk, exp}` — broker Curve25519 pub for
+    one pairing/login exchange. Two observed forms: POST `{"eid"}`
     (Manager, test_5 pairing) and a bodyless GET (test_6 login). The SDK
     binds BOTH: pairing uses POST-with-eid (the caller is authenticated
     and holds the eid); the login path (REQ-AUTH-009 `begin`) uses the
     GET form because mobile mode holds NO credentials and the eid may be
-    unknown.
+    unknown. **Live facts (rev 3, M8-080 session 2026-07-23):** sessions
+    are CACHED server-side — repeat calls return the SAME epk until
+    rotation; `exp` ≈ now + 24 h; the eid-POST form additionally returns
+    `"paired": true/false` (whether that eid has any registered
+    authenticators — a credential-free pairing probe). The two forms are
+    NOT interchangeable: `event/new` accepts only the anonymous GET-form
+    epk (an eid-bound epk → 404); `register/init` accepts only the
+    eid-bound form (a GET-form epk → 401, rev 2).
   - `POST /notify/register/init` `{"epk", "eid", "request"}` → 200
     `{rid, link}` — starts a registration; `link` is the URL the phone
     app consumes (via QR).
@@ -42,8 +49,20 @@ itself.
   - `POST /notify/register/finalise/<rid>` — body = the device's
     `/ext/validate` response `{kid, code}` verbatim → 200.
   - `POST /notify/event/new` — body = the device's `/ext/request`
-    response `{authreq, epk}` verbatim → 200 `{eventid}` — pushes the
-    confirmation request to every paired phone.
+    response `{authreq, epk}` verbatim → 200 — pushes the confirmation
+    request to every paired phone. **Live facts (rev 3):** the 200 body
+    carries `eventid`, `sentcnt` (number of phones pushed — 0 would mean
+    an unanswerable push, a future credential-free NOAUTH signal), and
+    `ipinfo_you` — the broker GEOLOCATES the caller (ip/hostname/city/
+    org/loc) and forwards it, presumably for the phone's approval UI;
+    consumers should know the broker sees and shares this. **The broker
+    VALIDATES the authreq's `iat` against its own clock with ~zero
+    tolerance for the future**: 401 `{"err":"Cannot handle token prior
+    to (iat …) <time>"}` — with the device RTC running ~8% fast
+    (KNOWN-ISSUES), every mobile login 401s here within minutes of the
+    last clock sync. This is the failure the REQ-AUTH-009 rev 2
+    drift-gated check-in recovery exists for (discovered live at
+    STEP-M8-080: first login green, second 401 — device was +51 s).
   - `GET /notify/event/check/<eventid>` → **202 = pending**; 200 with
     `authreply` = approved on the phone; 200 with `deny` set = rejected
     on the phone (tester note: the app only produces an `authreply` on

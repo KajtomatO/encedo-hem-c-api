@@ -199,6 +199,69 @@ static void test_wait_timeout_and_resume(void **state)
     fake_transport_free(fake);
 }
 
+/* Broker clock-drift recovery (REQ-AUTH-009 rev 2): event/new 401 with the
+ * authreq's iat far from local time → ONE check-in + full re-fire; without
+ * iat evidence the 401 stays a plain failure. */
+static void test_begin_drift_recovery(void **state)
+{
+    (void)state;
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    ehem_ctx *ctx = ctx_with(fake);
+
+    /* Authreq whose payload carries a far-future iat (drifted device). */
+    char payload[64], seg[128], authreq_resp[512];
+    int m = snprintf(payload, sizeof payload, "{\"iat\":%lld}",
+                     (long long)9000000000LL);
+    size_t sn = ehem_b64url_encode((const uint8_t *)payload, (size_t)m,
+                                   seg, sizeof seg);
+    assert_int_not_equal(sn, (size_t)-1);
+    snprintf(authreq_resp, sizeof authreq_resp,
+             "{\"authreq\":\"h.%s.s\",\"epk\":\"" B64_32 "\"}", seg);
+
+    /* First fire: session, authreq(drifted), event/new 401 → check-in legs
+     * → second fire: session, authreq, event/new OK. */
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"epk\":\"" B64_32 "\"}"), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+                                                  authreq_resp), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 401,
+        "{\"err\":\"Cannot handle token prior to (iat 9000000000)\"}"), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"check\":\"C\"}"), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"checked\":\"V\"}"), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"status\":\"ok\",\"newcrt\":\"\"}"), 0);
+    push_begin(fake);
+
+    ehem_ext_confirm *c = NULL;
+    assert_int_equal(ehem_ext_confirm_begin(ctx, NULL, "s", NULL, NULL, &c),
+                     EHEM_OK);
+    assert_non_null(c);
+    assert_int_equal(fake_transport_request_count(fake), 9);
+    assert_string_equal(fake_transport_request(fake, 3)->path,
+                        "/api/system/checkin");
+    assert_string_equal(fake_transport_request(fake, 8)->path,
+                        EHEM_DEFAULT_NOTIFY_URL "/event/new");
+    ehem_ext_confirm_cancel(c);
+
+    /* No iat evidence (opaque authreq): a 401 stays terminal, no check-in. */
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"epk\":\"" B64_32 "\"}"), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"authreq\":\"a.b.c\",\"epk\":\"" B64_32 "\"}"), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 401, NULL), 0);
+    size_t before = fake_transport_request_count(fake);
+    assert_int_equal(ehem_ext_confirm_begin(ctx, NULL, "s", NULL, NULL, &c),
+                     EHEM_ERR_AUTH_FAILED);
+    assert_null(c);
+    assert_int_equal(fake_transport_request_count(fake), before + 3);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
 static void test_transient_poll_error_is_retryable(void **state)
 {
     (void)state;
@@ -245,6 +308,7 @@ int main(void)
         cmocka_unit_test(test_begin_poll_approved_seeds_cache),
         cmocka_unit_test(test_denied_is_terminal_without_token_call),
         cmocka_unit_test(test_wait_timeout_and_resume),
+        cmocka_unit_test(test_begin_drift_recovery),
         cmocka_unit_test(test_transient_poll_error_is_retryable),
     };
     if (ehem_global_init() != EHEM_OK) {
