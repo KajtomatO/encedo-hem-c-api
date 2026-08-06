@@ -1,7 +1,7 @@
 ---
 id: REQ-TOOL-018
 title: hem-tool --mobile — mobile auth for every bearer-needing subcommand
-status: approved
+status: verified
 priority: should
 revision: 2
 source: user decision 2026-08-06 (M9 scope reshape, ARCHITECTURE.md §11; user's working name "--app-auth", finalized "--mobile" to match ehem_login_mobile and the start_point HEM-CFG-3 vocabulary `auth = passphrase | mobile`); rev 2 = STEP-M9-020 no-pairing rework (user decision 2026-08-06: "timeout + hint" — nothing-paired is not detectable in pure mobile mode) + exit codes 13/14 recorded
