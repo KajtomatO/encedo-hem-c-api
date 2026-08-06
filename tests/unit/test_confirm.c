@@ -18,6 +18,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include <cmocka.h>
 
 #include "ehem/ehem.h"
@@ -245,6 +246,42 @@ static void test_begin_drift_recovery(void **state)
     assert_string_equal(fake_transport_request(fake, 8)->path,
                         EHEM_DEFAULT_NOTIFY_URL "/event/new");
     ehem_ext_confirm_cancel(c);
+
+    /* The formerly-DEAD window (STEP-M9-055, REQ-AUTH-009 rev 3): iat only
+     * a few seconds ahead of local — the broker rejects it (zero future
+     * tolerance, live-observed at +14 s) and the recovery must now fire. */
+    {
+        char p2[64], s2[128], resp2[512];
+        int m2 = snprintf(p2, sizeof p2, "{\"iat\":%lld}",
+                          (long long)time(NULL) + 8);
+        size_t sn2 = ehem_b64url_encode((const uint8_t *)p2, (size_t)m2,
+                                        s2, sizeof s2);
+        assert_int_not_equal(sn2, (size_t)-1);
+        snprintf(resp2, sizeof resp2,
+                 "{\"authreq\":\"h.%s.s\",\"epk\":\"" B64_32 "\"}", s2);
+        assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+            "{\"epk\":\"" B64_32 "\"}"), 0);
+        assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+                                                      resp2), 0);
+        assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 401,
+            "{\"err\":\"Cannot handle token prior to (iat ...)\"}"), 0);
+        assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+            "{\"check\":\"C\"}"), 0);
+        assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+            "{\"checked\":\"V\"}"), 0);
+        assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+            "{\"status\":\"ok\",\"newcrt\":\"\"}"), 0);
+        push_begin(fake);
+        size_t base = fake_transport_request_count(fake);
+        assert_int_equal(ehem_ext_confirm_begin(ctx, NULL, "s", NULL, NULL,
+                                                &c), EHEM_OK);
+        assert_non_null(c);
+        assert_int_equal(fake_transport_request_count(fake), base + 9);
+        assert_string_equal(fake_transport_request(fake, base + 3)->path,
+                            "/api/system/checkin");
+        ehem_ext_confirm_cancel(c);
+        c = NULL;
+    }
 
     /* No iat evidence (opaque authreq): a 401 stays terminal, no check-in. */
     assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,

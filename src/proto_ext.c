@@ -541,10 +541,17 @@ struct ehem_ext_confirm {
 };
 
 /* Local-vs-device clock disagreement (via the authreq's iat) beyond which a
- * broker 401 on event/new is treated as drift, not refusal. The broker was
- * observed rejecting +51 s; REQ-AUTH-004's skew is 60 s — this must sit
- * well below the rejection threshold actually seen. */
-#define EXT_BROKER_IAT_SKEW 15
+ * broker 401 on event/new is treated as drift, not refusal. The broker has
+ * ~ZERO tolerance for a FUTURE iat — live-observed rejecting +14 s
+ * (2026-08-06, STEP-M9-055; M8-080 had seen +51 s and picked a 15 s gate,
+ * which left a (0,15] s DEAD WINDOW re-entered ~3 min after every resync
+ * at the ~8%-fast RTC) — so anything meaningfully ahead of local wall
+ * time is evidence; 2 s covers transmission and clock-read jitter. A PAST
+ * iat is acceptable to the broker (tokens are valid from iat onward), so
+ * the backward gate stays wide: a strongly negative reading means a wrong
+ * LOCAL clock, still worth the one resync try. */
+#define EXT_BROKER_IAT_FUTURE_SKEW  2
+#define EXT_BROKER_IAT_PAST_SKEW   15
 
 /* Best-effort read of a compact JWT's payload `iat` claim (the device's
  * clock as stamped into the authreq). */
@@ -650,7 +657,8 @@ ehem_rc ehem_ext_confirm_begin(ehem_ctx *ctx, const char *notify_url,
         if (peek_jwt_iat(reqi->authreq, &iat)) {
             drift = iat - (int64_t)time(NULL);
         }
-        if (drift > EXT_BROKER_IAT_SKEW || drift < -EXT_BROKER_IAT_SKEW) {
+        if (drift > EXT_BROKER_IAT_FUTURE_SKEW ||
+            drift < -EXT_BROKER_IAT_PAST_SKEW) {
             if (ehem_checkin_run(ctx, /*relax_device_tls=*/1, NULL)
                     == EHEM_OK) {
                 ehem_ext_request_free(reqi);

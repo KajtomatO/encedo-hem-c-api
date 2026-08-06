@@ -275,8 +275,12 @@ Discovered while building and attending the M8 mobile-auth milestone
    With the device RTC running ~8% fast (see the clock entry above), the
    attended run reproduced it minutes after a check-in (+51 s drift).
    **SDK mitigation shipped:** `ehem_ext_confirm_begin` runs ONE
-   drift-gated check-in (evidence = authreq `iat` vs local clock, >15 s)
-   and re-fires the push with a fresh authreq (REQ-AUTH-009 rev 2).
+   drift-gated check-in and re-fires the push with a fresh authreq
+   (REQ-AUTH-009). Evidence gate narrowed 2026-08-06 (rev 3) after a
+   live 401 at only +14 s: any authreq `iat` more than 2 s AHEAD of the
+   local clock now counts (the rev-2 15 s gate left an unhealable
+   (0,15] s window that reopened ~3 min after every resync); the
+   backward gate stays 15 s.
    Root fix is the RTC (upstream).
 
 2. **Anti-bruteforce delay on `/api/auth/ext/token` is dead code.**

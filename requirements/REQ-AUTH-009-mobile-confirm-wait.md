@@ -3,8 +3,8 @@ id: REQ-AUTH-009
 title: Mobile confirmation wait — pollable state machine with blocking wrapper, distinct rejected/timeout results
 status: verified
 priority: must
-revision: 2
-source: user decision 2026-07-22 (M8 decomposition); ARCHITECTURE.md §5 mobile-app confirmation bullet; start_point HEM-SDK-8/HEM-AUTH-2 (distinct rejection vs timeout, blocking with confirm_timeout)
+revision: 3
+source: user decision 2026-07-22 (M8 decomposition); ARCHITECTURE.md §5 mobile-app confirmation bullet; start_point HEM-SDK-8/HEM-AUTH-2 (distinct rejection vs timeout, blocking with confirm_timeout); rev bump 2026-08-06 = STEP-M9-055 asymmetric drift gate (user decision: threshold only)
 depends_on: ["REQ-AUTH-002", "REQ-AUTH-007", "REQ-AUTH-008"]
 supersedes: null
 superseded_by: null
@@ -30,7 +30,12 @@ passes unanswered.
   **Drift recovery (rev 2, found live at M8-080, 2026-08-05):** the broker rejects
   an authreq whose `iat` is in its future (REQ-AUTH-008 rev 3) and the
   device RTC runs ~8% fast, so `begin` SHALL, on an `event/new` HTTP 401
-  WITH drift evidence (|authreq `iat` − local now| > 15 s), run ONE
+  WITH drift evidence (rev 3, STEP-M9-055: authreq `iat` AHEAD of
+  local now by > 2 s — the broker has ~zero tolerance for a future iat,
+  live-observed rejecting +14 s on 2026-08-06, so the rev-2 15 s gate
+  left a (0,15] s dead window re-entered ~3 min after every resync at
+  the ~8%-fast RTC; or `iat` BEHIND by > 15 s, a wrong-local-clock
+  reading), run ONE
   check-in (the firmware resyncs its RTC) and re-fire all three legs
   once — a fresh authreq is mandatory, the old `iat` stays bad. Honors
   `no_auto_checkin` and the check-in recursion guard; without drift
