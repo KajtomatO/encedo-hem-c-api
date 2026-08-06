@@ -2,7 +2,8 @@
  * proto_auth.c — the session engine: passphrase login, the eJWT challenge
  * exchange, and a scope-keyed bearer-token cache with silent refresh.
  *
- * implements: REQ-AUTH-001, REQ-AUTH-002, REQ-AUTH-004, REQ-AUTH-005
+ * implements: REQ-AUTH-001, REQ-AUTH-002, REQ-AUTH-004, REQ-AUTH-005,
+ *             REQ-AUTH-010
  *
  * Mirrors the reference python client's Auth (encedo-hem-python-api auth.py):
  * ehem_login() records the credential (lazily, no network); the first

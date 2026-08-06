@@ -528,9 +528,17 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   15 min for rewritten `keymgmt:use:` scopes); the documented
   anti-bruteforce delay on `ext/token` is dead code; ExtAuth bearers
   carry `sub`=base64(kid), so pairing management always needs a
-  passphrase login. **Gate:** simulated pair+login cycle green
-  unattended; all three login terminals demonstrated on the real phone;
-  §12 risk 6 resolved.
+  passphrase login. **Gate PASSED (2026-07-23):** all 7 M8 REQs
+  verified; simulated pair+login cycles green unattended in the
+  integration suite; the attended run (real Encedo app, terminal-QR
+  pairing) demonstrated approve/reject/timeout as distinct exit codes
+  back-to-back — surfacing one more clock pathology (the broker
+  validates authreq `iat`; the device's fast RTC broke mobile login
+  minutes after a sync → the confirm engine gained a drift-gated
+  check-in recovery, REQ-AUTH-009 rev 2) and the M8 findings recorded
+  in KNOWN-ISSUES (dead ext/token bruteforce delay, ignored request
+  `exp`, get-omits-descr for pairings, broker geolocation forwarding,
+  the app's 15-minute bearer cap).
 - **M9 — full-spec conformance (1.0):** sweep of encedo-hem-api-doc for
   uncovered endpoints/fields; the `system/upgrade` family deferred from
   M7 (fw upload/check/install triad, ui triad, bootloader upload,
@@ -597,7 +605,18 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
    Post-mortem in **KNOWN-ISSUES.md**.
 6. **Mobile-auth flow under-documented** (`auth/ext-*.md` not yet
    analyzed) — *Resolved by:* doc analysis + device experiments at M8;
-   the session design keeps the flow additive.
+   the session design keeps the flow additive. **RESOLVED (M8,
+   2026-07-23):** the doc pages proved accurate against firmware source
+   with the divergences pinned in REQ-AUTH-006/007 (tester's ignored
+   `exp`, dead bruteforce delay, header key order); the wholly
+   UNDOCUMENTED part was the cloud notification broker — its session /
+   registration / event API is now reconstructed and live-pinned in
+   REQ-AUTH-008 (rev 4), including the two non-interchangeable session
+   forms, the authreq `iat` clock validation, and all four `event/check`
+   terminal shapes. The flow landed additively as designed: the ext
+   bindings, broker client, and confirm engine are new surface; the one
+   session-engine touch is the mobile branch at the ensure-token
+   chokepoint (REQ-AUTH-010), leaving the passphrase path byte-identical.
 7. **API doc may lag device firmware** (DISCREPANCIES.md exists for a
    reason) — *Resolved by:* every binding landing with an integration
    test against the real device; device behavior wins and is recorded in
