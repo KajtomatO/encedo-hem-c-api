@@ -600,12 +600,7 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   **`auth/init`** — device personalisation, GET challenge + POST signed
   init JWT with the 14-field `cfg` block (moved in from
   deliberately-unbound, user decision 2026-08-07: the SDK should be
-  able to initialise a wiped device); the **dormant-route re-check**:
-  `stream/*` (4 routes) and `x509/*` (7 routes — an undocumented
-  device-side CA: ca/init, ca/cert, ca/sign, cert/<sn>, tls/init) are
-  both commented out of the v1.2.2 route table with handler code
-  shipped (`api_crypto.c` stream blocks, `api_x509.c`) — re-check
-  against whatever firmware then ships, bind what got routed.
+  able to initialise a wiped device).
 - **M11 — device administration & diagnostics** *(created by user
   decision 2026-08-07)*: `system/config/provisioning` (factory ATECC
   certificate write — no longer permanently excluded, but last in
@@ -617,6 +612,26 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   talks to `diag/*` directly, no library surface) or (b) a separate
   diagnostic SDK/library beside the production one. The production
   `libencedo-hem` stays diag-free either way.
+- **MFW — firmware-pending** *(created by user decision 2026-08-07: one
+  generic future milestone for every feature that is documented — or
+  shipped dormant — but MISSING from the running firmware; nothing here
+  can be built or verified until upstream routes it; re-swept on every
+  firmware upgrade, items promote to a numbered milestone when they go
+  live)*:
+  - `DELETE /api/logger/{id}` — documented, handler exists, dispatch
+    commented out (`/* not available in CC mode */`), every request
+    404s (REQ-SYS-009 hook);
+  - `POST /api/keymgmt/list` "extended version" — in Encedo Manager's
+    endpoint registry; firmware implements GET only (REQ-KEY-001 hook);
+  - `system/health` GET+POST — handler prototypes declared in `api.h`,
+    never routed, no doc page;
+  - `stream/*` (4 routes) and `x509/*` (7 routes — an undocumented
+    device-side CA: ca/init, ca/cert, ca/sign, cert/<sn>, tls/init) —
+    commented out of the v1.2.2 route table with handler code shipped
+    (`api_crypto.c` stream blocks, `api_x509.c`);
+  - `misc/rnd` — fully commented out (the reason `ehem_random`
+    emulates via IV harvest); if a real RNG endpoint ever ships, swap
+    the emulation for it.
 
 ## 12. Risks & open questions
 

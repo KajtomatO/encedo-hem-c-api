@@ -3,7 +3,7 @@ id: REQ-KEY-001
 title: Binding for /api/keymgmt/list — paginated key inventory
 status: verified
 priority: must
-revision: 2
+revision: 3
 source: ARCHITECTURE.md §6, §11 (M3); encedo-hem-api-doc keymgmt/list.md; encedo-hem-python-api keymgmt.py (OQ-17 pagination fact); HEM-SDK-4/6 (requirements/start_point/encedo-pkcs11/REQUIREMENTS-hem.md); approved 2026-07-16; rev 2 = M9 sweep record (2026-08-06)
 depends_on: ["REQ-AUTH-003", "REQ-API-003", "REQ-API-005"]
 supersedes: null
@@ -63,5 +63,6 @@ DISCREPANCIES-OFFICIAL-DOCS "POST keymgmt/list"):** Encedo Manager's
 endpoint registry lists an aspirational `POST api/keymgmt/list`
 ("extended version", scope `keymgmt:list`); the firmware keymgmt router
 implements GET only, and this binding is GET-only — consistent with
-firmware truth. Treat the POST variant as unavailable; re-sweep if
-firmware support ever lands (the REQ-SYS-009 logger-DELETE pattern).
+firmware truth. Treat the POST variant as unavailable; parked in
+milestone MFW (firmware-pending) with the other unrouted surface —
+re-swept on firmware upgrades.

@@ -240,7 +240,7 @@ Field-level notes:
 | logger/key.md | `GET /api/logger/key` | BOUND | `ehem_logger_key` |
 | logger/list.md | `GET /api/logger/list[/{offset}]` | BOUND | `ehem_logger_list` |
 | logger/get.md | `GET /api/logger/{id}` | BOUND | `ehem_logger_get` |
-| logger/delete.md | `DELETE /api/logger/{id}` | ABSENT-IN-FW | — handler exists but its dispatch is commented out (`/* not available in CC mode */`); every request 404s. Recorded in REQ-SYS-009 + ARCHITECTURE §11; source comment added at this sweep |
+| logger/delete.md | `DELETE /api/logger/{id}` | DEFERRED-MFW | — handler exists but its dispatch is commented out (`/* not available in CC mode */`); every request 404s. Parked in milestone MFW (firmware-pending, user decision 2026-08-07); REQ-SYS-009 hook |
 | storage/unlock.md | `GET /api/storage/unlock` | BOUND | `ehem_storage_unlock` |
 | storage/lock.md | `GET /api/storage/lock` | BOUND | `ehem_storage_lock` |
 
@@ -315,11 +315,12 @@ mapped to where this project records the divergence:
   bound with full field coverage, deliberately unbound with a recorded
   reason (general config writes incl. wipeout, logger DELETE, storage
   /ro//rw variants, search's unauthenticated bypass), or deferred to a
-  milestone — M10: the upgrade family, auth/init, and the dormant
-  stream/* + x509/* route re-check; M11: config-provisioning and
-  diag/* (re-dispositioned 2026-08-07 — every unimplemented firmware
-  feature now has a milestone). `stream/*` and `x509/*` exist only as
-  commented-out routes in the firmware (no doc pages).
+  milestone — M10: the upgrade family + auth/init; M11:
+  config-provisioning + diag/*; MFW (firmware-pending, one generic
+  bucket, user decision 2026-08-07): everything documented or shipped
+  dormant but missing from the running firmware — logger DELETE,
+  Manager's POST keymgmt/list, system/health, stream/*, x509/*,
+  misc/rnd — re-swept on every firmware upgrade.
 - **Two SDK defects found and fixed** (STEP-M9-015, user decision
   2026-08-06): the version parser hard-required the
   firmware-conditional `blv`; the status parser carried a dead,
