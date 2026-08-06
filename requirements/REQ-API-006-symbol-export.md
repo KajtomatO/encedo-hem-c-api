@@ -1,0 +1,34 @@
+---
+id: REQ-API-006
+title: Shared library exports only ehem_-prefixed symbols
+status: verified
+priority: must
+revision: 1
+source: ARCHITECTURE.md §4 (ABI/versioning); §1 (artifact name and prefix, user decision 2026-07-15)
+depends_on: []
+supersedes: null
+superseded_by: null
+traces:
+  architecture: ["ARCHITECTURE.md#4-public-api--conventions", "ARCHITECTURE.md#1-decisions-fixed"]
+---
+
+# Shared library exports only ehem_-prefixed symbols
+
+Shared-library builds SHALL export only symbols carrying the `ehem_`
+prefix.
+
+**Rationale:** A PKCS#11 module embedding this SDK gets loaded into
+arbitrary host processes; leaking internal or vendored symbols (cJSON,
+Argon2) invites collisions. Visibility is hidden by default on GCC/Clang;
+MinGW/Windows uses an export macro. The `ehem_` prefix is fixed to avoid
+clashing with the `hem_*` seam inside encedo-pkcs11.
+
+**Acceptance criteria:**
+- [x] Linux: `nm -D --defined-only` on the shared library lists only
+      `ehem_*` symbols (scripted check in the unit suite or CI). *(export_symbols test)*
+- [x] Windows (MinGW): the DLL export table lists only `ehem_*` symbols.
+      *(via linker `.def`; CI windows-mingw green)*
+- [ ] Vendored cJSON symbols are not exported. *(open: cJSON not vendored
+      until STEP-M1-030; the existing export_symbols check already fails on
+      ANY non-`ehem_` symbol, so it will cover this the moment cJSON lands)*
+- [x] `ehem_version()` is exported and returns the runtime version string.

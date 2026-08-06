@@ -1,0 +1,180 @@
+# Integration tests (label `integration`). Real device; skipped unless
+# EHEM_TEST_URL is set (REQ-TEST-002). See tests/README.md.
+
+ehem_add_integration_test(test_system_live SOURCES test_system_live.c)
+
+# REQ-SYS-003: live check-in (device + Encedo cloud relay).
+ehem_add_integration_test(test_checkin_live SOURCES test_checkin_live.c)
+
+# REQ-SYS-004: live authenticated config GET (public API only).
+ehem_add_integration_test(test_config_live SOURCES test_config_live.c)
+
+# REQ-KEY-001: live authenticated keymgmt list walk (public API only).
+ehem_add_integration_test(test_keymgmt_live SOURCES test_keymgmt_live.c)
+
+# REQ-KEY-004/005, REQ-TEST-003: live create → list → delete round-trip with
+# EHEMTEST key hygiene (public API only).
+ehem_add_integration_test(test_keymgmt_mutate_live SOURCES test_keymgmt_mutate_live.c)
+
+# REQ-KEY-002: live descr prefix search (hit + no-match) (public API only).
+ehem_add_integration_test(test_keymgmt_search_live SOURCES test_keymgmt_search_live.c)
+
+# REQ-KEY-003: live single-key get + a per-KID scope probe. Exception to the
+# public-API-only rule (like test_auth_live): the scope probe drives the INTERNAL
+# ehem_proto_request_json to try scopes the public binding never uses, so it links
+# the static lib + internal headers via ehem_test_support. Still `integration`.
+add_executable(test_keymgmt_get_live test_keymgmt_get_live.c)
+target_link_libraries(test_keymgmt_get_live PRIVATE ehem_test_support cmocka::cmocka)
+target_include_directories(test_keymgmt_get_live PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
+target_compile_options(test_keymgmt_get_live PRIVATE ${EHEM_WARNING_FLAGS})
+add_test(NAME test_keymgmt_get_live COMMAND test_keymgmt_get_live)
+set_tests_properties(test_keymgmt_get_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
+
+# REQ-KEY-007/008: live update round-trip + import→ECDH cross-check + the
+# unknown-kid / label-required / dedup / type-support probes. Internal-linking
+# (crypto shim X25519 + internal request path for the label-less body probe).
+add_executable(test_update_import_live test_update_import_live.c)
+target_link_libraries(test_update_import_live PRIVATE ehem_test_support cmocka::cmocka)
+target_include_directories(test_update_import_live PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
+target_compile_options(test_update_import_live PRIVATE ${EHEM_WARNING_FLAGS})
+add_test(NAME test_update_import_live COMMAND test_update_import_live)
+set_tests_properties(test_update_import_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
+
+# REQ-OPS-009: live wrap/unwrap — direct round-trip + tamper + width +
+# alignment probes + the ECDH-KEK byte-exact local wc_AesKeyWrap cross-check.
+# Internal-linking (shim + wolfCrypt key wrap).
+add_executable(test_wrap_live test_wrap_live.c)
+target_link_libraries(test_wrap_live PRIVATE ehem_test_support cmocka::cmocka)
+target_include_directories(test_wrap_live PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
+target_compile_options(test_wrap_live PRIVATE ${EHEM_WARNING_FLAGS})
+add_test(NAME test_wrap_live COMMAND test_wrap_live)
+set_tests_properties(test_wrap_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
+
+# REQ-AUTH-008: live broker session probe (GET + POST-with-eid) — the one
+# notify endpoint under the plain integration label (REQ-TEST-006).
+# Internal-linking (ext_sim JWT peek).
+add_executable(test_notify_session_live test_notify_session_live.c)
+target_link_libraries(test_notify_session_live PRIVATE ehem_test_support cmocka::cmocka)
+target_include_directories(test_notify_session_live PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
+target_compile_options(test_notify_session_live PRIVATE ${EHEM_WARNING_FLAGS})
+add_test(NAME test_notify_session_live COMMAND test_notify_session_live)
+set_tests_properties(test_notify_session_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
+
+# REQ-AUTH-006, REQ-TEST-006: live ExtAuth pairing via the simulated
+# authenticator (init → reply → validate → code check → dedup 406 → mac).
+# Internal-linking (crypto shim + ext_sim).
+add_executable(test_ext_pair_live test_ext_pair_live.c)
+target_link_libraries(test_ext_pair_live PRIVATE ehem_test_support cmocka::cmocka)
+target_include_directories(test_ext_pair_live PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
+target_compile_options(test_ext_pair_live PRIVATE ${EHEM_WARNING_FLAGS})
+add_test(NAME test_ext_pair_live COMMAND test_ext_pair_live)
+set_tests_properties(test_ext_pair_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
+
+# REQ-AUTH-007, REQ-TEST-006: live ExtAuth login round-trip via the simulated
+# authenticator (request → decrypt scheme-A entry → authreply → token → bearer
+# used on the wire; no-auth probe; scope-rewrite probe). Internal-linking.
+add_executable(test_ext_login_live test_ext_login_live.c)
+target_link_libraries(test_ext_login_live PRIVATE ehem_test_support cmocka::cmocka)
+target_include_directories(test_ext_login_live PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
+target_compile_options(test_ext_login_live PRIVATE ${EHEM_WARNING_FLAGS})
+add_test(NAME test_ext_login_live COMMAND test_ext_login_live)
+set_tests_properties(test_ext_login_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
+
+# REQ-SYS-009: live logger — key triple + shim Ed25519 nonce verification,
+# list → get round-trip. Internal-linking (crypto shim verify).
+add_executable(test_logger_live test_logger_live.c)
+target_link_libraries(test_logger_live PRIVATE ehem_test_support cmocka::cmocka)
+target_include_directories(test_logger_live PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
+target_compile_options(test_logger_live PRIVATE ${EHEM_WARNING_FLAGS})
+add_test(NAME test_logger_live COMMAND test_logger_live)
+set_tests_properties(test_logger_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
+
+# REQ-KEY-009: live derive — byte-exact ECDH+HKDF pipeline proof vs the shim,
+# determinism probes (equal-length + the SECP521R1 stale-stack quirk), and the
+# exact-scope probe. Internal-linking (shim + internal request path).
+add_executable(test_derive_live test_derive_live.c)
+target_link_libraries(test_derive_live PRIVATE ehem_test_support cmocka::cmocka)
+target_include_directories(test_derive_live PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
+target_compile_options(test_derive_live PRIVATE ${EHEM_WARNING_FLAGS})
+add_test(NAME test_derive_live COMMAND test_derive_live)
+set_tests_properties(test_derive_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
+
+# REQ-OPS-001 (+ REQ-KEY-006 live cross-check): live sign → local wolfCrypt
+# verify (the M4 gate criterion) + the sign scope probe closing §12 risk 3.
+# Internal-linking like test_keymgmt_get_live (probe + crypto shim).
+add_executable(test_sign_live test_sign_live.c)
+target_link_libraries(test_sign_live PRIVATE ehem_test_support cmocka::cmocka)
+target_include_directories(test_sign_live PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
+target_compile_options(test_sign_live PRIVATE ${EHEM_WARNING_FLAGS})
+add_test(NAME test_sign_live COMMAND test_sign_live)
+set_tests_properties(test_sign_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
+
+# REQ-OPS-003: live sign → device-side verify + tamper negatives (public API).
+ehem_add_integration_test(test_verify_live SOURCES test_verify_live.c)
+
+# REQ-OPS-004: live ECDH — X25519 shim cross-check + P-384 truncation probe.
+# Internal-linking (crypto shim + wolfCrypt SHA-256), like test_sign_live.
+add_executable(test_ecdh_live test_ecdh_live.c)
+target_link_libraries(test_ecdh_live PRIVATE ehem_test_support cmocka::cmocka)
+target_include_directories(test_ecdh_live PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
+target_compile_options(test_ecdh_live PRIVATE ${EHEM_WARNING_FLAGS})
+add_test(NAME test_ecdh_live COMMAND test_ecdh_live)
+set_tests_properties(test_ecdh_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
+
+# REQ-OPS-005: live HMAC round-trips + the derived-key HKDF-conflict probe.
+# Internal-linking (crypto shim X25519/HMAC), like test_ecdh_live.
+add_executable(test_hmac_live test_hmac_live.c)
+target_link_libraries(test_hmac_live PRIVATE ehem_test_support cmocka::cmocka)
+target_include_directories(test_hmac_live PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
+target_compile_options(test_hmac_live PRIVATE ${EHEM_WARNING_FLAGS})
+add_test(NAME test_hmac_live COMMAND test_hmac_live)
+set_tests_properties(test_hmac_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
+
+# REQ-OPS-006: live cipher matrix + HKDF-info probe. Internal-linking (shim
+# X25519 + wolfCrypt HKDF/AES-GCM), like test_ecdh_live.
+add_executable(test_cipher_live test_cipher_live.c)
+target_link_libraries(test_cipher_live PRIVATE ehem_test_support cmocka::cmocka)
+target_include_directories(test_cipher_live PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
+target_compile_options(test_cipher_live PRIVATE ${EHEM_WARNING_FLAGS})
+add_test(NAME test_cipher_live COMMAND test_cipher_live)
+set_tests_properties(test_cipher_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
+
+# REQ-OPS-007/008: live ML-KEM/ML-DSA round-trips + quirk probes (public API,
+# longer keygen timeout).
+ehem_add_integration_test(test_pqc_live SOURCES test_pqc_live.c)
+
+# REQ-AUTH-001/002/003: live authenticated token acquisition. Exception to the
+# public-API-only rule for integration tests — no public authenticated binding
+# exists until M2-050, so this drives the INTERNAL ehem_auth_ensure_token and
+# therefore links the static lib + internal headers (via ehem_test_support),
+# like the unit suite. Still carries the `integration` label + skip gating.
+add_executable(test_auth_live test_auth_live.c)
+target_link_libraries(test_auth_live PRIVATE ehem_test_support cmocka::cmocka)
+target_include_directories(test_auth_live PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
+target_compile_options(test_auth_live PRIVATE ${EHEM_WARNING_FLAGS})
+add_test(NAME test_auth_live COMMAND test_auth_live)
+set_tests_properties(test_auth_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
+
+# REQ-TOOL-006: live `keys rm --label-prefix` removes EHEMTEST keys. Drives the
+# shared hem-tool-core code (public API), so it links hem-tool-core; only exists
+# when the CLI is built. Integration (EHEMTEST-only mutation), not disruptive.
+if(TARGET hem-tool-core)
+  # REQ-OPS-002 + REQ-TOOL-010: live hardware-RNG harvest + tool hygiene.
+  add_executable(test_random_live test_random_live.c)
+  target_link_libraries(test_random_live PRIVATE hem-tool-core cmocka::cmocka)
+  target_include_directories(test_random_live PRIVATE
+    ${PROJECT_SOURCE_DIR}/tests/support
+    ${PROJECT_SOURCE_DIR}/src/tools/hem-tool)
+  target_compile_options(test_random_live PRIVATE ${EHEM_WARNING_FLAGS})
+  add_test(NAME test_random_live COMMAND test_random_live)
+  set_tests_properties(test_random_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
+
+  add_executable(test_keys_rm_live test_keys_rm_live.c)
+  target_link_libraries(test_keys_rm_live PRIVATE hem-tool-core cmocka::cmocka)
+  target_include_directories(test_keys_rm_live PRIVATE
+    ${PROJECT_SOURCE_DIR}/tests/support
+    ${PROJECT_SOURCE_DIR}/src/tools/hem-tool)
+  target_compile_options(test_keys_rm_live PRIVATE ${EHEM_WARNING_FLAGS})
+  add_test(NAME test_keys_rm_live COMMAND test_keys_rm_live)
+  set_tests_properties(test_keys_rm_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
+endif()

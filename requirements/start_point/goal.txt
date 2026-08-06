@@ -1,0 +1,27 @@
+This project is a [c] library that will interface between application and a HEM device. 
+
+NOTE: Development will be done both on linux and windows. Tests should be able to run on both, but linux for MVP is more important.
+
+Here is documentation of HEM device:
+https://github.com/KajtomatO/encedo-hem-api-doc
+
+Here is example in python [in progresds - not perfect] :
+https://github.com/KajtomatO/encedo-hem-python-api
+
+This library should build for windows, mac and linux. MVP will be on linux, all other tharget can be planned for later stages.
+
+One of first consumers of this library will be:
+https://github.com/encedo/encedo-pkcs11
+
+An extract is in folder "encedo-pkcs11" in this repo.
+
+MVP : A simple test connection to device.
+One of first milestones should include a tool that will list keys, and allow to remove keys from device [see: python example, including "protected" keys"]
+
+All milestones should include unit and integration tests. Test that are potentialy dangerous [flashing, rebooting] should newer be run automaticly. 
+
+Last milestone is a full coverage of spec in encedo-hem-api-doc.
+Note: Autorising with phone app, can be one of the last milestones.
+
+
+Ask Questions.
