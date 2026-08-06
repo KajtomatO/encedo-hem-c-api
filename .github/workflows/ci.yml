@@ -10,6 +10,7 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 # Cancel superseded runs on the same ref to save minutes.
 concurrency:
