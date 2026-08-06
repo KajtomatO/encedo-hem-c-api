@@ -123,7 +123,7 @@ Additional notes (recorded SDK-side; doc gaps, not SDK gaps):
 | Page | Endpoint | Disposition | SDK symbol(s) |
 |---|---|---|---|
 | token.md | `GET/POST /api/auth/token` | BOUND | `ehem_login`/`ehem_logout`/`ehem_login_mobile` (lazy; internal `ehem_auth_ensure_token`) |
-| init.md | `GET/POST /api/auth/init` | UNBOUND-DELIBERATE | — one-shot device personalisation (factory/provisioning act, like `config/provisioning`; re-init requires a wipeout first) |
+| init.md | `GET/POST /api/auth/init` | DEFERRED-M10 | — one-shot device personalisation (re-init requires a wipeout first). Re-dispositioned from UNBOUND-DELIBERATE 2026-08-07 (user decision: the SDK should be able to initialise a wiped device) |
 | ext-init.md | `POST /api/auth/ext/init` | BOUND | `ehem_ext_init` |
 | ext-validate.md | `POST /api/auth/ext/validate` | BOUND | `ehem_ext_validate` |
 | ext-mac.md | `POST /api/auth/ext/mac` | BOUND | `ehem_ext_mac` |
@@ -180,8 +180,8 @@ Field-level notes:
 | reboot.md | `GET /api/system/reboot` | BOUND | `ehem_system_reboot` |
 | selftest.md | `GET /api/system/selftest` | BOUND | `ehem_system_selftest` |
 | shutdown.md | `GET /api/system/shutdown` | BOUND | `ehem_system_shutdown` |
-| config-provisioning.md | `POST /api/system/config/provisioning` | UNBOUND-DELIBERATE | — factory-only ATECC cert write (REQ-SYS-011 decision) |
-| diag.md | `GET /api/diag/*` (9 endpoints) | UNBOUND-DELIBERATE | — DIAG-build-only, unauthenticated, destructive (wipe/corrupt/memdump); production builds 404; the SDK must never bind these |
+| config-provisioning.md | `POST /api/system/config/provisioning` | DEFERRED-M11 | — factory ATECC cert write. Re-dispositioned from UNBOUND-DELIBERATE 2026-08-07 (user decision: every unimplemented fw feature gets a milestone) |
+| diag.md | `GET /api/diag/*` (9 endpoints) | DEFERRED-M11 | — DIAG-build-only, unauthenticated, destructive (wipe/corrupt/memdump); production builds 404. Re-dispositioned 2026-08-07 (user decision) with a reserved design constraint: NOT in the production SDK — hem-tool-only OR a separate diagnostic SDK (decided at M11 decomposition) |
 | upgrade-firmware.md | `POST upload_fw`, `GET check_fw`, `GET install_fw` | DEFERRED-M10 | — |
 | upgrade-ui.md | `POST upload_ui`, `GET check_ui`, `GET install_ui` | DEFERRED-M10 | — |
 | upgrade-bootloader.md | `POST upload_bootldr`, `GET install_bl` (DIAG-only builds) | DEFERRED-M10 | — |
@@ -313,10 +313,13 @@ mapped to where this project records the divergence:
 
 - **No must-bind gaps for 1.0.** Every documented endpoint is either
   bound with full field coverage, deliberately unbound with a recorded
-  reason (auth/init, config-provisioning, diag/*, general config
-  writes incl. wipeout, logger DELETE, storage /ro//rw variants,
-  search's unauthenticated bypass), or deferred to M10 (the upgrade
-  family). `stream/*` does not exist anywhere in the doc repo.
+  reason (general config writes incl. wipeout, logger DELETE, storage
+  /ro//rw variants, search's unauthenticated bypass), or deferred to a
+  milestone — M10: the upgrade family, auth/init, and the dormant
+  stream/* + x509/* route re-check; M11: config-provisioning and
+  diag/* (re-dispositioned 2026-08-07 — every unimplemented firmware
+  feature now has a milestone). `stream/*` and `x509/*` exist only as
+  commented-out routes in the firmware (no doc pages).
 - **Two SDK defects found and fixed** (STEP-M9-015, user decision
   2026-08-06): the version parser hard-required the
   firmware-conditional `blv`; the status parser carried a dead,

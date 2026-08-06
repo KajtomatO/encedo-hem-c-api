@@ -590,11 +590,33 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   device dark until power-cycle). Zero deliberately-open acceptance
   criteria remain across all 84 REQs.
 - **M10 — 1.0+ (post-release firmware surface)** *(deferred out of the
-  release by user decision 2026-08-06)*: the `system/upgrade` family
-  deferred since M7 (fw upload/check/install triad, ui triad, bootloader
-  upload, usbmode) plus the `hem-tool fw-upgrade` orchestrator (user
-  decision 2026-07-17); `stream/*` (commented out of fw v1.2.2 —
-  re-check against whatever firmware then ships).
+  release by user decision 2026-08-06; scope extended by user decision
+  2026-08-07 — every unimplemented firmware feature now has a
+  milestone)*: the `system/upgrade` family deferred since M7 (fw
+  upload/check/install triad, ui triad, bootloader upload, usbmode —
+  plus the bare `GET /api/system/upgrade` base route, found live and
+  auth-gated on v1.2.2 at the M9 firmware scan) plus the
+  `hem-tool fw-upgrade` orchestrator (user decision 2026-07-17);
+  **`auth/init`** — device personalisation, GET challenge + POST signed
+  init JWT with the 14-field `cfg` block (moved in from
+  deliberately-unbound, user decision 2026-08-07: the SDK should be
+  able to initialise a wiped device); the **dormant-route re-check**:
+  `stream/*` (4 routes) and `x509/*` (7 routes — an undocumented
+  device-side CA: ca/init, ca/cert, ca/sign, cert/<sn>, tls/init) are
+  both commented out of the v1.2.2 route table with handler code
+  shipped (`api_crypto.c` stream blocks, `api_x509.c`) — re-check
+  against whatever firmware then ships, bind what got routed.
+- **M11 — device administration & diagnostics** *(created by user
+  decision 2026-08-07)*: `system/config/provisioning` (factory ATECC
+  certificate write — no longer permanently excluded, but last in
+  line); the `diag/*` family (9 DIAG-build-only endpoints: liveness,
+  TRNG draw, fault injection, wipe_config, corrupt_repo, memdump).
+  **Design decision reserved for M11 decomposition (user note
+  2026-08-07):** diag support must NOT enter the production SDK —
+  candidate shapes are (a) hem-tool-only implementation (the tool
+  talks to `diag/*` directly, no library surface) or (b) a separate
+  diagnostic SDK/library beside the production one. The production
+  `libencedo-hem` stays diag-free either way.
 
 ## 12. Risks & open questions
 
