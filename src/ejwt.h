@@ -70,7 +70,10 @@ size_t ehem_b64url_decode(const char *in, size_t in_len,
  * `now + lifetime`, which keeps the eJWT itself un-expired at the device.
  *
  * The header is the fixed byte string {"ecdh":"x25519","alg":"HS256","typ":"JWT"}
- * (base64url, no pad); claims are emitted compactly in order
+ * (base64url, no pad). The device validates ONLY the `ecdh` field — `alg` and
+ * `typ` are not validation gates (fw reads just `ecdh`; Manager sends a
+ * minimal {"ecdh":"x25519"} and both forms pass — DISCREPANCIES-HEM-TEST,
+ * recorded at the M9 sweep). Claims are emitted compactly in order
  * jti/aud/exp/iat/iss/scope; the signature is HMAC-SHA256 over
  * "<header>.<payload>". On success *out_ejwt is a freshly allocated,
  * NUL-terminated token — free it with ehem_ejwt_free(). Returns EHEM_ERR_ARG on

@@ -56,7 +56,8 @@ typedef struct ehem_key_entry {
 typedef struct ehem_key_page {
     int64_t         offset;   /* effective offset the device applied (echo) */
     int64_t         total;    /* total number of keys in the repository */
-    size_t          listed;   /* number of entries below (the wire `listed`) */
+    size_t          listed;   /* number of entries below (computed from the
+                               * parsed list; the wire `listed` is not read) */
     ehem_key_entry *entries;  /* `listed` entries; NULL exactly when listed == 0 */
 } ehem_key_page;
 
@@ -138,7 +139,7 @@ typedef struct ehem_key_create_params {
  * On success writes the new key id (32 hex chars + NUL) into `kid_out` — a
  * caller-provided buffer of at least EHEM_KID_HEX_SIZE bytes — and returns
  * EHEM_OK. Returns EHEM_ERR_ARG (no network I/O) on a NULL argument, a missing
- * type/label, or a label that is not 1..31 printable-ASCII bytes; a device
+ * type/label, or a label that is not 1..32 printable-ASCII bytes; a device
  * validation failure is HTTP 400 and a full/failed repo write is HTTP 406, both
  * EHEM_ERR_DEVICE with the device payload in ehem_last_error(); 401/403 map per
  * REQ-AUTH-003. The returned kid is suitable for ehem_key_delete() and the

@@ -3,8 +3,8 @@ id: REQ-KEY-001
 title: Binding for /api/keymgmt/list — paginated key inventory
 status: verified
 priority: must
-revision: 1
-source: ARCHITECTURE.md §6, §11 (M3); encedo-hem-api-doc keymgmt/list.md; encedo-hem-python-api keymgmt.py (OQ-17 pagination fact); HEM-SDK-4/6 (requirements/start_point/encedo-pkcs11/REQUIREMENTS-hem.md); approved 2026-07-16
+revision: 2
+source: ARCHITECTURE.md §6, §11 (M3); encedo-hem-api-doc keymgmt/list.md; encedo-hem-python-api keymgmt.py (OQ-17 pagination fact); HEM-SDK-4/6 (requirements/start_point/encedo-pkcs11/REQUIREMENTS-hem.md); approved 2026-07-16; rev 2 = M9 sweep record (2026-08-06)
 depends_on: ["REQ-AUTH-003", "REQ-API-003", "REQ-API-005"]
 supersedes: null
 superseded_by: null
@@ -57,3 +57,11 @@ resolved at M4 decomposition (candidate: §12 risk 3 device experiments).
       (≥ the protected TLS pair) with kid/type/label populated
       (integration test). — tests/integration/test_keymgmt_live.c: 6 keys
       including "TLS PrivateKey"/"TLS Certificate", kid/type populated.
+
+**M9 conformance-sweep record (2026-08-06,
+DISCREPANCIES-OFFICIAL-DOCS "POST keymgmt/list"):** Encedo Manager's
+endpoint registry lists an aspirational `POST api/keymgmt/list`
+("extended version", scope `keymgmt:list`); the firmware keymgmt router
+implements GET only, and this binding is GET-only — consistent with
+firmware truth. Treat the POST variant as unavailable; re-sweep if
+firmware support ever lands (the REQ-SYS-009 logger-DELETE pattern).

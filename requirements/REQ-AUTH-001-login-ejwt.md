@@ -3,8 +3,8 @@ id: REQ-AUTH-001
 title: Passphrase login — credential derivation and eJWT token acquisition
 status: verified
 priority: must
-revision: 1
-source: ARCHITECTURE.md §5; encedo-hem-api-doc auth/token.md; encedo-hem-python-api auth.py (build_ejwt — WORKING against the dev device, live-proven 2026-07-16); encedo-manager encedo.js postAuthToken (discrepancy, see criteria)
+revision: 2
+source: ARCHITECTURE.md §5; encedo-hem-api-doc auth/token.md; encedo-hem-python-api auth.py (build_ejwt — WORKING against the dev device, live-proven 2026-07-16); encedo-manager encedo.js postAuthToken (discrepancy, see criteria); rev 2 = M9 sweep record (2026-08-06, header-enforcement fact)
 depends_on: ["REQ-API-001", "REQ-API-003", "REQ-API-004", "REQ-SYS-003"]
 supersedes: null
 superseded_by: null
@@ -61,7 +61,10 @@ initialised, not negotiable per session.
 (`postAuthToken`) derives with **Argon2** (time=10, mem=8192 KiB,
 hashLen=32, salt = base64-DECODED `eid`, argon2-browser default variant)
 and a minimal header `{"ecdh":"x25519"}` — a Manager-initialised device
-will NOT accept the PBKDF2 derivation and vice versa. ARCHITECTURE.md §5
+will NOT accept the PBKDF2 derivation and vice versa. Both header forms
+pass because the firmware reads ONLY the `ecdh` header field — `alg` and
+`typ` are documentation convenience, not validation gates
+(DISCREPANCIES-HEM-TEST, recorded at the M9 sweep 2026-08-06). ARCHITECTURE.md §5
 and §12 risk 2 assumed "Argon2, Manager authoritative"; the live evidence
 contradicts that for the dev device. M2 ships PBKDF2 only; Argon2 support
 (as an `ehem_options` KDF selector) is deferred until a Manager-initialised

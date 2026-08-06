@@ -10,6 +10,10 @@
  * and download are PPA-only routes: an EPA build has no microSD and answers
  * 404 → EHEM_ERR_NOT_FOUND.
  *
+ * The documented `DELETE /api/logger/{id}` is deliberately NOT bound: its
+ * dispatch is commented out of fw v1.2.2 (every request 404s), so there is
+ * nothing to call — see REQ-SYS-009 (re-swept if firmware re-enables it).
+ *
  * implements: REQ-SYS-009
  */
 #ifndef EHEM_LOGGER_H

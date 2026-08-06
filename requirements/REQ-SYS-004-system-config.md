@@ -3,8 +3,8 @@ id: REQ-SYS-004
 title: Binding for /api/system/config — read config and install a TLS certificate
 status: verified
 priority: must
-revision: 1
-source: user decision 2026-07-16 (cert-install tooling); approved 2026-07-16; encedo-hem-api-doc system/config.md; live remediation 2026-07-16 (config tls.crt install verified working on fw v1.2.2)
+revision: 2
+source: user decision 2026-07-16 (cert-install tooling); approved 2026-07-16; encedo-hem-api-doc system/config.md; live remediation 2026-07-16 (config tls.crt install verified working on fw v1.2.2); rev 2 = M9 sweep records (2026-08-06)
 depends_on: ["REQ-AUTH-003", "REQ-API-005", "REQ-SYS-003"]
 supersedes: null
 superseded_by: null
@@ -32,6 +32,19 @@ options, storage layout, userkey rotation) remain M7+ territory; only the
 TLS-cert install variant is bound because check-in cert rotation is broken
 in device firmware v1.2.2 (REQ-SYS-003 root-cause finding) and this path is
 the working remediation (executed live 2026-07-16).
+
+**M9 conformance-sweep records (2026-08-06, docs/COVERAGE.md):**
+1. The narrow POST scope is now the RATIFIED 1.0 disposition, not an
+   interim one: general config/administration writes — including the
+   documented `wipeout` (factory reset), `userkey*` rotation, and
+   `gen_csr` — stay deliberately unbound (no HEM-SDK-1..9 consumer need;
+   M10 candidate if device administration is ever wanted).
+2. DISCREPANCIES-OFFICIAL-DOCS records that firmware answers an
+   UNAUTHENTICATED `GET /api/system/config` with an identifying subset
+   (`eid` etc.) for pairing/discovery clients, despite the doc's
+   bearer-required marking. NOT live-verified by this SDK and not relied
+   on — the SDK gets `eid` from the auth challenge (REQ-AUTH-001).
+   Recorded as a sweep hook for any future discovery feature.
 
 **Acceptance criteria:**
 - [ ] Config GET declares scope `system:config`, parses required + optional
