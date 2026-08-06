@@ -3,8 +3,8 @@ id: REQ-SYS-001
 title: Binding for GET /api/system/status
 status: verified
 priority: must
-revision: 1
-source: encedo-hem-api-doc system/status.md (fetched 2026-07-15); ARCHITECTURE.md §11 M1
+revision: 2
+source: encedo-hem-api-doc system/status.md (fetched 2026-07-15); ARCHITECTURE.md §11 M1; rev 2 = STEP-M9-015 record (dead status-side repo_stats surface removed)
 depends_on: ["REQ-API-001", "REQ-NET-001", "REQ-API-005"]
 supersedes: null
 superseded_by: null
@@ -23,7 +23,13 @@ consumer needs for token-presence reporting (HEM-SDK-1). Per the API doc
 (system/status.md) the endpoint requires no authentication (a token only
 adds key-repository statistics); documented response fields include `ctx`,
 `fls_state`, `uptime`, `ts`, `time`, `temp`, `storage`, plus optional
-fields (`hostname`, `inited`, `https`, `fw_upgrade`, `repo_stats`, ...).
+fields (`hostname`, `inited`, `https`, `fw_upgrade`, ...). *(Rev 2,
+STEP-M9-015: the M1-era `repo_stats`-on-status surface was removed — the
+current doc and fw v1.2.2 source agree `repo_stats` is emitted ONLY by
+`GET /api/system/selftest` (REQ-SYS-007), and the status-side block used
+key names that firmware never emits, so it could never populate; a
+`repo_stats` object in a status body is now ignored like any unknown
+field, unit-proven.)*
 
 **Acceptance criteria:**
 - [ ] `ehem_system_status(ctx, &out)` populates a typed struct from the

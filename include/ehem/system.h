@@ -26,16 +26,6 @@
 extern "C" {
 #endif
 
-/* Key-repository memory statistics (status.repo_stats; present only with a
- * valid token, so absent on the M1 unauthenticated call). */
-typedef struct ehem_repo_stats {
-    int64_t deleted;
-    int64_t fragmentation;
-    int64_t freespace;
-    int64_t invalid;
-    int64_t total;
-} ehem_repo_stats;
-
 /*
  * GET /api/system/status result (filled by ehem_system_status()). Required
  * fields (always present per the doc): ctx, fls_state, uptime, temp. Everything
@@ -68,27 +58,35 @@ typedef struct ehem_status_info {
     bool has_https;      bool https;      /* HTTPS availability */
     bool has_tts;        bool tts;        /* false if TrustedTime disabled */
 
-    /* Optional nested repo stats (requires auth). */
-    bool            has_repo_stats;
-    ehem_repo_stats repo_stats;
+    /* NB: key-repository statistics (repo_stats) are NOT part of status —
+     * fw v1.2.2 emits them only from GET /api/system/selftest (see
+     * ehem_selftest_info's repo_* fields). A status-side surface removed at
+     * STEP-M9-015: it could never populate on any real firmware. */
 } ehem_status_info;
 
 /*
  * GET /api/system/version result (filled by ehem_system_version()). Required
- * fields: hwv, fwv, blv. The signing blobs and the rest are optional strings
- * (NULL when absent). Named `_info` to avoid colliding with the function.
+ * fields: hwv, fwv. The bootloader triple blv/blk/bls is CONDITIONAL — the
+ * firmware emits it only when the bootloader footer's publisher matches the
+ * firmware's (fw api_system.c `if (bldr != NULL)`), so all three may be NULL
+ * on a legal response (relaxed at STEP-M9-015; the doc marks them conditional
+ * too). The signing blobs and the rest are optional strings (NULL when
+ * absent). Named `_info` to avoid colliding with the function.
  */
 typedef struct ehem_version_info {
     /* Required. */
     char *hwv;   /* hardware version, e.g. "PPA rev 2.2" */
     char *fwv;   /* firmware version */
+
+    /* Conditional bootloader triple (present only with a publisher-matched
+     * bootloader footer). */
     char *blv;   /* bootloader version */
+    char *blk;   /* bootloader signing public key */
+    char *bls;   /* bootloader signature */
 
     /* Optional signing key/signature blobs (base64). */
     char *fwk;   /* firmware signing public key */
     char *fws;   /* firmware signature */
-    char *blk;   /* bootloader signing public key */
-    char *bls;   /* bootloader signature */
 
     /* Optional. */
     char *uis;     /* Encedo Manager version hash */

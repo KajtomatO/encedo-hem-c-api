@@ -111,10 +111,9 @@ static void test_status_full(void **state)
     assert_true(s->has_https && s->https);
     assert_true(s->has_tts && s->tts);
 
-    /* Nested repo_stats. */
-    assert_true(s->has_repo_stats);
-    assert_int_equal(s->repo_stats.freespace, 1024);
-    assert_int_equal(s->repo_stats.total, 100);
+    /* The fixture's repo_stats object is tolerantly IGNORED like any other
+     * unknown field — status carries no repo_stats on real firmware
+     * (fw emits it only from selftest; surface removed at STEP-M9-015). */
 
     /* A successful call clears last-error. */
     assert_int_equal(ehem_last_error(ctx)->http_status, 0);
@@ -144,7 +143,6 @@ static void test_status_minimal_optionals_absent(void **state)
     assert_false(s->has_time);
     assert_false(s->has_inited);
     assert_false(s->has_https);
-    assert_false(s->has_repo_stats);
 
     ehem_system_status_free(s);
     ehem_ctx_destroy(ctx);
@@ -243,18 +241,42 @@ static void test_version_full(void **state)
     fake_transport_free(fake);
 }
 
+/* verifies: REQ-SYS-002 — blv/blk/bls are CONDITIONAL (fw emits the triple
+ * only with a publisher-matched bootloader footer); a blv-less response is
+ * legal and parses with the triple NULL (STEP-M9-015). */
+static void test_version_no_bootloader_footer(void **state)
+{
+    (void)state;
+    ehem_transport *fake;
+    ehem_ctx *ctx = ctx_scripted(&fake, EHEM_OK, 200,
+        "{ \"hwv\": \"PPA rev 2.2\", \"fwv\": \"FW\", \"fwk\": \"K\" }");
+    ehem_version_info *v = NULL;
+
+    assert_int_equal(ehem_system_version(ctx, &v), EHEM_OK);
+    assert_non_null(v);
+    assert_string_equal(v->hwv, "PPA rev 2.2");
+    assert_string_equal(v->fwv, "FW");
+    assert_null(v->blv);
+    assert_null(v->blk);
+    assert_null(v->bls);
+
+    ehem_system_version_free(v);
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
 static void test_version_missing_required(void **state)
 {
     (void)state;
     ehem_transport *fake;
-    /* blv omitted. */
+    /* hwv omitted. */
     ehem_ctx *ctx = ctx_scripted(&fake, EHEM_OK, 200,
-        "{ \"hwv\": \"PPA rev 2.2\", \"fwv\": \"FW\" }");
+        "{ \"fwv\": \"FW\" }");
     ehem_version_info *v = NULL;
 
     assert_int_equal(ehem_system_version(ctx, &v), EHEM_ERR_PROTOCOL);
     assert_null(v);
-    assert_non_null(strstr(ehem_last_error(ctx)->message, "blv"));
+    assert_non_null(strstr(ehem_last_error(ctx)->message, "hwv"));
 
     ehem_ctx_destroy(ctx);
     fake_transport_free(fake);
@@ -277,6 +299,7 @@ int main(void)
         cmocka_unit_test(test_status_transport_error),
         cmocka_unit_test(test_status_malformed_json),
         cmocka_unit_test(test_version_full),
+        cmocka_unit_test(test_version_no_bootloader_footer),
         cmocka_unit_test(test_version_missing_required),
         cmocka_unit_test(test_free_null_safe),
     };

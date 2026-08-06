@@ -203,21 +203,22 @@ Field-level notes:
   this sweep):** firmware emits `tts` as a JSON boolean
   (`cJSON_AddBoolToObject`, api_system.c:92); the doc types it Number.
   Upstream doc-fix candidate.
-- **status `repo_stats` — SDK DEFECT found by this sweep:** the status
-  parser carries a dead `repo_stats` block (keys
-  `fragmentation`/`freespace`) — firmware emits `repo_stats` ONLY from
-  the selftest handler, and with keys `fragmented`/`freeslots`
-  (api_system.c:328-330, DEV-365; status.md:56 agrees). The status-side
-  public surface (`ehem_repo_stats`, `has_repo_stats`) can never
-  populate on any real firmware; nothing consumes it (hem-tool prints
-  repo stats from the selftest binding, which is correct). Fix proposed
-  (user decision): remove the dead status-side surface pre-ABI-freeze.
-- **version `blv` — SDK DEFECT found by this sweep:** firmware emits
+- **status `repo_stats` — SDK defect found by this sweep, FIXED at
+  STEP-M9-015 (user decision 2026-08-06):** the status parser carried a
+  dead `repo_stats` block (keys `fragmentation`/`freespace`) — firmware
+  emits `repo_stats` ONLY from the selftest handler, and with keys
+  `fragmented`/`freeslots` (api_system.c:328-330, DEV-365; status.md:56
+  agrees). The status-side public surface could never populate and
+  nothing consumed it (hem-tool prints repo stats from the selftest
+  binding, which is correct); removed pre-ABI-freeze, tolerant-ignore
+  unit-proven (REQ-SYS-001 rev 2).
+- **version `blv` — SDK defect found by this sweep, FIXED at
+  STEP-M9-015 (user decision 2026-08-06):** firmware emits
   `blv`/`blk`/`bls` only when the bootloader footer's publisher matches
   (`if (bldr != NULL)`, api_system.c:215); the doc marks them
-  conditional; the SDK hard-requires `blv` → a legal response fails
-  with EHEM_ERR_PROTOCOL. Fix proposed (user decision, touches a
-  REQ-SYS-002 criterion): demote `blv` to optional.
+  conditional; the SDK hard-required `blv` → a legal response failed
+  with EHEM_ERR_PROTOCOL. Now conditional/NULL-able (REQ-SYS-002
+  rev 2), blv-less fixture unit-proven.
 - checkin: request/response relayed verbatim across the 3 legs; the
   extra exposed fields (`newcrt_chain`, `current_serial`,
   `cert_updated`) derive from documented JWT claims (REQ-SYS-006); the
@@ -316,10 +317,12 @@ mapped to where this project records the divergence:
   writes incl. wipeout, logger DELETE, storage /ro//rw variants,
   search's unauthenticated bypass), or deferred to M10 (the upgrade
   family). `stream/*` does not exist anywhere in the doc repo.
-- **Two SDK defects found** (fix decisions pending, see the step
-  record): the version parser hard-requires the firmware-conditional
-  `blv`; the status parser carries a dead, wrong-keyed `repo_stats`
-  surface.
+- **Two SDK defects found and fixed** (STEP-M9-015, user decision
+  2026-08-06): the version parser hard-required the
+  firmware-conditional `blv`; the status parser carried a dead,
+  wrong-keyed `repo_stats` surface. Both corrected before the M9-050
+  ABI freeze. All deliberately-unbound dispositions above were ratified
+  by the user the same day.
 - **Upstream doc-fix candidates collected here:** pubkey cap 66→67
   (all crypto pages + keymgmt/derive), status `tts` Number→bool,
   token.md's stray `cfg` 400 row, update.md's wrong omitted-`descr`

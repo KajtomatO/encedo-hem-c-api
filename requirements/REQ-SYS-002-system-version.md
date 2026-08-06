@@ -1,10 +1,10 @@
 ---
 id: REQ-SYS-002
 title: Binding for GET /api/system/version
-status: verified
+status: needs-reverify
 priority: must
-revision: 1
-source: encedo-hem-api-doc system/version.md (fetched 2026-07-15); ARCHITECTURE.md §11 M1
+revision: 2
+source: encedo-hem-api-doc system/version.md (fetched 2026-07-15); ARCHITECTURE.md §11 M1; rev 2 = STEP-M9-015 blv relaxation (user decision 2026-08-06; fw api_system.c `if (bldr != NULL)` — the blv/blk/bls triple is conditional)
 depends_on: ["REQ-API-001", "REQ-NET-001", "REQ-API-005"]
 supersedes: null
 superseded_by: null
@@ -26,10 +26,14 @@ and signature blobs (`fwk`, `fws`, `blk`, `bls`), and optional `uis`,
 `sd_csd`, `sd_cid`.
 
 **Acceptance criteria:**
-- [ ] `ehem_system_version(ctx, &out)` populates a typed struct with at
-      least `hwv`, `fwv`, `blv` and the documented optional fields marked
-      present/absent; freed by its `ehem_*_free()` (unit test with canned
-      JSON via fake transport).
+- [ ] `ehem_system_version(ctx, &out)` populates a typed struct with
+      required `hwv`, `fwv`; the bootloader triple `blv`/`blk`/`bls` is
+      CONDITIONAL (rev 2 — the firmware emits it only when the bootloader
+      footer's publisher matches, `if (bldr != NULL)` in api_system.c, so
+      a blv-less response is legal and parses with the triple NULL); the
+      documented optional fields are NULL when absent; freed by its
+      `ehem_*_free()` (unit tests with canned JSON via fake transport,
+      incl. a blv-less fixture).
 - [ ] Unknown JSON fields are ignored; missing required fields yield
       `EHEM_ERR_PROTOCOL`.
 - [x] RESOLVED (M1 gate, 2026-07-15): verified against the real dev-machine

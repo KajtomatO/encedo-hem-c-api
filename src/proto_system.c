@@ -122,16 +122,10 @@ static ehem_rc parse_status(ehem_ctx *ctx, const ehem_json *root,
         }
     }
 
-    /* repo_stats: nested object, present only with auth. */
-    node = ehem_json_get(root, "repo_stats");
-    if (ehem_json_is_object(node)) {
-        s->has_repo_stats = true;
-        ehem_json_get_int64(node, "deleted", &s->repo_stats.deleted);
-        ehem_json_get_int64(node, "fragmentation", &s->repo_stats.fragmentation);
-        ehem_json_get_int64(node, "freespace", &s->repo_stats.freespace);
-        ehem_json_get_int64(node, "invalid", &s->repo_stats.invalid);
-        ehem_json_get_int64(node, "total", &s->repo_stats.total);
-    }
+    /* NB: no repo_stats here — fw v1.2.2 emits it only from the selftest
+     * handler (keys `fragmented`/`freeslots`); a status-side parse could
+     * never populate and was removed at STEP-M9-015. A repo_stats object in
+     * a status body is ignored like any unknown field. */
 
     *out = s;
     return EHEM_OK;
@@ -202,10 +196,6 @@ static ehem_rc parse_version(ehem_ctx *ctx, const ehem_json *root,
         missing = "fwv";
     } else if ((v->fwv = dup_str(str)) == NULL) {
         goto oom;
-    } else if (!ehem_json_get_string(root, "blv", &str)) {
-        missing = "blv";
-    } else if ((v->blv = dup_str(str)) == NULL) {
-        goto oom;
     }
     if (missing != NULL) {
         ehem_system_version_free(v);
@@ -213,8 +203,12 @@ static ehem_rc parse_version(ehem_ctx *ctx, const ehem_json *root,
                              "system/version: missing required field '%s'", missing);
     }
 
-    /* Optional strings. */
-    if (!opt_str(root, "fwk", &v->fwk) ||
+    /* Optional strings. blv is CONDITIONAL, not required: the firmware
+     * emits the blv/blk/bls triple only when the bootloader footer's
+     * publisher matches (api_system.c `if (bldr != NULL)`) — relaxed at
+     * STEP-M9-015 (REQ-SYS-002 rev 2). */
+    if (!opt_str(root, "blv", &v->blv) ||
+        !opt_str(root, "fwk", &v->fwk) ||
         !opt_str(root, "fws", &v->fws) ||
         !opt_str(root, "blk", &v->blk) ||
         !opt_str(root, "bls", &v->bls) ||
