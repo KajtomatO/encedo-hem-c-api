@@ -86,6 +86,28 @@ stall.
   `vAssertCalled` real bodies (log + reset, not spin).
 - Investigate the stall itself under sustained API load.
 
+### 2026-08-06 update: the keygen matrix is now a reliable trigger — quarantined
+
+The M5-era conclusion "not any single crypto op / not any single test"
+is FALSIFIED on the current device state: during the M8 gate,
+`test_keygen_matrix_live` hard-stalled the device **4 out of 4 runs** in
+one day — twice as the first casualty of a full sweep, once mid-suite,
+and once ALONE on a freshly power-cycled, orphan-free, otherwise idle
+device (dead 84 s in, during the FIRST family's sign; `test_sign_live`,
+doing near-identical create+sign, passed minutes earlier). Each
+recurrence began earlier than the last. The per-test reboot mitigation
+(REQ-TEST-005) does not help — the kill happens WITHIN the test, from a
+clean boot. Deltas vs the clean M7 gate sweep (2026-07-22, 21/21, no
+stall): two weeks of accumulated device state and the resident ExtAuth
+phone pairing; a pairing-removal experiment was offered and declined in
+favor of quarantine (user decision 2026-08-06).
+
+**Mitigation:** the matrix now carries the `disruptive` CTest label
+(REQ-TEST-004 rev 3) — the default `./dev test it` suite no longer
+kills the device; run the matrix deliberately via `./dev test it -d`
+with a power-cycle on standby. Root cause still needs device UART +
+firmware work (watchdog re-enable) upstream.
+
 ## OPEN — Device clock runs ~8% fast; login breaks after ~12 h; check-in resyncs
 
 **Status:** open (device/firmware issue; workaround known, SDK/consumer
@@ -240,6 +262,53 @@ by pipe-delimited records (`seq|ts|type|result|…|sig|chain`, base64url fields)
 not the "one JSON-like record per line" `logger/get.md` states. **SDK
 handling:** `ehem_logger_get` returns the body verbatim (never parses it); the
 header documents the real shape (REQ-SYS-009). **Fix:** correct the doc.
+
+## OPEN — M8 ExtAuth/broker findings (fw v1.2.2 + api.encedo.com, 2026-08-05/06)
+
+Discovered while building and attending the M8 mobile-auth milestone
+(details in REQ-AUTH-006..010 / REQ-TOOL-016; every item live-verified).
+
+1. **Broker rejects drifted authreqs — mobile login breaks within minutes
+   of a clock sync.** `POST api.encedo.com/notify/event/new` validates the
+   authreq's `iat` against the BROKER's clock (~zero tolerance for the
+   future): 401 `{"err":"Cannot handle token prior to (iat …) <time>"}`.
+   With the device RTC running ~8% fast (see the clock entry above), the
+   attended run reproduced it minutes after a check-in (+51 s drift).
+   **SDK mitigation shipped:** `ehem_ext_confirm_begin` runs ONE
+   drift-gated check-in (evidence = authreq `iat` vs local clock, >15 s)
+   and re-fires the push with a fresh authreq (REQ-AUTH-009 rev 2).
+   Root fix is the RTC (upstream).
+
+2. **Anti-bruteforce delay on `/api/auth/ext/token` is dead code.**
+   `auth_delay_response_remote` (api_auth.c:71) early-returns whenever
+   `start_ts < ts` — true for any request taking ≥1 ms tick — so the
+   documented failure delay never fires. Upstream filing candidate.
+
+3. **`/api/auth/ext/request` ignores a request-body `exp`.** The
+   hem-api-tester sends one (test_6.php) to no effect: lifetime is fixed
+   60 min (15 min for rewritten `keymgmt:use:` scopes). Doc/tester fix.
+
+4. **`/api/keymgmt/get` omits `descr` for ext-paired CURVE25519 keys**
+   (and reports the bare type `CURVE25519` where list shows
+   `ECDH,CURVE25519`); list and search return the full `"EXTAID"+pid`
+   descriptor. REPO_* source is absent from the fw checkout — pinned from
+   device behavior (test_ext_pair_live). Inspect pairings via
+   list/search, never get.
+
+5. **The broker geolocates callers and forwards it to phones.**
+   `event/new` responses (and completed events) carry `ipinfo_you` /
+   `ipinfo_aid` / `ipinfo_eid` — ip, hostname, city, org, coordinates of
+   the API caller — presumably for the phone's approval UI. Consumers
+   should know this leaves the machine. (The SDK's `ext pair` renders the
+   QR locally for the same reason — no third-party QR service.)
+
+6. **The Encedo app caps mobile bearers at 15 minutes.** The phone stamps
+   its authreply with `exp = iat + 900` regardless of the authreq's
+   60-minute lifetime, and the device copies the authreply `exp` verbatim
+   into the bearer (REQ-AUTH-007) — so real-phone tokens live ≤15 min and
+   mobile-mode consumers re-push at that cadence. The simulated
+   authenticator (tests) copies the authreq `exp` instead, so tests see
+   the full lifetime.
 
 ## RESOLVED — Windows (MinGW) X25519 crash: missing wolfCrypt_Init()
 

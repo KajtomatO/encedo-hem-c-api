@@ -1,7 +1,7 @@
 ---
 id: REQ-TEST-006
 title: Simulated authenticator — device-local ExtAuth testing and broker-test gating
-status: approved
+status: verified
 priority: must
 revision: 2
 source: user decision 2026-07-22 (M8 decomposition; broker tests gated into the disruptive label — user decision same day); encedo_firmware api_auth.c scheme-A construction (:1511-1545, :1743-1801); REQ-TEST-003 EHEMTEST policy

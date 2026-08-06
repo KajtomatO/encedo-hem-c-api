@@ -1,7 +1,7 @@
 ---
 id: REQ-AUTH-006
 title: ExtAuth pairing bindings — init, validate, mac
-status: approved
+status: verified
 priority: must
 revision: 2
 source: user decision 2026-07-22 (M8 decomposition); encedo-hem-api-doc auth/ext-init.md, ext-validate.md, ext-mac.md; encedo_firmware api_auth.c:838 (init), :980 (validate), :1174 (mac); hem-api-tester test_5.php

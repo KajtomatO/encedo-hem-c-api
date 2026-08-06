@@ -1,7 +1,7 @@
 ---
 id: REQ-TOOL-016
 title: hem-tool ext family — pair (terminal QR), list, login
-status: approved
+status: verified
 priority: should
 revision: 2
 source: user decision 2026-07-22 (M8 decomposition; "Add QR code generation to hem-tool" — user decision same day); hem-api-tester test_5.php QR payload; REQ-TOOL-012 family-in-one-REQ precedent
@@ -74,11 +74,11 @@ loop.
       exercises it); observed pairing payloads land ≈ v10-13 ≤ 77 cols.
 - [x] Export/header gates green with qrcodegen vendored (tool-only
       linkage proven by the standing check suite, 2026-07-23).
-- [x] Live (attended, STEP-M8-080, 2026-07-23): `ext pair` scanned from
+- [x] Live (attended, STEP-M8-080, 2026-08-05): `ext pair` scanned from
       the TERMINAL QR by the real Encedo app completed registration
       (phone label "SM-S938B (Android)"); `ext list` shows it with the
       `[PROTECTED]` mark (the (Android) classifier — real phones are
       guarded from bulk rm exactly as designed); `ext login`
       demonstrated approve/reject/timeout as exit 0/4/3 back-to-back.
-      Pairing KEPT on the device (user decision 2026-07-23) for future
+      Pairing KEPT on the device (user decision 2026-08-06) for future
       mobile testing.

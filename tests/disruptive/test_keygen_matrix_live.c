@@ -361,7 +361,10 @@ static void test_family_matrix(void **state)
 
 int main(void)
 {
-    ehem_require_test_url();   /* skip (exit 77) without a device */
+    /* QUARANTINED to the disruptive label (M8 gate, user decision
+     * 2026-08-06): reproducibly hard-stalls the current device — physical
+     * power-cycle to recover. See KNOWN-ISSUES + REQ-TEST-004 rev 3. */
+    ehem_require_disruptive();
     const struct CMUnitTest tests[] = {
         cmocka_unit_test_setup_teardown(test_family_matrix, setup, teardown),
     };

@@ -28,3 +28,16 @@ target_include_directories(test_notify_register_live PRIVATE ${PROJECT_SOURCE_DI
 target_compile_options(test_notify_register_live PRIVATE ${EHEM_WARNING_FLAGS})
 add_test(NAME test_notify_register_live COMMAND test_notify_register_live)
 set_tests_properties(test_notify_register_live PROPERTIES LABELS disruptive SKIP_RETURN_CODE 77)
+
+# REQ-TEST-004: the per-family generation matrix — QUARANTINED into the
+# disruptive label (M8 gate, user decision 2026-08-06): on the current
+# device state it reproducibly hard-stalls the firmware (4/4 that day, even
+# alone on a fresh boot), and recovery is a PHYSICAL power-cycle — the
+# definition of disruptive. History + details in KNOWN-ISSUES ("Device
+# stalls/hangs") and REQ-TEST-004 rev 3. Internal-linking (crypto shim).
+add_executable(test_keygen_matrix_live test_keygen_matrix_live.c)
+target_link_libraries(test_keygen_matrix_live PRIVATE ehem_test_support cmocka::cmocka)
+target_include_directories(test_keygen_matrix_live PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
+target_compile_options(test_keygen_matrix_live PRIVATE ${EHEM_WARNING_FLAGS})
+add_test(NAME test_keygen_matrix_live COMMAND test_keygen_matrix_live)
+set_tests_properties(test_keygen_matrix_live PROPERTIES LABELS disruptive SKIP_RETURN_CODE 77)

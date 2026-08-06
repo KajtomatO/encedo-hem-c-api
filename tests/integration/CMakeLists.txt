@@ -143,16 +143,6 @@ set_tests_properties(test_cipher_live PROPERTIES LABELS integration SKIP_RETURN_
 # longer keygen timeout).
 ehem_add_integration_test(test_pqc_live SOURCES test_pqc_live.c)
 
-# REQ-TEST-004: the M5 per-family generation matrix — create → list → get/
-# classify → sign(where ExDSA-capable)+local verify → delete, for every fw
-# create type. Internal-linking (crypto shim local verify), like test_sign_live.
-add_executable(test_keygen_matrix_live test_keygen_matrix_live.c)
-target_link_libraries(test_keygen_matrix_live PRIVATE ehem_test_support cmocka::cmocka)
-target_include_directories(test_keygen_matrix_live PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
-target_compile_options(test_keygen_matrix_live PRIVATE ${EHEM_WARNING_FLAGS})
-add_test(NAME test_keygen_matrix_live COMMAND test_keygen_matrix_live)
-set_tests_properties(test_keygen_matrix_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
-
 # REQ-AUTH-001/002/003: live authenticated token acquisition. Exception to the
 # public-API-only rule for integration tests — no public authenticated binding
 # exists until M2-050, so this drives the INTERNAL ehem_auth_ensure_token and

@@ -1,7 +1,7 @@
 ---
 id: REQ-AUTH-008
 title: Notification-broker client — cloud legs for ExtAuth pairing and login
-status: approved
+status: verified
 priority: must
 revision: 4
 source: user decision 2026-07-22 (M8 decomposition); hem-api-tester test_5.php/test_6.php (notify flows); Encedo Manager encedo.js:335/1316, build.js:383/1438 (per doc-repo citations); NO doc page exists for the broker API — shapes are reconstructed, all pinned by live probes
@@ -33,7 +33,7 @@ itself.
     binds BOTH: pairing uses POST-with-eid (the caller is authenticated
     and holds the eid); the login path (REQ-AUTH-009 `begin`) uses the
     GET form because mobile mode holds NO credentials and the eid may be
-    unknown. **Live facts (rev 3, M8-080 session 2026-07-23):** sessions
+    unknown. **Live facts (rev 3, M8-080 session 2026-08-05):** sessions
     are CACHED server-side — repeat calls return the SAME epk until
     rotation; `exp` ≈ now + 24 h; the eid-POST form additionally returns
     `"paired": true/false` (whether that eid has any registered
@@ -62,7 +62,7 @@ itself.
     (KNOWN-ISSUES), every mobile login 401s here within minutes of the
     last clock sync. This is the failure the REQ-AUTH-009 rev 2
     drift-gated check-in recovery exists for (discovered live at
-    STEP-M8-080: first login green, second 401 — device was +51 s).
+    STEP-M8-080, 2026-08-05: first login green, second 401 — device was +51 s).
   - `GET /notify/event/check/<eventid>` → **202 = pending**; 200 with
     `authreply` = approved on the phone; 200 with `deny` set = rejected
     on the phone (tester note: the app only produces an `authreply` on
@@ -106,7 +106,7 @@ update, hence the everything-is-an-open-criterion posture and the
       session-POST-with-eid.** Registration left dangling
       (expires broker-side). Phone leg → `{pid, reply}`, `finalise`
       status, and expired-`rid` behavior remain for STEP-M8-080.
-- [x] Attended (real phone SM-S938B, STEP-M8-080, 2026-07-23): the
+- [x] Attended (real phone SM-S938B, STEP-M8-080, 2026-08-05/06): the
       phone-completed `register/check` 200 + `finalise` leg green (`ext
       pair` end-to-end via terminal QR); `event/check` shapes captured
       VERBATIM — pending 202 (empty), approved 200 `{authreply, 

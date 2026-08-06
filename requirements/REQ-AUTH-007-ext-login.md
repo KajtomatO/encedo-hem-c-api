@@ -1,7 +1,7 @@
 ---
 id: REQ-AUTH-007
 title: ExtAuth login bindings — request and token (push-confirm bearer issuance)
-status: approved
+status: verified
 priority: must
 revision: 2
 source: user decision 2026-07-22 (M8 decomposition); encedo-hem-api-doc auth/ext-request.md, ext-token.md; encedo_firmware api_auth.c:1289 (alter_requested_scope), :1329 (request), :1588 (token), crypto.c:3177 (grant_ext_jwt_auth_token); hem-api-tester test_6.php

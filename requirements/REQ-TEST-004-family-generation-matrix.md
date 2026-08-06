@@ -3,7 +3,7 @@ id: REQ-TEST-004
 title: Per-family generation matrix — every fw create type exercised live
 status: verified
 priority: must
-revision: 1
+revision: 3
 source: ARCHITECTURE.md §11 (M5 gate); user decision 2026-07-16 (M5 decomposition); firmware v1.2.2 api_keymgmt.c:866-963 (create type vocabulary, ground truth per REQ-MGMT §8); approved 2026-07-16
 depends_on: ["REQ-KEY-001", "REQ-KEY-003", "REQ-KEY-004", "REQ-KEY-005", "REQ-KEY-006", "REQ-OPS-001", "REQ-TEST-002", "REQ-TEST-003"]
 supersedes: null
@@ -14,7 +14,7 @@ traces:
 
 # Per-family generation matrix — every fw create type exercised live
 
-The integration suite SHALL include a per-family generation matrix test
+The live suite SHALL include a per-family generation matrix test
 that, for **every** key type accepted by the device firmware's create
 endpoint (fw v1.2.2 vocabulary, api_keymgmt.c:866-963 — 23 types:
 `SECP256R1/384R1/521R1/256K1`, `CURVE25519/448`, `ED25519/448`,
@@ -36,6 +36,18 @@ endpoint (fw v1.2.2 vocabulary, api_keymgmt.c:866-963 — 23 types:
 The matrix runs sequentially with **at most one matrix key alive at a
 time** (repo capacity is small), and cleanup failures fail the test
 (REQ-TEST-003).
+
+**Suite placement (rev 3, M8 gate, user decision 2026-08-06):** the
+matrix runs under the **`disruptive`** CTest label, not `integration`.
+On the current device state it reproducibly HARD-STALLS the firmware —
+4/4 that day, including alone on a freshly power-cycled, orphan-free,
+otherwise idle device (died in the FIRST family's sign; near-identical
+ops in test_sign_live passed minutes earlier) — and recovery is a
+physical power-cycle, the definition of disruptive here. This
+supersedes the M5-era observation that no single test triggers the
+stall (falsified 2026-08-06; the KNOWN-ISSUES stall entry has the full
+history). The matrix still runs on demand (`./dev test it -d`) and its
+M5/M7 full-green history stands; rev 2 was the 21→23 type-count fix.
 
 **Rationale:** this is the substance of the M5 gate ("generate → list →
 sign where ExDSA-capable → delete cycle per family on the real device",
