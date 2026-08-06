@@ -3,8 +3,8 @@ id: REQ-API-007
 title: API reference documentation for the 1.0 surface
 status: approved
 priority: must
-revision: 1
-source: user decision 2026-08-06 (M9 scope reshape, ARCHITECTURE.md §11 "API reference docs")
+revision: 2
+source: user decision 2026-08-06 (M9 scope reshape, ARCHITECTURE.md §11 "API reference docs"); rev 2 = format decided (user decision 2026-08-06): headers stay the per-symbol reference + hand-written docs/ guide + scripted completeness gate
 depends_on: []
 supersedes: null
 superseded_by: null
@@ -18,19 +18,15 @@ The SDK SHALL ship API reference documentation covering every public
 symbol (functions, structs, enums, macros) declared in
 `include/ehem/*.h` at the 1.0 release.
 
-- **Format (OPEN — user decision at M9 decomposition):** the public
-  headers already carry thorough prose documentation for every symbol
-  (contracts, ownership, defaults, firmware quirks). Candidate shapes:
-  1. *(proposed)* **headers are the reference** + a hand-written
-     `docs/` guide: an overview (conventions, error model, auth modes,
-     memory/ownership rules), a per-header module index (symbol → one
-     line), and worked examples — no duplication of per-symbol
-     contracts, which stay in the headers;
-  2. retrofit Doxygen markup onto all headers and generate HTML —
-     mechanical churn across every public header right before an ABI
-     freeze, and a new toolchain dependency;
-  3. a fully hand-written per-symbol markdown reference — duplicates
-     the headers and will drift.
+- **Format (DECIDED — user decision 2026-08-06, rev 2): headers are
+  the per-symbol reference** + a hand-written `docs/` guide: an
+  overview (conventions, error model, auth modes, memory/ownership
+  rules), a per-header module index (symbol → one line), and worked
+  examples — no duplication of per-symbol contracts, which stay in the
+  headers. (Rejected: a Doxygen retrofit — churn across every public
+  header right before the ABI freeze plus a new toolchain dependency;
+  a fully hand-written per-symbol reference — duplicates the headers
+  and drifts.)
 - Whatever the shape, a completeness check is part of the deliverable:
   every `EHEM_API` symbol and public type is reachable from the docs
   (script-checkable, in the spirit of the export/header gates).
@@ -43,7 +39,9 @@ contract must be findable without grepping headers. The user named API
 reference docs a 1.0 deliverable (2026-08-06).
 
 **Acceptance criteria:**
-- [ ] Format decided by the user and recorded here (revision bump).
+- [x] Format decided by the user and recorded here (rev 2,
+      2026-08-06): headers-as-reference + docs/ guide + scripted
+      completeness gate.
 - [ ] Every `EHEM_API` function and every public struct/enum/macro in
       `include/ehem/*.h` is covered per the decided format; a
       completeness check (scripted, runnable via `./dev`) passes and
