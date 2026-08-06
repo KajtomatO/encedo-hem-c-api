@@ -5,13 +5,34 @@ A portable **C99 client library** (the *Encedo HEM C SDK*, symbol prefix
 device over its REST/HTTPS API. Its first consumer is the `encedo-pkcs11`
 module.
 
-> **Status: early development (0.1.0).** Milestone M1 is in progress: the build
-> skeleton, the `ehem_ctx` surface, the transport layer, and the unauthenticated
-> `system/status` + `system/version` bindings. See
-> [ARCHITECTURE.md](ARCHITECTURE.md) for the full design and milestone plan, and
-> [REQUIREMENTS-MANAGEMENT.md](REQUIREMENTS-MANAGEMENT.md) for how the work is
-> tracked. What exists *today* is the CMake build, `ehem_version()`, and the
-> unit-test harness.
+> **Status: 1.0 track.** The SDK covers the device API end to end: the
+> full eJWT auth flow (passphrase and mobile push-confirmation), key
+> management (list/search/get/create/delete/update/import/derive), every
+> crypto operation (ExDSA sign/verify, ECDH, HMAC, AES incl. wrap/unwrap,
+> ML-KEM, ML-DSA, hardware random), system/logger/storage bindings, and
+> the TLS-lifecycle tooling (check-in, cert-install, full recovery) —
+> each binding live-verified against a real HEM.
+> [docs/COVERAGE.md](docs/COVERAGE.md) maps every documented endpoint to
+> its binding; the deliberately-unbound remainder (device provisioning,
+> the firmware-upgrade family) is recorded there and scheduled post-1.0.
+> See [ARCHITECTURE.md](ARCHITECTURE.md) for the design and
+> [REQUIREMENTS-MANAGEMENT.md](REQUIREMENTS-MANAGEMENT.md) for how the
+> work is tracked.
+
+## Documentation
+
+- **[docs/API-GUIDE.md](docs/API-GUIDE.md)** — start here: conventions
+  (error model, ownership, auth modes, scopes, TLS, automatic
+  recoveries), a per-header symbol index, and worked examples. The
+  public headers in `include/ehem/` are the per-symbol reference — every
+  contract is documented at the declaration, and a scripted gate keeps
+  the guide's index complete.
+- **[docs/COVERAGE.md](docs/COVERAGE.md)** — endpoint-by-endpoint
+  conformance record against the device API documentation.
+- **[KNOWN-ISSUES.md](KNOWN-ISSUES.md)** — firmware bugs and doc
+  divergences the SDK works around (device behavior wins).
+- **`hem-tool`** — the bundled CLI is the living usage documentation:
+  every binding is drivable from it (see below).
 
 ## Dependencies
 
@@ -21,10 +42,11 @@ module.
 | A C99 compiler (GCC/Clang on Linux, MinGW-w64 on Windows) | — |
 | [libcurl](https://curl.se/libcurl/) dev | default HTTPS transport |
 | [CMocka](https://cmocka.org/) dev | unit tests |
-| wolfSSL dev *(from M2 on)* | crypto primitives for the auth flow |
+| wolfSSL dev | crypto primitives (X25519, HMAC, PBKDF2, cert parsing, local verify) |
 
-cJSON and Argon2 are **vendored into the source tree** (no system install), so
-they are not listed above.
+cJSON is **vendored into the source tree** (no system install), so it is
+not listed above; the CLI additionally vendors the single-file qrcodegen
+(tool-only — never part of the library).
 
 ### Install them automatically
 
@@ -101,10 +123,9 @@ ctest --test-dir build -L unit --output-on-failure
 
 - **`unit`** — CMocka tests plus a scripted check that the shared library
   exports only `ehem_*` symbols. These never touch the network.
-- **`integration`** *(arrives in a later M1 step)* — real-device round-trips,
+- **`integration`** — real-device round-trips over the whole surface,
   **gated on the `EHEM_TEST_URL` environment variable**. With it unset the
-  integration tests skip, so a checkout without a device stays green. To run
-  them once they exist:
+  integration tests skip, so a checkout without a device stays green:
 
   ```bash
   EHEM_TEST_URL="https://my-hem.example" EHEM_TEST_PASSPHRASE="…" \
@@ -146,6 +167,27 @@ that need the device (`test it`, `test all`, `tool`) use the `EHEM_*` variables
 when set, otherwise auto-source a git-ignored `./hem.env` (and say so on
 stderr). See `./dev help` for the full surface.
 
+## hem-tool
+
+The bundled CLI drives every binding through the public API. Commands are
+grouped by what they need — none (`status`, `checkin`), any bearer
+(`keys`, `sign`, `random`, `logs`, `selftest`, `cert-install`, `reboot`,
+`tls-recover`, `ext list/login`), or a passphrase only (`ext pair` — the
+device demands `sub="U"` for pairing changes):
+
+```bash
+hem-tool status                     # no --url needed: defaults to https://my.ence.do
+hem-tool keys list --mobile         # any bearer command can push to the paired
+                                    # phone instead of taking a passphrase
+hem-tool help keys rm               # per-command help (== hem-tool keys rm --help)
+```
+
+Connection comes from `--url`/`EHEM_URL` (default `https://my.ence.do` —
+a one-line notice tells you when the default kicked in), credentials from
+`--passphrase`/`EHEM_PASSPHRASE` or `--mobile` (push confirmation;
+`--timeout SEC` bounds the wait; exit 13 = no answer, 14 = rejected on
+the phone). `hem-tool --help` shows the grouped command summary.
+
 ## Install
 
 ```bash
@@ -164,8 +206,9 @@ target_link_libraries(app PRIVATE encedo-hem::encedo-hem-static)  # static
 ## Layout
 
 ```
-include/ehem/   public headers (ehem_ prefix)
-src/            library sources (+ vendored cjson/argon2, tools/hem-tool)
+include/ehem/   public headers (ehem_ prefix) — the per-symbol reference
+docs/           API-GUIDE.md · COVERAGE.md
+src/            library sources (+ vendored cjson, tools/hem-tool)
 tests/          unit/ · integration/ · disruptive/ · support/
 cmake/          MinGW toolchain, package config
 scripts/        dependency installers
@@ -176,5 +219,5 @@ workplan/        todo/ · doing/ · done/ step files
 ## License
 
 MIT — see [LICENSE](LICENSE). Written from scratch (no code derived from GPL
-PKCS#11 implementations). Note wolfSSL, linked from M2 on, is GPLv3/commercial
+PKCS#11 implementations). Note wolfSSL is GPLv3/commercial
 dual-licensed; binaries that link it must comply accordingly.

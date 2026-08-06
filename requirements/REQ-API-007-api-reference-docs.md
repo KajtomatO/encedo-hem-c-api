@@ -1,7 +1,7 @@
 ---
 id: REQ-API-007
 title: API reference documentation for the 1.0 surface
-status: approved
+status: verified
 priority: must
 revision: 2
 source: user decision 2026-08-06 (M9 scope reshape, ARCHITECTURE.md §11 "API reference docs"); rev 2 = format decided (user decision 2026-08-06): headers stay the per-symbol reference + hand-written docs/ guide + scripted completeness gate
@@ -42,13 +42,19 @@ reference docs a 1.0 deliverable (2026-08-06).
 - [x] Format decided by the user and recorded here (rev 2,
       2026-08-06): headers-as-reference + docs/ guide + scripted
       completeness gate.
-- [ ] Every `EHEM_API` function and every public struct/enum/macro in
-      `include/ehem/*.h` is covered per the decided format; a
-      completeness check (scripted, runnable via `./dev`) passes and
-      is wired so a new public symbol without docs fails it.
-- [ ] The conventions that span symbols are documented in one place:
-      error model + `ehem_last_error`, ownership/`*_free` rules,
-      `ehem_options` abi_size discipline, auth modes
-      (passphrase/mobile), scope model (`keymgmt:use:<kid>`), TLS
-      trust modes, and the automatic-recovery behaviors.
-- [ ] README updated to the 1.0 surface and linking the reference.
+- [x] Every `EHEM_API` function and every public struct/enum/macro in
+      `include/ehem/*.h` is indexed in docs/API-GUIDE.md; the
+      completeness check (tests/unit/check_docs_coverage.cmake, CTest
+      `docs_coverage`, runs in `./dev test`/`./dev ci`) passes and
+      fails on a missing symbol (negative-tested: empty docs → exit 1,
+      2026-08-06).
+- [x] The conventions that span symbols are documented in one place
+      (docs/API-GUIDE.md "Conventions"): error model +
+      `ehem_last_error`, ownership/`*_free` rules, `ehem_options`
+      abi_size discipline, auth modes (passphrase/mobile), scope model
+      (`keymgmt:use:<kid>`), TLS trust modes, and the
+      automatic-recovery behaviors — plus worked examples
+      (2026-08-06).
+- [x] README updated to the 1.0 surface (status, docs section,
+      hem-tool auth model incl. --mobile and the default URL, stale
+      M1/Argon2 text removed) and linking the reference (2026-08-06).

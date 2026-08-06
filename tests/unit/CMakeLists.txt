@@ -140,4 +140,13 @@ add_test(NAME export_symbols
     -DEHEM_SHARED_LIB=$<TARGET_FILE:encedo-hem>
     -P ${CMAKE_CURRENT_SOURCE_DIR}/check_exports.cmake)
 set_tests_properties(export_symbols PROPERTIES LABELS unit)
+
+# REQ-API-007: docs/API-GUIDE.md must index every public symbol (the
+# headers are the per-symbol reference; the guide is the map to them).
+add_test(NAME docs_coverage
+  COMMAND ${CMAKE_COMMAND}
+    -DEHEM_INCLUDE_DIR=${PROJECT_SOURCE_DIR}/include
+    -DEHEM_DOCS_FILE=${PROJECT_SOURCE_DIR}/docs/API-GUIDE.md
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/check_docs_coverage.cmake)
+set_tests_properties(docs_coverage PROPERTIES LABELS unit)
 ehem_add_unit_test(test_logger_storage SOURCES test_logger_storage.c)
