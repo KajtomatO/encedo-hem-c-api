@@ -175,6 +175,7 @@ if(EHEM_BUILD_TOOL)
     src/tools/hem-tool/recover.c
     src/tools/hem-tool/selftest.c
     src/tools/hem-tool/sign.c
+    src/tools/hem-tool/tool_auth.c
     # Vendored qrcodegen (REQ-TOOL-016): TOOL-ONLY — never part of the SDK
     # library; the export/header gates prove the containment.
     src/tools/hem-tool/vendor/qrcodegen/qrcodegen.c)

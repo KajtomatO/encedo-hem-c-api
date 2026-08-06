@@ -4,6 +4,7 @@
  * implements: REQ-TOOL-012
  */
 #include "logs.h"
+#include "tool_auth.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -33,15 +34,9 @@ static void lreport(FILE *err, ehem_ctx *ctx, ehem_rc rc, const char *what)
 static int logs_login(ehem_ctx *ctx, const hem_logs_opts *o, FILE *err)
 {
     ehem_rc rc;
-    if (o->passphrase == NULL || o->passphrase[0] == '\0') {
-        fprintf(err, "error: no passphrase — pass --passphrase or set "
-                     "EHEM_PASSPHRASE\n");
-        return HEM_LOGS_USAGE;
-    }
-    rc = ehem_login(ctx, o->passphrase);
+    rc = hem_tool_login(ctx, o->passphrase, o->mobile, err);
     if (rc != EHEM_OK) {
-        lreport(err, ctx, rc, "login");
-        return HEM_LOGS_RUNTIME;
+        return (rc == EHEM_ERR_ARG) ? HEM_LOGS_USAGE : HEM_LOGS_RUNTIME;
     }
     return HEM_LOGS_OK;
 }
@@ -56,7 +51,7 @@ static int epa_or_runtime(FILE *err, ehem_ctx *ctx, ehem_rc rc,
     } else {
         lreport(err, ctx, rc, what);
     }
-    return HEM_LOGS_RUNTIME;
+    return hem_tool_auth_exit(rc, err, HEM_LOGS_RUNTIME);
 }
 
 int hem_logs_list_run(ehem_ctx *ctx, const hem_logs_opts *o)

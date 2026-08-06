@@ -10,6 +10,7 @@
 #ifndef HEM_SIGN_H
 #define HEM_SIGN_H
 
+#include <stdbool.h>
 #include <stdio.h>
 
 #include "ehem/ehem.h"
@@ -30,6 +31,7 @@ typedef enum {
 
 typedef struct {
     const char     *passphrase;  /* login passphrase; NULL → HEM_SIGN_USAGE */
+    bool        mobile;       /* --mobile: push-confirm auth (REQ-TOOL-018) */
     const char     *kid;         /* 32 hex chars; NULL/malformed → USAGE, no I/O */
     const char     *alg;         /* REQ-OPS-001 selector, verbatim; NULL →
                                   * fetch the key type and pick the family's

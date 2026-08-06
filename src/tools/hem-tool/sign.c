@@ -8,6 +8,7 @@
  * from main() and the fake transport from the unit test.
  */
 #include "sign.h"
+#include "tool_auth.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -83,11 +84,6 @@ int hem_sign_run(ehem_ctx *ctx, const hem_sign_opts *o)
     ehem_signature *sig = NULL;
     ehem_rc rc;
 
-    if (o->passphrase == NULL) {
-        fprintf(err, "error: no passphrase — pass --passphrase or set "
-                     "EHEM_PASSPHRASE\n");
-        return HEM_SIGN_USAGE;
-    }
     if (!hem_tool_kid_ok(o->kid)) {
         fprintf(err, "error: 'sign' needs a key id (exactly 32 hex chars)\n");
         return HEM_SIGN_USAGE;
@@ -127,10 +123,9 @@ int hem_sign_run(ehem_ctx *ctx, const hem_sign_opts *o)
         return HEM_SIGN_USAGE;
     }
 
-    rc = ehem_login(ctx, o->passphrase);
+    rc = hem_tool_login(ctx, o->passphrase, o->mobile, err);
     if (rc != EHEM_OK) {
-        report(err, ctx, rc, "login");
-        return HEM_SIGN_RUNTIME;
+        return (rc == EHEM_ERR_ARG) ? HEM_SIGN_USAGE : HEM_SIGN_RUNTIME;
     }
 
     /*
@@ -150,7 +145,7 @@ int hem_sign_run(ehem_ctx *ctx, const hem_sign_opts *o)
         }
         if (rc != EHEM_OK) {
             report(err, ctx, rc, "sign (key-type lookup)");
-            return HEM_SIGN_RUNTIME;
+            return hem_tool_auth_exit(rc, err, HEM_SIGN_RUNTIME);
         }
         (void)ehem_key_type_parse(d->type, &info);
         alg = default_alg(info.family);
@@ -169,7 +164,7 @@ int hem_sign_run(ehem_ctx *ctx, const hem_sign_opts *o)
                    (o->sigctx != NULL) ? strlen(o->sigctx) : 0, &sig);
     if (rc != EHEM_OK) {
         report(err, ctx, rc, "sign");
-        return HEM_SIGN_RUNTIME;
+        return hem_tool_auth_exit(rc, err, HEM_SIGN_RUNTIME);
     }
 
     switch (o->format) {

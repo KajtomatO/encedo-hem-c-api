@@ -11,6 +11,7 @@
 #ifndef HEM_RANDOM_H
 #define HEM_RANDOM_H
 
+#include <stdbool.h>
 #include <stdio.h>
 
 #include "ehem/ehem.h"
@@ -27,6 +28,7 @@ enum {
 
 typedef struct {
     const char *passphrase;  /* login passphrase; NULL → HEM_RANDOM_USAGE */
+    bool        mobile;       /* --mobile: push-confirm auth (REQ-TOOL-018) */
     const char *count_arg;   /* N as the CLI string; parsed/validated here so
                               * the unit tests cover the bounds (1..4096) */
     const char *kid;         /* existing AES key; NULL → create a transient

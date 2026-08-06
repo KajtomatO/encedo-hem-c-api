@@ -11,6 +11,7 @@
 #ifndef HEM_TOOL_LOGS_H
 #define HEM_TOOL_LOGS_H
 
+#include <stdbool.h>
 #include <stdio.h>
 
 #include "ehem/ehem.h"
@@ -23,6 +24,7 @@ enum {
 
 typedef struct {
     const char *passphrase;   /* login passphrase; NULL → HEM_LOGS_USAGE */
+    bool        mobile;       /* --mobile: push-confirm auth (REQ-TOOL-018) */
     FILE       *out;          /* payload output (NULL → stdout) */
     FILE       *err;          /* diagnostics (NULL → stderr) */
 } hem_logs_opts;

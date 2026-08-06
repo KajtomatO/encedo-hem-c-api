@@ -16,6 +16,7 @@
 #ifndef HEM_CERT_INSTALL_H
 #define HEM_CERT_INSTALL_H
 
+#include <stdbool.h>
 #include <stdio.h>
 
 #include "ehem/ehem.h"
@@ -44,6 +45,7 @@ enum {
 
 typedef struct {
     const char *passphrase;   /* --passphrase / EHEM_PASSPHRASE; NULL if none */
+    bool        mobile;       /* --mobile: push-confirm auth (REQ-TOOL-018) */
     int         force;        /* reinstall even if the device is already current */
     int         insecure;     /* ctx is in insecure TLS mode — verify can't prove */
     unsigned    poll_attempts; /* max post-reboot status polls (0 → default) */

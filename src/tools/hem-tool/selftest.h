@@ -7,6 +7,7 @@
 #ifndef HEM_TOOL_SELFTEST_H
 #define HEM_TOOL_SELFTEST_H
 
+#include <stdbool.h>
 #include <stdio.h>
 
 #include "ehem/ehem.h"
@@ -22,6 +23,7 @@ enum {
 
 typedef struct {
     const char *passphrase;   /* login passphrase; NULL → HEM_SELFTEST_USAGE */
+    bool        mobile;       /* --mobile: push-confirm auth (REQ-TOOL-018) */
     FILE       *out;          /* report (NULL → stdout) */
     FILE       *err;          /* diagnostics (NULL → stderr) */
 } hem_selftest_opts;

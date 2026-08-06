@@ -8,6 +8,7 @@
 #define _POSIX_C_SOURCE 199309L   /* nanosleep / struct timespec under -std=c99 */
 
 #include "cert_install.h"
+#include "tool_auth.h"
 
 #include <string.h>
 
@@ -120,18 +121,20 @@ int hem_cert_install_run(ehem_ctx *ctx, const hem_cert_install_opts *o)
         }
     }
 
-    /* From here on the tool MUTATES device state (install + reboot). */
-    if (o->passphrase == NULL || o->passphrase[0] == '\0') {
+    /* From here on the tool MUTATES device state (install + reboot). The
+     * credential check stays HERE, after skip-if-current, so a
+     * credential-less run can still exit 0 "already current". */
+    if (!o->mobile && (o->passphrase == NULL || o->passphrase[0] == '\0')) {
         fprintf(err, "error: installing needs authentication — "
-                     "set EHEM_PASSPHRASE or pass --passphrase\n");
+                     "set EHEM_PASSPHRASE / pass --passphrase, or use "
+                     "--mobile\n");
         ret = HEM_CERT_NO_PASSPHRASE;
         goto cleanup;
     }
     fprintf(out, "installing the new certificate and rebooting the device...\n");
 
-    rc = ehem_login(ctx, o->passphrase);
+    rc = hem_tool_login(ctx, o->passphrase, o->mobile, err);
     if (rc != EHEM_OK) {
-        report(err, ctx, rc, "login");
         ret = HEM_CERT_AUTH_FAILED;
         goto cleanup;
     }
@@ -143,6 +146,7 @@ int hem_cert_install_run(ehem_ctx *ctx, const hem_cert_install_opts *o)
         ret = (rc == EHEM_ERR_AUTH_FAILED || rc == EHEM_ERR_AUTH_EXPIRED ||
                rc == EHEM_ERR_SCOPE_DENIED) ? HEM_CERT_AUTH_FAILED
                                             : HEM_CERT_INSTALL_FAILED;
+        ret = hem_tool_auth_exit(rc, err, ret);
         goto cleanup;
     }
     if (!inst->updated) {

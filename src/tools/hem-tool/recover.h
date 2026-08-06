@@ -10,6 +10,7 @@
 #ifndef HEM_TOOL_RECOVER_H
 #define HEM_TOOL_RECOVER_H
 
+#include <stdbool.h>
 #include <stdio.h>
 
 #include "ehem/ehem.h"
@@ -29,6 +30,7 @@ enum {
 
 typedef struct {
     const char *passphrase;    /* login passphrase; NULL → HEM_RECOVER_USAGE */
+    bool        mobile;       /* --mobile: push-confirm auth (REQ-TOOL-018) */
     const char *register_url;  /* provisioning endpoint; NULL → SDK default */
     int         force;         /* recover even when status reports https up */
     unsigned    poll_attempts; /* post-reboot polls (0 → default) */

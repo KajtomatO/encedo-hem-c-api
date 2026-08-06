@@ -7,6 +7,7 @@
  * from main() and the fake transport from the unit test.
  */
 #include "random.h"
+#include "tool_auth.h"
 
 #include <ctype.h>
 #include <stdlib.h>
@@ -77,20 +78,14 @@ int hem_random_run(ehem_ctx *ctx, const hem_random_opts *o)
                 HEM_RANDOM_N_MAX);
         return HEM_RANDOM_USAGE;
     }
-    if (o->passphrase == NULL) {
-        fprintf(err, "error: no passphrase — pass --passphrase or set "
-                     "EHEM_PASSPHRASE\n");
-        return HEM_RANDOM_USAGE;
-    }
     if (kid != NULL && !hem_tool_kid_ok(kid)) {
         fprintf(err, "error: --kid must be exactly 32 hex chars\n");
         return HEM_RANDOM_USAGE;
     }
 
-    rc = ehem_login(ctx, o->passphrase);
+    rc = hem_tool_login(ctx, o->passphrase, o->mobile, err);
     if (rc != EHEM_OK) {
-        report(err, ctx, rc, "login");
-        return HEM_RANDOM_RUNTIME;
+        return (rc == EHEM_ERR_ARG) ? HEM_RANDOM_USAGE : HEM_RANDOM_RUNTIME;
     }
 
     /* No --kid: transient EHEMTEST AES-128 key (REQ-OPS-002 keeps key
@@ -103,7 +98,7 @@ int hem_random_run(ehem_ctx *ctx, const hem_random_opts *o)
         rc = ehem_key_create(ctx, &p, created_kid);
         if (rc != EHEM_OK) {
             report(err, ctx, rc, "random (transient key create)");
-            return HEM_RANDOM_RUNTIME;
+            return hem_tool_auth_exit(rc, err, HEM_RANDOM_RUNTIME);
         }
         kid = created_kid;
     }
@@ -121,7 +116,7 @@ int hem_random_run(ehem_ctx *ctx, const hem_random_opts *o)
 
     if (rc != EHEM_OK) {
         report(err, ctx, rc, "random");
-        return HEM_RANDOM_RUNTIME;
+        return hem_tool_auth_exit(rc, err, HEM_RANDOM_RUNTIME);
     }
 
     if (o->raw) {

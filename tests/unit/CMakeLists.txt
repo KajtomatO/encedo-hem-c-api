@@ -77,6 +77,10 @@ if(TARGET hem-tool-core)
   # REQ-TOOL-016: `ext` pair/list/login + terminal QR (M8).
   ehem_add_unit_test(test_ext_tool SOURCES test_ext_tool.c)
   target_link_libraries(test_ext_tool PRIVATE hem-tool-core)
+
+  # REQ-TOOL-018: the shared login chokepoint + --mobile outcome exits.
+  ehem_add_unit_test(test_tool_auth SOURCES test_tool_auth.c)
+  target_link_libraries(test_tool_auth PRIVATE hem-tool-core)
 endif()
 
 # REQ-SYS-004, REQ-SYS-005: config GET / cert install / reboot bindings.

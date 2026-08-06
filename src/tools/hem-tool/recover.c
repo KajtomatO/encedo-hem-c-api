@@ -6,6 +6,7 @@
 #define _POSIX_C_SOURCE 199309L   /* nanosleep / struct timespec under -std=c99 */
 
 #include "recover.h"
+#include "tool_auth.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -74,9 +75,11 @@ int hem_tls_recover_run(ehem_ctx *ctx, const hem_recover_opts *o)
     ehem_rc rc;
     unsigned i;
 
-    if (o->passphrase == NULL || o->passphrase[0] == '\0') {
-        fprintf(err, "error: no passphrase — pass --passphrase or set "
-                     "EHEM_PASSPHRASE\n");
+    /* Fail fast BEFORE any probe: recovery MUTATES the device, so a run
+     * that cannot possibly authenticate should produce zero traffic. */
+    if (!o->mobile && (o->passphrase == NULL || o->passphrase[0] == '\0')) {
+        fprintf(err, "error: no passphrase — pass --passphrase / set "
+                     "EHEM_PASSPHRASE, or use --mobile\n");
         return HEM_RECOVER_USAGE;
     }
 
@@ -101,10 +104,9 @@ int hem_tls_recover_run(ehem_ctx *ctx, const hem_recover_opts *o)
     }
 
     /* 3. The recovery ceremony (REQ-SYS-013). */
-    rc = ehem_login(ctx, o->passphrase);
+    rc = hem_tool_login(ctx, o->passphrase, o->mobile, err);
     if (rc != EHEM_OK) {
-        rreport(err, ctx, rc, "login");
-        return HEM_RECOVER_RUNTIME;
+        return (rc == EHEM_ERR_ARG) ? HEM_RECOVER_USAGE : HEM_RECOVER_RUNTIME;
     }
     fprintf(out, "recovering: attestation -> provisioning cloud -> "
                  "install...\n");
@@ -115,7 +117,7 @@ int hem_tls_recover_run(ehem_ctx *ctx, const hem_recover_opts *o)
     }
     if (rc != EHEM_OK) {
         rreport(err, ctx, rc, "tls-recover");
-        return HEM_RECOVER_RUNTIME;
+        return hem_tool_auth_exit(rc, err, HEM_RECOVER_RUNTIME);
     }
     fprintf(out, "installed: updated=%s reboot_required=%s\n",
             info->updated ? "yes" : "no",
@@ -129,7 +131,7 @@ int hem_tls_recover_run(ehem_ctx *ctx, const hem_recover_opts *o)
         rc = ehem_system_reboot(ctx);
         if (rc != EHEM_OK) {
             rreport(err, ctx, rc, "reboot");
-            return HEM_RECOVER_RUNTIME;
+            return hem_tool_auth_exit(rc, err, HEM_RECOVER_RUNTIME);
         }
         fprintf(out, "rebooting; waiting for the device to return with "
                      "HTTPS...\n");

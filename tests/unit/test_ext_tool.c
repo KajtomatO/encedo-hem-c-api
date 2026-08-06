@@ -256,7 +256,7 @@ static void test_list(void **state)
         "\"descr\":\"%s\"}]}", descr_b64, descr_b64);
     assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200, page), 0);
 
-    assert_int_equal(hem_ext_list_run(ctx, EJWT_FX_PASSPHRASE, out, out),
+    assert_int_equal(hem_ext_list_run(ctx, EJWT_FX_PASSPHRASE, false, out, out),
                      HEM_EXT_OK);
     char *printed = slurp(out);
     assert_non_null(strstr(printed, KID_HEX));
@@ -266,7 +266,8 @@ static void test_list(void **state)
     free(printed);
 
     /* Usage without a passphrase. */
-    assert_int_equal(hem_ext_list_run(ctx, NULL, out, out), HEM_EXT_USAGE);
+    assert_int_equal(hem_ext_list_run(ctx, NULL, false, out, out),
+                     HEM_EXT_USAGE);
 
     fclose(out);
     ehem_ctx_destroy(ctx);

@@ -43,6 +43,7 @@
 #include "recover.h"
 #include "selftest.h"
 #include "sign.h"
+#include "tool_auth.h"
 
 #define MAX_LABEL_PREFIXES 32
 
@@ -89,6 +90,11 @@ typedef struct {
 
     /* reboot behavior (REQ-TOOL-014). */
     int         wait_back;    /* --wait: poll until the device answers again */
+
+    /* auth mode (REQ-TOOL-018). */
+    int         mobile;       /* --mobile: push-confirm instead of passphrase */
+    int         pw_flag;      /* --passphrase given explicitly (vs env) —
+                               * --mobile + --passphrase is a usage error */
 } cli_opts;
 
 static void usage(FILE *f)
@@ -102,6 +108,11 @@ static void usage(FILE *f)
         "  --cacert FILE    verify TLS against this CA/pinned certificate\n"
         "  --insecure       skip TLS verification (lab use only)\n"
         "  --passphrase PW  login passphrase (or set EHEM_PASSPHRASE)\n"
+        "  --mobile         authenticate via push confirmation on the paired\n"
+        "                   phone instead of a passphrase (any command needing\n"
+        "                   a bearer; NOT ext pair — pairing needs sub=\"U\").\n"
+        "                   Push not answered in time exits 13, rejected 14;\n"
+        "                   --timeout SEC sets the wait (default 60)\n"
         "  --force          cert-install / tls-recover: run even if the device\n"
         "                   is already healthy\n"
         "  --all            keys rm: target every non-protected key\n"
@@ -345,6 +356,7 @@ static int cmd_cert_install(const cli_opts *o)
 
     memset(&co, 0, sizeof co);
     co.passphrase    = o->passphrase;
+    co.mobile       = o->mobile;
     co.force         = o->force;
     co.insecure      = o->insecure;
     co.poll_attempts = HEM_CERT_DEFAULT_POLL_ATTEMPTS;
@@ -372,6 +384,7 @@ static int cmd_keys_list(const cli_opts *o)
 
     memset(&ko, 0, sizeof ko);
     ko.passphrase = o->passphrase;
+    ko.mobile     = o->mobile;
     ko.out        = stdout;
     ko.err        = stderr;
 
@@ -396,6 +409,7 @@ static int cmd_keys_rm(const cli_opts *o)
 
     memset(&ko, 0, sizeof ko);
     ko.passphrase   = o->passphrase;
+    ko.mobile       = o->mobile;
     ko.all          = o->all;
     ko.prefixes     = o->prefixes;
     ko.prefix_count = o->prefix_count;
@@ -431,6 +445,7 @@ static int cmd_keys_pub(const cli_opts *o, const char *kid)
 
     memset(&ko, 0, sizeof ko);
     ko.passphrase = o->passphrase;
+    ko.mobile     = o->mobile;
     ko.kid        = kid;
     ko.format     = o->raw ? HEM_KEYS_PUB_RAW
                            : (o->hex ? HEM_KEYS_PUB_HEX : HEM_KEYS_PUB_B64);
@@ -465,6 +480,7 @@ static int cmd_sign(const cli_opts *o, const char *kid)
 
     memset(&so, 0, sizeof so);
     so.passphrase = o->passphrase;
+    so.mobile     = o->mobile;
     so.kid        = kid;
     so.alg        = o->alg;
     so.in_path    = o->in_path;
@@ -503,6 +519,7 @@ static int cmd_random(const cli_opts *o, const char *count_arg)
 
     memset(&ro, 0, sizeof ro);
     ro.passphrase = o->passphrase;
+    ro.mobile     = o->mobile;
     ro.count_arg  = count_arg;
     ro.kid        = o->kid;
     ro.raw        = o->raw;
@@ -532,6 +549,7 @@ static int cmd_keys_gen(const cli_opts *o, const char *type)
 
     memset(&ko, 0, sizeof ko);
     ko.passphrase = o->passphrase;
+    ko.mobile     = o->mobile;
     ko.type       = type;
     ko.label      = o->label;
     ko.descr      = o->descr;
@@ -558,6 +576,7 @@ static int cmd_keys_update(const cli_opts *o, const char *kid)
 
     memset(&uo, 0, sizeof uo);
     uo.passphrase = o->passphrase;
+    uo.mobile     = o->mobile;
     uo.kid        = kid;
     uo.label      = o->label;
     uo.descr      = o->descr;
@@ -632,6 +651,7 @@ static int cmd_logs(const cli_opts *o, const char *subcmd, const char *arg)
     }
     memset(&lo, 0, sizeof lo);
     lo.passphrase = o->passphrase;
+    lo.mobile     = o->mobile;
     lo.out        = stdout;
     lo.err        = stderr;
 
@@ -660,23 +680,23 @@ static int cmd_reboot(const cli_opts *o, int wait_back)
     ehem_rc rc;
     int ret;
 
-    if (o->passphrase == NULL || o->passphrase[0] == '\0') {
-        fprintf(stderr, "error: no passphrase — pass --passphrase or set "
-                        "EHEM_PASSPHRASE\n");
+    if (!o->mobile && (o->passphrase == NULL || o->passphrase[0] == '\0')) {
+        fprintf(stderr, "error: no passphrase — pass --passphrase / set "
+                        "EHEM_PASSPHRASE, or use --mobile\n");
         return 2;
     }
     ret = make_ctx(o, &ctx);
     if (ret != 0) {
         return ret;
     }
-    rc = ehem_login(ctx, o->passphrase);
+    rc = hem_tool_login(ctx, o->passphrase, o->mobile != 0, stderr);
     if (rc == EHEM_OK) {
         rc = ehem_system_reboot(ctx);
     }
     if (rc != EHEM_OK) {
         print_last_error(ctx, rc, "reboot");
         ehem_ctx_destroy(ctx);
-        return 1;
+        return hem_tool_auth_exit(rc, stderr, 1);
     }
     print_cert_notice(ctx);
     ehem_ctx_destroy(ctx);
@@ -755,11 +775,12 @@ static int cmd_ext(const cli_opts *o, const char *subcmd)
         hem_ext_pair_opts po;
         memset(&po, 0, sizeof po);
         po.passphrase = o->passphrase;
+        po.mobile     = o->mobile;
         po.notify_url = o->notify_url;
         po.no_qr      = o->no_qr;
         ret = hem_ext_pair_run(ctx, &po);
     } else if (strcmp(subcmd, "list") == 0) {
-        ret = hem_ext_list_run(ctx, o->passphrase, NULL, NULL);
+        ret = hem_ext_list_run(ctx, o->passphrase, o->mobile != 0, NULL, NULL);
     } else if (strcmp(subcmd, "login") == 0) {
         hem_ext_login_opts lo;
         memset(&lo, 0, sizeof lo);
@@ -790,6 +811,7 @@ static int cmd_tls_recover(const cli_opts *o)
     }
     memset(&ro, 0, sizeof ro);
     ro.passphrase   = o->passphrase;
+    ro.mobile       = o->mobile;
     ro.force        = o->force;
     ro.poll_delay_ms = HEM_RECOVER_POLL_DELAY_MS;
     ro.out          = stdout;
@@ -814,6 +836,7 @@ static int cmd_selftest(const cli_opts *o)
     }
     memset(&so, 0, sizeof so);
     so.passphrase = o->passphrase;
+    so.mobile     = o->mobile;
     so.out        = stdout;
     so.err        = stderr;
 
@@ -848,8 +871,12 @@ int main(int argc, char **argv)
             o.cacert = a + 9;
         } else if (strcmp(a, "--passphrase") == 0 && i + 1 < argc) {
             o.passphrase = argv[++i];
+            o.pw_flag = 1;
         } else if (strncmp(a, "--passphrase=", 13) == 0) {
             o.passphrase = a + 13;
+            o.pw_flag = 1;
+        } else if (strcmp(a, "--mobile") == 0) {
+            o.mobile = 1;
         } else if (strcmp(a, "--force") == 0) {
             o.force = 1;
         } else if (strcmp(a, "--all") == 0) {
@@ -952,6 +979,14 @@ int main(int argc, char **argv)
 
     if (o.cacert != NULL && o.insecure) {
         fprintf(stderr, "error: --cacert and --insecure are mutually exclusive\n");
+        return 2;
+    }
+    if (o.mobile && o.pw_flag) {
+        /* implements: REQ-TOOL-018 — the explicit flags conflict; a
+         * passphrase from the ENVIRONMENT is simply outranked by --mobile
+         * (hem.env is commonly auto-sourced). */
+        fprintf(stderr,
+                "error: --mobile and --passphrase are mutually exclusive\n");
         return 2;
     }
     if (cmd == NULL) {

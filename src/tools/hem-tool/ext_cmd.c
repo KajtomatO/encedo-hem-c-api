@@ -6,6 +6,7 @@
 #define _POSIX_C_SOURCE 199309L   /* nanosleep / struct timespec under -std=c99 */
 
 #include "ext_cmd.h"
+#include "tool_auth.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -206,6 +207,15 @@ int hem_ext_pair_run(ehem_ctx *ctx, const hem_ext_pair_opts *o)
     }
     out = or_stdout(o->out);
     err = or_stderr(o->err);
+    if (o->mobile) {
+        /* implements: REQ-TOOL-018 — pairing is passphrase-ONLY: the device
+         * demands sub="U" for the pairing trio (REQ-AUTH-006), and mobile
+         * bearers carry sub=base64(kid) (REQ-AUTH-007). */
+        fprintf(err, "error: ext pair cannot use --mobile — the device "
+                     "accepts pairing changes only from a passphrase login "
+                     "(sub=\"U\"); pass --passphrase / set EHEM_PASSPHRASE\n");
+        return HEM_EXT_USAGE;
+    }
     if (o->passphrase == NULL) {
         fprintf(err, "error: ext pair needs a passphrase "
                      "(--passphrase / EHEM_PASSPHRASE)\n");
@@ -226,7 +236,9 @@ int hem_ext_pair_run(ehem_ctx *ctx, const hem_ext_pair_opts *o)
     }
     ehem_checkin_result_free(ci);
 
-    if (ehem_login(ctx, o->passphrase) != EHEM_OK ||
+    /* Passphrase-only by design (mobile rejected above) — still routed
+     * through the shared chokepoint (REQ-TOOL-018). */
+    if (hem_tool_login(ctx, o->passphrase, false, err) != EHEM_OK ||
         ehem_system_config(ctx, &cfg) != EHEM_OK) {
         fprintf(err, "error: login/config failed: %s\n",
                 ehem_last_error(ctx)->message);
@@ -329,27 +341,27 @@ done:
 /* ext list                                                                   */
 /* -------------------------------------------------------------------------- */
 
-int hem_ext_list_run(ehem_ctx *ctx, const char *passphrase, FILE *out,
-                     FILE *err_in)
+int hem_ext_list_run(ehem_ctx *ctx, const char *passphrase, bool mobile,
+                     FILE *out, FILE *err_in)
 {
     FILE *err = or_stderr(err_in);
     ehem_key_page *page = NULL;
     size_t i, shown = 0;
+    ehem_rc rc;
 
     out = or_stdout(out);
     if (ctx == NULL) {
         return HEM_EXT_USAGE;
     }
-    if (passphrase == NULL) {
-        fprintf(err, "error: ext list needs a passphrase "
-                     "(--passphrase / EHEM_PASSPHRASE)\n");
-        return HEM_EXT_USAGE;
+    rc = hem_tool_login(ctx, passphrase, mobile, err);
+    if (rc != EHEM_OK) {
+        return (rc == EHEM_ERR_ARG) ? HEM_EXT_USAGE : HEM_EXT_RUNTIME;
     }
-    if (ehem_login(ctx, passphrase) != EHEM_OK ||
-        ehem_key_search_all(ctx, (const uint8_t *)"EXTAID", 6,
-                            EHEM_KEY_SEARCH_PREFIX, &page) != EHEM_OK) {
+    rc = ehem_key_search_all(ctx, (const uint8_t *)"EXTAID", 6,
+                             EHEM_KEY_SEARCH_PREFIX, &page);
+    if (rc != EHEM_OK) {
         fprintf(err, "error: %s\n", ehem_last_error(ctx)->message);
-        return HEM_EXT_RUNTIME;
+        return hem_tool_auth_exit(rc, err, HEM_EXT_RUNTIME);
     }
 
     for (i = 0; i < page->listed; i++) {
@@ -393,7 +405,7 @@ int hem_ext_login_run(ehem_ctx *ctx, const hem_ext_login_opts *o)
      * times out (the broker pushes to nobody). */
     if (o->passphrase != NULL) {
         ehem_key_page *page = NULL;
-        if (ehem_login(ctx, o->passphrase) == EHEM_OK &&
+        if (hem_tool_login(ctx, o->passphrase, false, err) == EHEM_OK &&
             ehem_key_search_all(ctx, (const uint8_t *)"EXTAID", 6,
                                 EHEM_KEY_SEARCH_PREFIX, &page) == EHEM_OK) {
             size_t n = page->listed;

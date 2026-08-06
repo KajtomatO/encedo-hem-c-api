@@ -4,6 +4,7 @@
  * implements: REQ-TOOL-013
  */
 #include "selftest.h"
+#include "tool_auth.h"
 
 #include <time.h>
 
@@ -52,15 +53,9 @@ int hem_selftest_run(ehem_ctx *ctx, const hem_selftest_opts *o)
     ehem_rc rc;
     int ret;
 
-    if (o->passphrase == NULL || o->passphrase[0] == '\0') {
-        fprintf(err, "error: no passphrase — pass --passphrase or set "
-                     "EHEM_PASSPHRASE\n");
-        return HEM_SELFTEST_USAGE;
-    }
-    rc = ehem_login(ctx, o->passphrase);
+    rc = hem_tool_login(ctx, o->passphrase, o->mobile, err);
     if (rc != EHEM_OK) {
-        sreport(err, ctx, rc, "login");
-        return HEM_SELFTEST_RUNTIME;
+        return (rc == EHEM_ERR_ARG) ? HEM_SELFTEST_USAGE : HEM_SELFTEST_RUNTIME;
     }
 
     fprintf(err, "note: selftest re-runs the device's test battery on every "
@@ -68,7 +63,7 @@ int hem_selftest_run(ehem_ctx *ctx, const hem_selftest_opts *o)
     rc = ehem_system_selftest(ctx, &info);
     if (rc != EHEM_OK) {
         sreport(err, ctx, rc, "selftest");
-        return HEM_SELFTEST_RUNTIME;
+        return hem_tool_auth_exit(rc, err, HEM_SELFTEST_RUNTIME);
     }
 
     fprintf(out, "selftest: %s (fls_state %lld)\n",

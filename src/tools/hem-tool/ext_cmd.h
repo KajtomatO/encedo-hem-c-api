@@ -13,6 +13,7 @@
 #ifndef HEM_TOOL_EXT_CMD_H
 #define HEM_TOOL_EXT_CMD_H
 
+#include <stdbool.h>
 #include <stdio.h>
 
 #include "ehem/ehem.h"
@@ -35,6 +36,7 @@ enum {
 
 typedef struct {
     const char *passphrase;    /* pairing needs sub="U"; NULL → USAGE */
+    bool        mobile;       /* --mobile: push-confirm auth (REQ-TOOL-018) */
     const char *notify_url;    /* broker base; NULL → SDK default */
     int         no_qr;         /* print the QR payload JSON instead */
     unsigned    poll_attempts; /* register/check polls (0 → default) */
@@ -59,10 +61,11 @@ int hem_ext_pair_run(ehem_ctx *ctx, const hem_ext_pair_opts *o);
  * `hem-tool ext list`: every key whose descriptor starts with "EXTAID" —
  * kid, label ([PROTECTED] per the keys-list policy: real phones label
  * themselves "(iPhone)"/"(Android)"), and the pid (standard base64 of the
- * 32-byte descriptor suffix). Needs a passphrase (keymgmt:search).
+ * 32-byte descriptor suffix). Needs a bearer (keymgmt:search) — passphrase
+ * or --mobile (REQ-TOOL-018).
  */
-int hem_ext_list_run(ehem_ctx *ctx, const char *passphrase, FILE *out,
-                     FILE *err);
+int hem_ext_list_run(ehem_ctx *ctx, const char *passphrase, bool mobile,
+                     FILE *out, FILE *err);
 
 typedef struct {
     const char *scope;         /* NULL → "system:config" */

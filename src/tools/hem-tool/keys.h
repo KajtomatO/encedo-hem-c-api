@@ -30,6 +30,7 @@ enum {
 
 typedef struct {
     const char *passphrase;   /* login passphrase; NULL → HEM_KEYS_USAGE */
+    bool        mobile;       /* --mobile: push-confirm auth (REQ-TOOL-018) */
     FILE       *out;          /* listing output (NULL → stdout) */
     FILE       *err;          /* diagnostics (NULL → stderr) */
 } hem_keys_opts;
@@ -64,6 +65,7 @@ int hem_keys_list_run(ehem_ctx *ctx, const hem_keys_opts *o);
  * `prefixes` (neither / both → HEM_KEYS_USAGE). */
 typedef struct {
     const char        *passphrase;   /* login passphrase; NULL → HEM_KEYS_USAGE */
+    bool        mobile;       /* --mobile: push-confirm auth (REQ-TOOL-018) */
     int                all;          /* --all: every non-protected key */
     const char *const *prefixes;     /* --label-prefix values (label prefixes) */
     size_t             prefix_count;
@@ -83,6 +85,7 @@ typedef enum {
 
 typedef struct {
     const char         *passphrase;  /* login passphrase; NULL → HEM_KEYS_USAGE */
+    bool        mobile;       /* --mobile: push-confirm auth (REQ-TOOL-018) */
     const char         *kid;         /* 32 hex chars; NULL/malformed → USAGE, no I/O */
     hem_keys_pub_format format;
     FILE               *out;         /* summary / raw material (NULL → stdout) */
@@ -105,6 +108,7 @@ int hem_keys_pub_run(ehem_ctx *ctx, const hem_keys_pub_opts *o);
 /* Options for `keys gen` (REQ-TOOL-009). `type` and `label` are required. */
 typedef struct {
     const char *passphrase;   /* login passphrase; NULL → HEM_KEYS_USAGE */
+    bool        mobile;       /* --mobile: push-confirm auth (REQ-TOOL-018) */
     const char *type;         /* device type literal; NULL → USAGE */
     const char *label;        /* key label (SDK validates); NULL → USAGE */
     const char *descr;        /* optional descr — raw bytes are these string
@@ -145,6 +149,7 @@ int hem_keys_rm_run(ehem_ctx *ctx, const hem_keys_rm_opts *o);
  * (the firmware rejects a label-less update — REQ-KEY-007). */
 typedef struct {
     const char *passphrase;   /* login passphrase; NULL → HEM_KEYS_USAGE */
+    bool        mobile;       /* --mobile: push-confirm auth (REQ-TOOL-018) */
     const char *kid;          /* 32 hex chars; NULL/malformed → USAGE, no I/O */
     const char *label;        /* new label; NULL → USAGE */
     const char *descr;        /* new descr (these string bytes); NULL = keep the

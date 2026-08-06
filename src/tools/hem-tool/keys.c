@@ -7,6 +7,7 @@
  * main() and the fake transport from the unit test.
  */
 #include "keys.h"
+#include "tool_auth.h"
 
 #include <ctype.h>
 #include <stdlib.h>
@@ -96,23 +97,17 @@ int hem_keys_list_run(ehem_ctx *ctx, const hem_keys_opts *o)
     size_t i;
     unsigned long protected_count = 0;
 
-    if (o->passphrase == NULL) {
-        fprintf(err, "error: no passphrase — pass --passphrase or set "
-                     "EHEM_PASSPHRASE\n");
-        return HEM_KEYS_USAGE;
-    }
 
     /* Login is lazy (no traffic); the list call performs the auth exchange. */
-    rc = ehem_login(ctx, o->passphrase);
+    rc = hem_tool_login(ctx, o->passphrase, o->mobile, err);
     if (rc != EHEM_OK) {
-        report(err, ctx, rc, "login");
-        return HEM_KEYS_RUNTIME;
+        return (rc == EHEM_ERR_ARG) ? HEM_KEYS_USAGE : HEM_KEYS_RUNTIME;
     }
 
     rc = ehem_key_list_all(ctx, &page);
     if (rc != EHEM_OK) {
         report(err, ctx, rc, "keys list");
-        return HEM_KEYS_RUNTIME;
+        return hem_tool_auth_exit(rc, err, HEM_KEYS_RUNTIME);
     }
 
     for (i = 0; i < page->listed; i++) {
@@ -198,21 +193,15 @@ int hem_keys_pub_run(ehem_ctx *ctx, const hem_keys_pub_opts *o)
     const char *material_name;
     ehem_rc rc;
 
-    if (o->passphrase == NULL) {
-        fprintf(err, "error: no passphrase — pass --passphrase or set "
-                     "EHEM_PASSPHRASE\n");
-        return HEM_KEYS_USAGE;
-    }
     if (!hem_tool_kid_ok(o->kid)) {
         fprintf(err, "error: 'keys pub' needs a key id "
                      "(exactly 32 hex chars)\n");
         return HEM_KEYS_USAGE;
     }
 
-    rc = ehem_login(ctx, o->passphrase);
+    rc = hem_tool_login(ctx, o->passphrase, o->mobile, err);
     if (rc != EHEM_OK) {
-        report(err, ctx, rc, "login");
-        return HEM_KEYS_RUNTIME;
+        return (rc == EHEM_ERR_ARG) ? HEM_KEYS_USAGE : HEM_KEYS_RUNTIME;
     }
 
     rc = ehem_key_get(ctx, o->kid, &d);
@@ -222,7 +211,7 @@ int hem_keys_pub_run(ehem_ctx *ctx, const hem_keys_pub_opts *o)
     }
     if (rc != EHEM_OK) {
         report(err, ctx, rc, "keys pub");
-        return HEM_KEYS_RUNTIME;
+        return hem_tool_auth_exit(rc, err, HEM_KEYS_RUNTIME);
     }
 
     if (d->pubkey != NULL) {
@@ -313,11 +302,6 @@ int hem_keys_gen_run(ehem_ctx *ctx, const hem_keys_gen_opts *o)
     char kid[EHEM_KID_HEX_SIZE] = {0};
     ehem_rc rc;
 
-    if (o->passphrase == NULL) {
-        fprintf(err, "error: no passphrase — pass --passphrase or set "
-                     "EHEM_PASSPHRASE\n");
-        return HEM_KEYS_USAGE;
-    }
     if (o->type == NULL || o->type[0] == '\0') {
         fprintf(err, "error: 'keys gen' needs a key type "
                      "(e.g. ED25519, SECP256R1, AES256)\n");
@@ -347,10 +331,9 @@ int hem_keys_gen_run(ehem_ctx *ctx, const hem_keys_gen_opts *o)
         }
     }
 
-    rc = ehem_login(ctx, o->passphrase);
+    rc = hem_tool_login(ctx, o->passphrase, o->mobile, err);
     if (rc != EHEM_OK) {
-        report(err, ctx, rc, "login");
-        return HEM_KEYS_RUNTIME;
+        return (rc == EHEM_ERR_ARG) ? HEM_KEYS_USAGE : HEM_KEYS_RUNTIME;
     }
 
     memset(&p, 0, sizeof p);
@@ -374,7 +357,7 @@ int hem_keys_gen_run(ehem_ctx *ctx, const hem_keys_gen_opts *o)
     }
     if (rc != EHEM_OK) {
         report(err, ctx, rc, "keys gen");
-        return HEM_KEYS_RUNTIME;
+        return hem_tool_auth_exit(rc, err, HEM_KEYS_RUNTIME);
     }
 
     fprintf(out, "%s\n", kid);
@@ -482,21 +465,15 @@ int hem_keys_rm_run(ehem_ctx *ctx, const hem_keys_rm_opts *o)
                      "--label-prefix PREFIX\n");
         return HEM_KEYS_USAGE;
     }
-    if (o->passphrase == NULL) {
-        fprintf(err, "error: no passphrase — pass --passphrase or set "
-                     "EHEM_PASSPHRASE\n");
-        return HEM_KEYS_USAGE;
-    }
 
-    rc = ehem_login(ctx, o->passphrase);
+    rc = hem_tool_login(ctx, o->passphrase, o->mobile, err);
     if (rc != EHEM_OK) {
-        report(err, ctx, rc, "login");
-        return HEM_KEYS_RUNTIME;
+        return (rc == EHEM_ERR_ARG) ? HEM_KEYS_USAGE : HEM_KEYS_RUNTIME;
     }
     rc = ehem_key_list_all(ctx, &page);
     if (rc != EHEM_OK) {
         report(err, ctx, rc, "keys list");
-        return HEM_KEYS_RUNTIME;
+        return hem_tool_auth_exit(rc, err, HEM_KEYS_RUNTIME);
     }
 
     n = page->listed;
@@ -694,11 +671,6 @@ int hem_keys_update_run(ehem_ctx *ctx, const hem_keys_update_opts *o)
     size_t i;
     ehem_rc rc;
 
-    if (o->passphrase == NULL || o->passphrase[0] == '\0') {
-        fprintf(err, "error: no passphrase — pass --passphrase or set "
-                     "EHEM_PASSPHRASE\n");
-        return HEM_KEYS_USAGE;
-    }
     if (o->kid == NULL || !hem_tool_kid_ok(o->kid)) {
         fprintf(err, "error: keys update needs a 32-hex-char KID\n");
         return HEM_KEYS_USAGE;
@@ -709,10 +681,9 @@ int hem_keys_update_run(ehem_ctx *ctx, const hem_keys_update_opts *o)
         return HEM_KEYS_USAGE;
     }
 
-    rc = ehem_login(ctx, o->passphrase);
+    rc = hem_tool_login(ctx, o->passphrase, o->mobile, err);
     if (rc != EHEM_OK) {
-        report(err, ctx, rc, "login");
-        return HEM_KEYS_RUNTIME;
+        return (rc == EHEM_ERR_ARG) ? HEM_KEYS_USAGE : HEM_KEYS_RUNTIME;
     }
 
     /* The CURRENT label decides the protected classification, and carries the
@@ -720,7 +691,7 @@ int hem_keys_update_run(ehem_ctx *ctx, const hem_keys_update_opts *o)
     rc = ehem_key_list_all(ctx, &page);
     if (rc != EHEM_OK) {
         report(err, ctx, rc, "keys list");
-        return HEM_KEYS_RUNTIME;
+        return hem_tool_auth_exit(rc, err, HEM_KEYS_RUNTIME);
     }
     for (i = 0; i < page->listed; i++) {
         if (strcmp(page->entries[i].kid, o->kid) == 0) {
@@ -771,7 +742,7 @@ int hem_keys_update_run(ehem_ctx *ctx, const hem_keys_update_opts *o)
     }
     if (rc != EHEM_OK) {
         report(err, ctx, rc, "keys update");
-        return HEM_KEYS_RUNTIME;
+        return hem_tool_auth_exit(rc, err, HEM_KEYS_RUNTIME);
     }
     fprintf(out, "updated %s: label '%s'\n", o->kid, o->label);
     return HEM_KEYS_OK;
