@@ -539,13 +539,39 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   in KNOWN-ISSUES (dead ext/token bruteforce delay, ignored request
   `exp`, get-omits-descr for pairings, broker geolocation forwarding,
   the app's 15-minute bearer cap).
-- **M9 — full-spec conformance (1.0):** sweep of encedo-hem-api-doc for
-  uncovered endpoints/fields; the `system/upgrade` family deferred from
-  M7 (fw upload/check/install triad, ui triad, bootloader upload,
-  usbmode) plus `hem-tool fw-upgrade` (user decision 2026-07-17);
-  `stream/*` (commented out of fw v1.2.2 — re-check); DISCREPANCIES
-  reconciliation recorded in REQs; API reference docs; ABI freeze and
-  1.0 release.
+- **M9 — the 1.0 release** *(scope reshaped by user decision
+  2026-08-06)*: sweep of encedo-hem-api-doc for uncovered
+  endpoints/fields; DISCREPANCIES reconciliation recorded in REQs; API
+  reference docs; ABI freeze and the 1.0 release. Plus the hem-tool
+  1.0-polish set (user additions 2026-08-06, names/details finalized at
+  decomposition):
+  - **default device URL** when neither `--url` nor `EHEM_URL` is set —
+    proposed default `https://my.ence.do`, the product convention (the
+    provisioning cloud registers devices under the `my` domain:
+    `api.encedo.com/domain/register/my`), not a user-specific address;
+  - **mobile auth for every subcommand** via one flag — proposed name
+    `--mobile` (matches `ehem_login_mobile` and the start_point
+    HEM-CFG-3 vocabulary `auth = passphrase | mobile`; the user's
+    working name was `--app-auth`) — pushing to the paired phone
+    instead of requiring a passphrase, everywhere a bearer is needed;
+  - **auth-requirement transparency**: the tool documents which
+    commands need which access, grouped/sorted accordingly — none
+    (status, checkin), any bearer (keys, sign, logs, …, all
+    mobile-capable), passphrase-only (`ext pair` — the device demands
+    `sub="U"` for pairing);
+  - **help overhaul** — the flat global options list is disconnected
+    from its commands; proposed structure: per-command help
+    (`hem-tool <command> --help` / `hem-tool help <command>`) listing
+    only that command's options, a compact top-level command summary
+    with the auth-requirement grouping above, options shown under the
+    commands they belong to;
+  - **README update** to the 1.0 surface.
+- **M10 — 1.0+ (post-release firmware surface)** *(deferred out of the
+  release by user decision 2026-08-06)*: the `system/upgrade` family
+  deferred since M7 (fw upload/check/install triad, ui triad, bootloader
+  upload, usbmode) plus the `hem-tool fw-upgrade` orchestrator (user
+  decision 2026-07-17); `stream/*` (commented out of fw v1.2.2 —
+  re-check against whatever firmware then ships).
 
 ## 12. Risks & open questions
 
