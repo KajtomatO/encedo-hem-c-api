@@ -1,7 +1,7 @@
 ---
 id: REQ-SYS-002
 title: Binding for GET /api/system/version
-status: needs-reverify
+status: verified
 priority: must
 revision: 2
 source: encedo-hem-api-doc system/version.md (fetched 2026-07-15); ARCHITECTURE.md §11 M1; rev 2 = STEP-M9-015 blv relaxation (user decision 2026-08-06; fw api_system.c `if (bldr != NULL)` — the blv/blk/bls triple is conditional)

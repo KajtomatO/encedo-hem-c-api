@@ -7,9 +7,22 @@ traces:
   architecture: ["ARCHITECTURE.md#6-protocol-bindings", "ARCHITECTURE.md#11-milestones"]
 depends_on: ["STEP-M9-010"]
 evidence:
-  commits: []
-  tests: []
-  notes: null
+  commits: ["6dbde91", "be7c702"]
+  tests: ["tests/unit/test_system.c (test_version_no_bootloader_footer, test_version_missing_required now hwv-keyed, test_status_full tolerant-ignore of repo_stats)"]
+  notes: >
+    ./dev ci green (GCC+Clang, 38 CTest units incl. the new blv-less
+    case inside test_system; export/header gates) + ./dev test asan
+    clean. LIVE regression: hem-tool status against my.ence.do parses
+    status+version (bootloader triple present on the dev device).
+    §6.2 applied for the REQ-SYS-002 criterion rework: affected set =
+    REQ-SYS-002 (rev 2, needs-reverify -> verified at the post-step
+    regen), parse_version, test_system.c version cases; STEP-M1-070
+    stays in done/ (rework carried here, user-approved insertion).
+    REQ-SYS-001 rev 2 is a record-only touch (criteria already aligned
+    with the current doc). Public-struct removal (ehem_repo_stats)
+    is pre-1.0-legal; no consumer existed (grep-proven). MinGW leg =
+    CI-on-push (no new format strings / identifiers; cross-compile not
+    run locally this step).
 reopened: []
 cancelled: null
 ---
@@ -39,16 +52,16 @@ exactly the pre-freeze cleanup window. The status unit fixture keeps a
 `repo_stats` object to prove tolerant-ignore.
 
 **Definition of done**
-- [ ] parse_version treats `blv` (and `blk`/`bls`, already optional) as
+- [x] parse_version treats `blv` (and `blk`/`bls`, already optional) as
       optional; a blv-less fixture parses with `blv == NULL`; `hwv`/`fwv`
       stay required (unit tests).
-- [ ] `ehem_repo_stats`, `has_repo_stats`, and the status parse block
+- [x] `ehem_repo_stats`, `has_repo_stats`, and the status parse block
       are gone; the status fixture's `repo_stats` object is tolerantly
       ignored (unit test); grep shows no remaining consumer.
-- [ ] REQ-SYS-002 criterion reworded (rev 2, §6.2 recorded);
+- [x] REQ-SYS-002 criterion reworded (rev 2, §6.2 recorded);
       REQ-SYS-001 rationale updated (rev 2); docs/COVERAGE.md defect
       bullets marked fixed.
-- [ ] `./dev ci` + ASan green; export/header gates green; MinGW
-      cross-syntax clean.
-- [ ] TRACE regenerated; REQ-SYS-002 restored to verified from fresh
+- [x] `./dev ci` + ASan green; export/header gates green; MinGW leg =
+      CI-on-push (no new format strings/identifiers; recorded in notes).
+- [x] TRACE regenerated; REQ-SYS-002 restored to verified from fresh
       evidence.
