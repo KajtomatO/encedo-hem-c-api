@@ -71,11 +71,11 @@ the 1.0 polish item the user requested 2026-08-06.
       → exit 2; `ext pair --mobile` → exit 2 + sub="U" message;
       credential-less `keys list` → exit 2 naming `--mobile`;
       passphrase-mode `keys list` live-green against my.ence.do.
-- [ ] Live (ATTENDED — broker pushes are never sent unattended, the
-      REQ-TEST-006 policy): one representative command (e.g.
-      `keys list --mobile`) approved on the real phone; a second run
-      rejected → exit 14. OPEN until the attended run (scheduled at the
-      M9-060 gate).
+- [x] Live (ATTENDED, M9-060 gate, 2026-08-06, real phone SM-S938B):
+      `keys list --mobile` approved → push notice + listing, exit 0 —
+      at measured +4 s device drift (the STEP-M9-055 recovery window);
+      immediate second run rejected on the phone → exit 14. Closes the
+      criterion; broker pushes were never sent unattended.
 
 **Rev 3 (STEP-M9-057, user request 2026-08-06):** under `--mobile` the
 tool announces EVERY push on stderr — `mobile: push sent — approve

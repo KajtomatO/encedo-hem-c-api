@@ -7,9 +7,11 @@ traces:
   architecture: ["ARCHITECTURE.md#5-auth--session", "ARCHITECTURE.md#8-hem-tool-cli"]
 depends_on: ["STEP-M9-020"]
 evidence:
-  commits: []
-  tests: []
-  notes: null
+  commits: ["256dc5d"]
+  tests: ["tests/unit/test_confirm.c test_confirm_notice_hook (verifies: REQ-AUTH-010)"]
+  notes: >
+    Attended live leg at the M9-060 gate (2026-08-06): notice printed
+    before the push, one line per scope. ci+asan green (41 units).
 reopened: []
 cancelled: null
 ---
@@ -31,15 +33,16 @@ untouched). ext login keeps its own richer push line; the hook is set
 only under `--mobile`, so no double-printing there.
 
 **Definition of done**
-- [ ] `ehem_options.confirm_notice`/`confirm_notice_arg` (append-only,
+- [x] `ehem_options.confirm_notice`/`confirm_notice_arg` (append-only,
       EHEM_OPT_HAS-guarded copy); fired once per delivered push incl.
       after the drift-recovery re-fire; NULL default = off.
-- [ ] Unit (test_confirm.c): hook receives the requested scope + the
+- [x] Unit (test_confirm.c): hook receives the requested scope + the
       effective timeout, exactly once per begin (incl. the recovery
-      path); silent when unset.
-- [ ] hem-tool prints the stderr notice under `--mobile`; usage/help
+      path); silent when unset. — test_confirm_notice_hook
+- [x] hem-tool prints the stderr notice under `--mobile`; usage/help
       unchanged (M9-030 registry already documents --mobile).
-- [ ] REQ-AUTH-010 + REQ-TOOL-018 rev bumps record the hook/notice;
+- [x] REQ-AUTH-010 + REQ-TOOL-018 rev bumps record the hook/notice;
       API-GUIDE auth section mentions it.
-- [ ] `./dev ci` + ASan green; live: user sees the notice on the next
-      --mobile run.
+- [x] `./dev ci` + ASan green; live (ATTENDED, M9-060 gate,
+      2026-08-06): user saw `mobile: push sent — approve
+      "keymgmt:list"...` before the push landed; approve run exit 0.

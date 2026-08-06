@@ -7,9 +7,20 @@ traces:
   architecture: ["ARCHITECTURE.md#5-auth--session", "ARCHITECTURE.md#11-milestones"]
 depends_on: ["STEP-M9-020"]
 evidence:
-  commits: []
-  tests: []
-  notes: null
+  commits: ["c0d6586"]
+  tests: ["tests/unit/test_confirm.c test_begin_drift_recovery (verifies: REQ-AUTH-009 — new dead-window case: iat=now+8 fires check-in + re-fire; far-future and no-evidence cases unchanged)"]
+  notes: >
+    Diagnosis from live gate-prep failures (logs get --mobile 401 at
+    broker event/new): device drift measured +14 s then +22 s
+    (~4.8 s/min = the known 8% RTC), i.e. INSIDE the rev-2 15 s
+    evidence gate while the broker already rejects — and the user's
+    later random --mobile succeeded exactly when drift crossed 15 s
+    and the recovery engaged (its check-in also explains the fresh
+    resync trace). Fix: EXT_BROKER_IAT_FUTURE_SKEW=2 /
+    EXT_BROKER_IAT_PAST_SKEW=15 (asymmetric; user decision "threshold
+    only" — wait-out variant declined; accepted residual: a re-fired
+    authreq can still land +1..2 s ahead of the broker right after a
+    resync). ./dev ci 41/41 GCC+Clang + ASan green.
 reopened: []
 cancelled: null
 ---
@@ -36,12 +47,14 @@ succeeded exactly because drift had crossed 15 s and the recovery finally
 engaged.
 
 **Definition of done**
-- [ ] proto_ext.c: future-drift evidence gate > 2 s (past stays 15 s),
+- [x] proto_ext.c: future-drift evidence gate > 2 s (past stays 15 s),
       constants + comment record today's live evidence.
-- [ ] test_confirm.c: regression for the previously-dead window (authreq
+- [x] test_confirm.c: regression for the previously-dead window (authreq
       iat = now+8 → check-in + re-fire happen); existing far-future and
       no-evidence cases stay green.
-- [ ] REQ-AUTH-009 rev 3 records the narrowed tolerance + asymmetric
+- [x] REQ-AUTH-009 rev 3 records the narrowed tolerance + asymmetric
       gate; KNOWN-ISSUES mitigation text updated.
-- [ ] `./dev ci` + ASan green; live: `--mobile` works in the fresh
-      post-sync window (user-verified at the gate).
+- [x] `./dev ci` + ASan green; live (ATTENDED, M9-060 gate,
+      2026-08-06): `keys list --mobile` APPROVED at measured +4 s drift
+      — inside the formerly-dead (0,15] window — notice + listing,
+      exit 0; the old gate would have hard-failed here.
