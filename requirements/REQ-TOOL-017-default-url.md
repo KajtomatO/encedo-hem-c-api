@@ -1,7 +1,7 @@
 ---
 id: REQ-TOOL-017
 title: hem-tool default device URL
-status: approved
+status: verified
 priority: should
 revision: 1
 source: user decision 2026-08-06 (M9 scope reshape, ARCHITECTURE.md §11; proposed default confirmed at M9 decomposition)
@@ -39,12 +39,16 @@ the user requested 2026-08-06. The stderr notice keeps the fallback
 honest for scripts.
 
 **Acceptance criteria:**
-- [ ] URL resolution (flag > env > default, plus the notice decision)
-      lives in hem-tool-core and a unit test covers all three
-      precedence levels.
-- [ ] With no `--url` and no `EHEM_URL`, `hem-tool status` targets
-      `https://my.ence.do` and prints the stderr notice exactly once;
-      with either source present, no notice is printed.
-- [ ] Top-level help documents the default next to `--url`/`EHEM_URL`.
-- [ ] Live: `hem-tool status` with a clean environment reaches the dev
-      device (which serves my.ence.do) with no URL arguments.
+- [x] URL resolution (flag > env > default, plus the notice decision)
+      lives in hem-tool-core (registry.c hem_tool_resolve_url) and a
+      unit test covers all three precedence levels
+      (tests/unit/test_registry.c, 2026-08-06).
+- [x] With no `--url` and no `EHEM_URL`, `hem-tool status` targets
+      `https://my.ence.do` and prints the stderr notice exactly once
+      (resolution runs once per invocation, stdout untouched); with
+      either source present, no notice (unit + live smoke 2026-08-06).
+- [x] Top-level help documents the default next to `--url`/`EHEM_URL`
+      (registry SHARED_OPTIONS; asserted in test_registry.c).
+- [x] Live (2026-08-06): `hem-tool status` with a clean environment
+      reached the dev device via the default URL — notice printed,
+      status + version rendered.

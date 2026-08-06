@@ -81,6 +81,10 @@ if(TARGET hem-tool-core)
   # REQ-TOOL-018: the shared login chokepoint + --mobile outcome exits.
   ehem_add_unit_test(test_tool_auth SOURCES test_tool_auth.c)
   target_link_libraries(test_tool_auth PRIVATE hem-tool-core)
+
+  # REQ-TOOL-017/019/020: command registry, help rendering, URL resolution.
+  ehem_add_unit_test(test_registry SOURCES test_registry.c)
+  target_link_libraries(test_registry PRIVATE hem-tool-core)
 endif()
 
 # REQ-SYS-004, REQ-SYS-005: config GET / cert install / reboot bindings.

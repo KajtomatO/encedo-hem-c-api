@@ -1,7 +1,7 @@
 ---
 id: REQ-TOOL-019
 title: hem-tool auth-requirement transparency in the command listing
-status: approved
+status: verified
 priority: should
 revision: 1
 source: user decision 2026-08-06 (M9 scope reshape, ARCHITECTURE.md §11)
@@ -39,12 +39,17 @@ listing makes the tool's security model legible at a glance and
 documents the one real device constraint (pairing is passphrase-only).
 
 **Acceptance criteria:**
-- [ ] Top-level help renders the three groups with one-line headers
-      that say what the group means (e.g. "needs a bearer — passphrase
-      or --mobile").
-- [ ] Unit: every registered command carries an auth class; the
-      rendered listing places each command under its class; adding a
-      command without a class fails the test (registry completeness).
-- [ ] The auth class shown for a command matches what its
-      implementation enforces (spot-checked in the unit test via the
-      shared login helper's mode for at least one command per group).
+- [x] Top-level help renders the three groups with meaningful headers
+      (none / bearer: "passphrase or --mobile" / passphrase-only:
+      "the device demands sub=\"U\""), in that order
+      (test_registry.c test_auth_classes, 2026-08-06).
+- [x] Unit: every registered command carries an auth class and full
+      descriptions (test_registry_complete walks the table — a new
+      command with missing fields fails); the rendered listing places
+      status under none and ext pair under passphrase-only
+      (test_registry.c, 2026-08-06).
+- [x] The auth class shown matches enforced behavior, one command per
+      group: status/checkin never log in (no login call), keys list
+      accepts either credential (test_tool_auth.c mobile run), ext pair
+      rejects --mobile (test_tool_auth.c) — spot-checks in
+      test_registry.c test_auth_classes (2026-08-06).

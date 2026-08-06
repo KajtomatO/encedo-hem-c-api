@@ -173,6 +173,7 @@ if(EHEM_BUILD_TOOL)
     src/tools/hem-tool/logs.c
     src/tools/hem-tool/random.c
     src/tools/hem-tool/recover.c
+    src/tools/hem-tool/registry.c
     src/tools/hem-tool/selftest.c
     src/tools/hem-tool/sign.c
     src/tools/hem-tool/tool_auth.c

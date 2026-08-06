@@ -41,6 +41,7 @@
 #include "logs.h"
 #include "random.h"
 #include "recover.h"
+#include "registry.h"
 #include "selftest.h"
 #include "sign.h"
 #include "tool_auth.h"
@@ -95,95 +96,17 @@ typedef struct {
     int         mobile;       /* --mobile: push-confirm instead of passphrase */
     int         pw_flag;      /* --passphrase given explicitly (vs env) —
                                * --mobile + --passphrase is a usage error */
+
+    /* help (REQ-TOOL-020): -h/--help defers until the command is known so
+     * `hem-tool keys rm --help` renders keys-rm help, not the top page. */
+    int         want_help;
 } cli_opts;
 
+/* REQ-TOOL-019/020: the top-level page renders from the command
+ * registry (single source of truth in hem-tool-core). */
 static void usage(FILE *f)
 {
-    fprintf(f,
-        "hem-tool " /* version printed at runtime below */ "\n"
-        "usage: hem-tool [options] <command>\n"
-        "\n"
-        "options:\n"
-        "  --url URL        device base URL (or set EHEM_URL)\n"
-        "  --cacert FILE    verify TLS against this CA/pinned certificate\n"
-        "  --insecure       skip TLS verification (lab use only)\n"
-        "  --passphrase PW  login passphrase (or set EHEM_PASSPHRASE)\n"
-        "  --mobile         authenticate via push confirmation on the paired\n"
-        "                   phone instead of a passphrase (any command needing\n"
-        "                   a bearer; NOT ext pair — pairing needs sub=\"U\").\n"
-        "                   Push not answered in time exits 13, rejected 14;\n"
-        "                   --timeout SEC sets the wait (default 60)\n"
-        "  --force          cert-install / tls-recover: run even if the device\n"
-        "                   is already healthy\n"
-        "  --all            keys rm: target every non-protected key\n"
-        "  --label-prefix P keys rm: target keys whose label starts with P\n"
-        "                   (repeatable; exact match required for protected keys)\n"
-        "  --dry-run        keys rm: show what would be deleted, delete nothing\n"
-        "  --yes            keys rm: skip the bulk prompt (never for protected keys)\n"
-        "  --hex            keys pub / sign: print the output as lowercase hex\n"
-        "  --raw            keys pub / sign / random: ONLY raw bytes on stdout\n"
-        "  --kid KID        random: use this existing AES key (else a transient\n"
-        "                   EHEMTEST key is created and removed)\n"
-        "  --alg ALG        sign: algorithm selector (e.g. Ed25519,\n"
-        "                   SHA256WithECDSA); omitted → derived from the key type\n"
-        "  --in FILE        sign: read the message from FILE (default: stdin)\n"
-        "  --sigctx STR     sign: RFC 8032 context for the Ed*ctx/Ed*ph selectors\n"
-        "  --label LABEL    keys gen/update: the key label (required)\n"
-        "  --descr STR      keys gen/update: opaque description blob (update:\n"
-        "                   omitted keeps the stored one, \"\" clears it)\n"
-        "  --mode MODE      keys gen: ECDH | ExDSA | ECDH,ExDSA (NIST-P/K only;\n"
-        "                   default ECDH,ExDSA so the key can sign)\n"
-        "  --out FILE       logs get: write the log file here (default: stdout)\n"
-        "  --no-qr          ext pair: print the QR payload JSON, no terminal QR\n"
-        "  --scope S        ext login: scope to confirm (default system:config)\n"
-        "  --note STR       ext login: free text shown in the phone's push UI\n"
-        "  --timeout SEC    ext login: wait this long for the answer (default 60)\n"
-        "  --notify-url URL notification-broker base override (ext family)\n"
-        "  --wait           reboot: block until the device answers again (~180 s max)\n"
-        "  -h, --help       show this help\n"
-        "\n"
-        "commands:\n"
-        "  status           print device status and version\n"
-        "  checkin          run the check-in handshake (refreshes the device\n"
-        "                   TLS certificate and clock via the Encedo cloud)\n"
-        "  cert-install     harvest the cloud certificate and install it on a\n"
-        "                   device whose firmware cannot apply it itself\n"
-        "                   (authenticates, installs, REBOOTS, and verifies)\n"
-        "  keys list        list every key on the device (read-only), marking\n"
-        "                   protected device keys [PROTECTED] (needs a passphrase)\n"
-        "  keys pub KID     print a key's public material and typed metadata\n"
-        "                   (read-only; --hex / --raw select the encoding)\n"
-        "  keys gen TYPE    generate a key of TYPE (e.g. ED25519, SECP256R1,\n"
-        "                   AES256); needs --label; prints the new key id\n"
-        "  keys rm          delete keys: --all (non-protected) or --label-prefix P;\n"
-        "                   protected keys need an exact label + per-key 'YES'\n"
-        "  keys update KID  rewrite a key's label (--label, required) and descr\n"
-        "                   (--descr); renaming a PROTECTED key needs a per-key\n"
-        "                   'YES' (--yes is ignored for them)\n"
-        "  logs list        list audit-log file ids (one per line)\n"
-        "  logs get ID      download one audit-log file (--out FILE or stdout)\n"
-        "  logs key         print the Ed25519 log-signing key + signed nonce\n"
-        "  selftest         run the device self-test battery; exit 0 = healthy,\n"
-        "                   3 = device reports a fail state\n"
-        "  ext pair         pair the Encedo mobile app: renders the QR to scan in\n"
-        "                   the terminal and completes the registration (needs a\n"
-        "                   passphrase; --no-qr prints the payload instead)\n"
-        "  ext list         list paired authenticators (needs a passphrase)\n"
-        "  ext login        demo of the push-confirm login: sends a push and\n"
-        "                   blocks for the answer; exit 0 approved, 3 timeout,\n"
-        "                   4 rejected, 5 nothing paired\n"
-        "  reboot           reboot the device (DISRUPTIVE — interrupts every\n"
-        "                   user); --wait polls until it answers again\n"
-        "  tls-recover      restore HTTPS after a wipe: fetch a key+cert bundle\n"
-        "                   from the provisioning cloud, install it, and reboot\n"
-        "                   (DISRUPTIVE; run against the device's http:// URL;\n"
-        "                   --force reinstalls even when HTTPS is up)\n"
-        "  sign KID         sign a message (stdin or --in FILE, max 2048 bytes)\n"
-        "                   with the device key KID; prints the signature as\n"
-        "                   base64 (--hex / --raw select the encoding)\n"
-        "  random N         print N bytes (1..4096) of device hardware RNG as\n"
-        "                   lowercase hex (--raw for binary); uses --kid KID's\n"
-        "                   AES key, else a transient EHEMTEST key\n");
+    hem_help_top(f, ehem_version());
 }
 
 /* REQ-TOOL-002: a security-relevant event (the device presented an invalid
@@ -856,7 +779,8 @@ int main(int argc, char **argv)
     int ret;
 
     memset(&o, 0, sizeof o);
-    o.url = getenv("EHEM_URL");           /* --url overrides below */
+    /* o.url stays flag-only; env + default resolve AFTER parsing
+     * (hem_tool_resolve_url, REQ-TOOL-017). */
     o.passphrase = getenv("EHEM_PASSPHRASE");  /* --passphrase overrides below */
 
     for (i = 1; i < argc; i++) {
@@ -958,8 +882,7 @@ int main(int argc, char **argv)
         } else if (strcmp(a, "--raw") == 0) {
             o.raw = 1;
         } else if (strcmp(a, "-h") == 0 || strcmp(a, "--help") == 0) {
-            usage(stdout);
-            return 0;
+            o.want_help = 1;   /* deferred: per-command help needs the command */
         } else if (a[0] == '-') {
             fprintf(stderr, "error: unknown option '%s'\n", a);
             usage(stderr);
@@ -989,10 +912,43 @@ int main(int argc, char **argv)
                 "error: --mobile and --passphrase are mutually exclusive\n");
         return 2;
     }
+
+    /* REQ-TOOL-020: `hem-tool help [<command> [<sub>]]` and the deferred
+     * `<command> --help` spelling — both render from the registry. */
+    if (cmd != NULL && strcmp(cmd, "help") == 0) {
+        if (subcmd == NULL) {
+            usage(stdout);
+            return 0;
+        }
+        if (hem_help_command(stdout, subcmd, arg) != 0) {
+            fprintf(stderr, "error: unknown command '%s%s%s'\n",
+                    subcmd, arg != NULL ? " " : "", arg != NULL ? arg : "");
+            return 2;
+        }
+        return 0;
+    }
+    if (o.want_help) {
+        if (cmd == NULL) {
+            usage(stdout);
+            return 0;
+        }
+        if (hem_help_command(stdout, cmd, subcmd) != 0) {
+            fprintf(stderr, "error: unknown command '%s%s%s'\n",
+                    cmd, subcmd != NULL ? " " : "",
+                    subcmd != NULL ? subcmd : "");
+            return 2;
+        }
+        return 0;
+    }
+
     if (cmd == NULL) {
         usage(stderr);
         return 2;
     }
+
+    /* REQ-TOOL-017: --url > EHEM_URL > the built-in default (with a
+     * one-line stderr notice when the default is used). */
+    o.url = hem_tool_resolve_url(o.url, getenv("EHEM_URL"), stderr);
 
     if (strcmp(cmd, "status") == 0) {
         ret = cmd_status(&o);

@@ -1,7 +1,7 @@
 ---
 id: REQ-TOOL-020
 title: hem-tool per-command help
-status: approved
+status: verified
 priority: should
 revision: 1
 source: user decision 2026-08-06 (M9 scope reshape, ARCHITECTURE.md §11)
@@ -47,12 +47,16 @@ and the tool doubles as the SDK's living documentation (ARCHITECTURE
 §8) — help quality is documentation quality. User decision 2026-08-06.
 
 **Acceptance criteria:**
-- [ ] Every registered command (all 20, both family depths) yields
-      per-command help via both spellings; unit test walks the registry
-      and asserts non-empty synopsis/description/options for each.
-- [ ] Unit: a sign-only option (`--sigctx`) appears in `help sign` and
-      NOT in `help reboot`; shared connection options appear in both.
-- [ ] Top-level help contains no command-specific option lines and
-      fits one screen (~40 lines).
-- [ ] `hem-tool help nosuch` errors with the unknown name, nonzero
-      exit.
+- [x] Every registered command (19 commands, both family depths)
+      yields per-command help via both spellings (`<cmd> --help`
+      deferred-parse + `help <cmd>`); test_registry_complete walks the
+      registry asserting non-empty synopsis/summary/details
+      (test_registry.c + offline smoke, 2026-08-06).
+- [x] Unit: `--sigctx` appears in `help sign` and NOT in
+      `help reboot`; both point at the shared connection/auth options
+      (test_registry.c test_per_command_help, 2026-08-06).
+- [x] Top-level help contains no command-specific option lines
+      (--sigctx/--wait/--label-prefix asserted absent) and renders at
+      38 lines (≤45 asserted; test_registry.c test_top_page_shape).
+- [x] `hem-tool help nosuch` errors naming the unknown command, exit
+      2 (hem_help_command → -1 unit-tested; main.c smoke 2026-08-06).
