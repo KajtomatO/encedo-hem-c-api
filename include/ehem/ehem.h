@@ -43,9 +43,22 @@ extern "C" {
 #endif
 
 /*
- * Runtime library version, e.g. "0.1.0" (semantic versioning; 0.x until
- * full-spec conformance — ARCHITECTURE.md §4). The returned pointer is a
- * static string owned by the library; the caller must not free it.
+ * Runtime library version, e.g. "1.0.0" (semantic versioning). The returned
+ * pointer is a static string owned by the library; the caller must not
+ * free it.
+ *
+ * THE 1.x ABI PROMISE (REQ-API-008, frozen at 1.0.0): within a major
+ * version,
+ *   - exported symbols are never removed or change signature (additions
+ *     are minor bumps; the export gate enforces the frozen baseline);
+ *   - ehem_options grows append-only under the abi_size discipline below
+ *     (zero always means "default"), so binaries built against an older
+ *     minor keep working in both directions;
+ *   - ehem_rc values are append-only, never renumbered;
+ *   - library-allocated output structs (ehem_*_info et al.) may grow in
+ *     minors — callers never size them, and each is released by its own
+ *     ehem_*_free().
+ * Anything breaking these rules is a MAJOR version.
  */
 EHEM_API const char *ehem_version(void);
 

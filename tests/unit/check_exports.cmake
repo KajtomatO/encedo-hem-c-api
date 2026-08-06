@@ -1,9 +1,16 @@
-# check_exports.cmake — assert the shared library exports ONLY ehem_* symbols.
+# check_exports.cmake — assert the shared library exports ONLY ehem_* symbols,
+# and (from 1.0 on) that every FROZEN-baseline symbol is still exported.
 #
-# verifies: REQ-API-006
+# verifies: REQ-API-006, REQ-API-008
 #
 # Run as a CTest (label `unit`):
-#   cmake -DEHEM_SHARED_LIB=<path-to-libencedo-hem.so|.dll> -P check_exports.cmake
+#   cmake -DEHEM_SHARED_LIB=<path-to-libencedo-hem.so|.dll> \
+#         [-DEHEM_EXPORTS_BASELINE=<exports_baseline_1.0.txt>] \
+#         -P check_exports.cmake
+#
+# The baseline (REQ-API-008, the 1.0 ABI freeze): removing or renaming a
+# symbol listed there is a MAJOR-version break and fails this gate; new
+# symbols beyond the baseline are fine (minor-version additions).
 #
 # Linux/macOS: parse `nm -D --defined-only`.
 # Windows (MinGW): parse the export table from `objdump -p`.
@@ -117,6 +124,28 @@ endif()
 
 if(NOT "ehem_version" IN_LIST _symbols)
   message(FATAL_ERROR "ehem_version is not exported")
+endif()
+
+# REQ-API-008: the 1.0 ABI baseline — every frozen symbol must still exist.
+if(DEFINED EHEM_EXPORTS_BASELINE)
+  if(NOT EXISTS "${EHEM_EXPORTS_BASELINE}")
+    message(FATAL_ERROR "baseline not found: ${EHEM_EXPORTS_BASELINE}")
+  endif()
+  file(STRINGS "${EHEM_EXPORTS_BASELINE}" _baseline)
+  set(_removed "")
+  foreach(_b IN LISTS _baseline)
+    if(_b MATCHES "^ehem_" AND NOT _b IN_LIST _symbols)
+      list(APPEND _removed "${_b}")
+    endif()
+  endforeach()
+  if(_removed)
+    message(FATAL_ERROR
+      "ABI BREAK: 1.0-frozen symbol(s) missing from the shared library: "
+      "${_removed}\nRemoving or changing a frozen symbol requires a MAJOR "
+      "version bump (REQ-API-008).")
+  endif()
+  list(LENGTH _baseline _nbase)
+  message(STATUS "ABI baseline OK — all ${_nbase} frozen 1.0 symbols present")
 endif()
 
 message(STATUS "export check OK — exported: ${_symbols}")

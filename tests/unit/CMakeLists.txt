@@ -138,6 +138,7 @@ set_tests_properties(public_headers_dep_free PROPERTIES LABELS unit)
 add_test(NAME export_symbols
   COMMAND ${CMAKE_COMMAND}
     -DEHEM_SHARED_LIB=$<TARGET_FILE:encedo-hem>
+    -DEHEM_EXPORTS_BASELINE=${CMAKE_CURRENT_SOURCE_DIR}/exports_baseline_1.0.txt
     -P ${CMAKE_CURRENT_SOURCE_DIR}/check_exports.cmake)
 set_tests_properties(export_symbols PROPERTIES LABELS unit)
 

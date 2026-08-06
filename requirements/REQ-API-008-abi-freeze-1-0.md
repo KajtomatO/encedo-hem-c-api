@@ -1,7 +1,7 @@
 ---
 id: REQ-API-008
 title: 1.0 ABI freeze and versioning
-status: approved
+status: verified
 priority: must
 revision: 1
 source: user decision 2026-08-06 (M9 scope reshape, ARCHITECTURE.md §11 "ABI freeze and the 1.0 release"); ARCHITECTURE.md §4 (semver, size/version discipline decided before 1.0)
@@ -46,17 +46,25 @@ The disciplines were designed in from M1 (abi_size, append-only enum,
 hidden visibility + export macro) — the release makes them normative.
 
 **Acceptance criteria:**
-- [ ] Version reads 1.0.0 everywhere it is observable: `ehem_version()`
-      (unit test), pkg-config/CMake package version, shared-lib
-      SOVERSION/VERSION properties.
-- [ ] The 1.x ABI promise (the four bullets above) is documented in
-      ehem.h and the API reference; ARCHITECTURE §4's "decided before
-      1.0" wording is resolved to "decided" (§6.2 impact analysis if
-      the edit alters traced meaning).
-- [ ] The export check's expected-symbol list is frozen as the 1.0
-      baseline: the gate fails on symbol *removal or change*, not just
-      on unexpected additions (extend the existing check if needed).
-- [ ] Unit: `ehem_options_init` + an abi_size smaller than
-      sizeof(ehem_options) still yields working defaults (the
-      backward-compat direction of the discipline) — test exists or is
-      added.
+- [x] Version reads 1.0.0 everywhere observable (2026-08-06):
+      `ehem_version()` returns "1.0.0" (test_version asserts it matches
+      the project version); CMake package version file carries 1.0.0;
+      shared lib builds as libencedo-hem.so.1.0.0 with SONAME
+      libencedo-hem.so.1. (No separate pkg-config .pc file is shipped —
+      the CMake package config is the consumption path.)
+- [x] The 1.x ABI promise is documented at ehem_version() in ehem.h
+      and in docs/API-GUIDE.md (abi_size conventions section);
+      ARCHITECTURE §4 reworded to "decided and shipped" — a recording
+      of the implemented discipline, not a decision change, so no REQ
+      reverification followed (mini §6.2: affected set = §4-tracing
+      REQs, all verified, no criterion references the old wording;
+      reported in chat 2026-08-06).
+- [x] tests/unit/exports_baseline_1.0.txt freezes the 101 exported
+      1.0 symbols; check_exports.cmake gained the baseline pass —
+      removal/rename fails the gate (negative-tested with a fabricated
+      baseline symbol, exit 1, 2026-08-06); additions stay legal
+      (minor bumps).
+- [x] Unit: the backward-compat direction was already pinned —
+      tests/unit/test_context.c drives an old-ABI options block whose
+      abi_size predates request_pace_ms and asserts defaults apply
+      (plus the abi_size==0 rejection case). No new test needed.

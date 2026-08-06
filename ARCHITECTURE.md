@@ -235,11 +235,15 @@ graph TD
   `EHEM_ERR_ARG`, `EHEM_ERR_NOMEM`, `EHEM_ERR_UNSUPPORTED`. The last
   HTTP status, device error payload, and a human-readable message are
   retrievable from the context (`ehem_last_error`).
-- **ABI/versioning:** semantic versioning, `0.x` until full spec coverage;
-  `ehem_version()` returns the runtime version. Public structs that may
-  grow carry a size/version discipline decided before 1.0. Shared library
-  builds export only `ehem_*` symbols (visibility hidden by default;
-  MinGW/Windows uses an export macro).
+- **ABI/versioning:** semantic versioning; 1.0.0 froze the public ABI
+  (REQ-API-008, 2026-08-06). `ehem_version()` returns the runtime
+  version. The growable-struct discipline is decided and shipped:
+  `ehem_options` carries `abi_size` (stamped by `ehem_options_init()`,
+  append-only growth, zero = default); `ehem_rc` is append-only;
+  library-allocated outputs may grow in minors. Shared library builds
+  export only `ehem_*` symbols (visibility hidden by default;
+  MinGW/Windows uses an export macro), and the export gate enforces the
+  frozen 1.0 symbol baseline — removals/renames are major-version breaks.
 
 ## 5. Auth & session
 
