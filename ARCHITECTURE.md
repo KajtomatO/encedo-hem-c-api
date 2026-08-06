@@ -570,6 +570,25 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
     with the auth-requirement grouping above, options shown under the
     commands they belong to;
   - **README update** to the 1.0 surface.
+
+  **Gate PASSED (2026-08-06):** all six M9 REQs verified plus two
+  inserted fixes (STEP-M9-015 sweep defects; STEP-M9-055 broker-drift
+  dead window) and one inserted feature (STEP-M9-057 mobile push
+  notices, user request). Version **1.0.0**, ABI frozen (SONAME `.so.1`,
+  101-symbol export baseline enforced by the gate). Conformance:
+  docs/COVERAGE.md dispositions every documented endpoint — no unbound
+  surface remains except the recorded deliberate exclusions and the M10
+  deferrals. Live gate evidence: fresh `./dev ci` 41/41 + ASan;
+  attended `--mobile` approve/reject on the real phone (exit 0/14, at
+  +4 s drift — the STEP-M9-055 window); full `./dev test it` **23/23
+  green (337 s)** after one occurrence of the known sustained-load
+  stall + power-cycle (KNOWN-ISSUES updated — the stall persists
+  without the quarantined matrix); the two long-carried open criteria
+  RESOLVED live at the gate (REQ-KEY-008: dedup does NOT persist across
+  delete/reboot on a healthy repo — the July observation was debris
+  state; REQ-SYS-008: attended shutdown ran as the gate's last live act,
+  device dark until power-cycle). Zero deliberately-open acceptance
+  criteria remain across all 84 REQs.
 - **M10 — 1.0+ (post-release firmware surface)** *(deferred out of the
   release by user decision 2026-08-06)*: the `system/upgrade` family
   deferred since M7 (fw upload/check/install triad, ui triad, bootloader

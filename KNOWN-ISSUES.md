@@ -108,6 +108,15 @@ kills the device; run the matrix deliberately via `./dev test it -d`
 with a power-cycle on standby. Root cause still needs device UART +
 firmware work (watchdog re-enable) upstream.
 
+### 2026-08-06 (M9 gate): the intermittent variant persists without the matrix
+
+At the M9/1.0 gate, a matrix-FREE `./dev test it` sweep stalled the
+device hard at test 15 of 23 (`test_sign_live` onward all UNREACHABLE),
+after a full day of heavy M9 traffic at ~12 h uptime — confirming the
+quarantine removed the reliable trigger but not the underlying
+sustained-load hang. Post-power-cycle the identical sweep ran **23/23
+green (337 s)** on the first try (the established recovery pattern).
+
 ## OPEN — Device clock runs ~8% fast; login breaks after ~12 h; check-in resyncs
 
 **Status:** open (device/firmware issue; workaround known, SDK/consumer

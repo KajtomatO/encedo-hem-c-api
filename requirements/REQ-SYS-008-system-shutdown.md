@@ -3,8 +3,8 @@ id: REQ-SYS-008
 title: Binding for /api/system/shutdown — stop network and USB services
 status: verified
 priority: must
-revision: 1
-source: ARCHITECTURE.md §11 (M7: system group), §1 (dangerous operations API-complete but test-gated); encedo-hem-api-doc system/shutdown.md; encedo_firmware api_system.c:2230 api_get_system_shutdown (fw v1.2.2); approved 2026-07-17
+revision: 2
+source: ARCHITECTURE.md §11 (M7: system group), §1 (dangerous operations API-complete but test-gated); encedo-hem-api-doc system/shutdown.md; encedo_firmware api_system.c:2230 api_get_system_shutdown (fw v1.2.2); approved 2026-07-17; rev bump 2026-08-06 = attended M9-060 gate run resolves the shutdown criterion
 depends_on: ["REQ-AUTH-002", "REQ-AUTH-003", "REQ-SYS-005"]
 supersedes: null
 superseded_by: null
@@ -47,6 +47,11 @@ reboot, with an even stronger gate because recovery is physical.
       asserted); 409/403 mapping.
 - [x] Export/header gates green; binding documented with the
       physical-recovery warning.
-- [ ] OPEN (attended manual only — may remain unchecked indefinitely):
-      live shutdown observed to stop the device until power-cycle;
-      recorded here if ever run.
+- [x] ~~OPEN~~ **RESOLVED (attended, M9-060 gate, 2026-08-06, user
+      decision to run it):** scripted `ehem_system_shutdown()` after a
+      passphrase login returned EHEM_OK (the empty-200 accepted-shape),
+      and the device went DARK — status probes UNREACHABLE from ~3 s
+      after the call. Run as the deliberately-LAST live act of the 1.0
+      gate (after the 23/23 sweep and the KEY-008 probe); recovery =
+      the user's physical power-cycle, as designed. Never entered the
+      disruptive suite — attended-manual policy holds.

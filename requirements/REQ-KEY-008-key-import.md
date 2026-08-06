@@ -3,8 +3,8 @@ id: REQ-KEY-008
 title: Binding for /api/keymgmt/import — import an external public key
 status: verified
 priority: must
-revision: 3
-source: ARCHITECTURE.md §11 (M7: keymgmt import); encedo-hem-api-doc keymgmt/import.md; encedo_firmware api_keymgmt.c:1123 api_post_keymgmt_import (fw v1.2.2; REPO_ImportKey body not in the source checkout); encedo-hem-python-api keymgmt.py import_key (406 = dedup finding); approved 2026-07-17
+revision: 4
+source: ARCHITECTURE.md §11 (M7: keymgmt import); encedo-hem-api-doc keymgmt/import.md; encedo_firmware api_keymgmt.c:1123 api_post_keymgmt_import (fw v1.2.2; REPO_ImportKey body not in the source checkout); encedo-hem-python-api keymgmt.py import_key (406 = dedup finding); approved 2026-07-17; rev bump 2026-08-06 = M9-060 gate probe resolves the dedup-across-reboot criterion
 depends_on: ["REQ-AUTH-002", "REQ-AUTH-003", "REQ-KEY-006"]
 supersedes: null
 superseded_by: null
@@ -61,17 +61,18 @@ the device arbitrates.
       pubkey → HTTP 406 with an EMPTY payload — the dedup rejection
       (python finding confirmed; the device gives no error body to
       distinguish dedup from other repo rejects).
-- [ ] OPEN (new observation, full-sweep run 2026-07-18): the dedup
-      rejection appears to match material from keys that were imported
-      and then DELETED, once the device has REBOOTED in between — the
-      morning's constants (P-256 generator, RFC 8032 pubkey, the ML-KEM
-      pattern, the fixed X25519 seed) all 406'd on re-import after
-      reboots despite clean deletes, while same-day re-imports without
-      an intervening reboot had succeeded. Suggests the boot-time repo
-      scan indexes non-compacted deleted slots. Confirm at the gate
-      (import fresh material → delete → reboot → re-import → expect
-      406 if the hypothesis holds); tests now use per-run-unique
-      material so this cannot produce false failures.
+- [x] ~~OPEN~~ **RESOLVED (M9-060 gate probe, 2026-08-06):** on the
+      post-wipe HEALTHY repo the hypothesis does NOT hold — scripted
+      probe (RFC 8032 §7.1 Ed25519 pubkey, deterministic): import →
+      200; delete → 200; re-import SAME boot → 200; delete → reboot →
+      check-in → re-import → **200** (and every import returned the
+      SAME kid, so kids are content-derived). Verdict: the 2026-07-18
+      dedup-across-reboot observations were a property of the
+      DEBRIS-laden pre-wipe repo state (~1560 non-compacted deleted
+      slots), not general firmware behavior. Dedup (406) applies only
+      to material that currently EXISTS in the repo. Tests keep
+      per-run-unique material as belt-and-braces against future repo
+      degradation.
 - [x] ~~OPEN~~ **RESOLVED (live probe 2026-07-18):** type support on fw
       v1.2.2-DIAG — SECP256R1 (SEC1 COMPRESSED point, 33 B, mode
       ECDH,ExDSA) ACCEPTED; ED25519 (raw 32 B) ACCEPTED; **MLKEM512 with
