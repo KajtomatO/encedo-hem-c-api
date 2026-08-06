@@ -11,7 +11,7 @@ evidence:
   tests: []
   notes: null
 reopened: []
-cancelled: null
+cancelled: "M9 decomposed 2026-08-06 (user-approved) — replaced by STEP-M9-010..060 per §5.3 step 5"
 ---
 
 **Goal:** Milestone M9 per ARCHITECTURE.md §11 (scope reshaped
