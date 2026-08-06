@@ -55,6 +55,11 @@ struct ehem_ctx {
     /* Mobile confirmation timeout (REQ-AUTH-010), per token acquisition. */
     long  confirm_timeout_ms;
 
+    /* Mobile push notice hook (REQ-AUTH-010): fired by the confirm engine
+     * once per delivered push. NULL = off. */
+    void (*confirm_notice)(const char *scope, long timeout_ms, void *arg);
+    void  *confirm_notice_arg;
+
     /* Auth / session (REQ-AUTH-001, REQ-AUTH-002). `auth` is lazily allocated
      * by ehem_login() and torn down (zeroizing credentials) by ehem_logout() /
      * ehem_ctx_destroy(). no_credential_retention mirrors the option. */

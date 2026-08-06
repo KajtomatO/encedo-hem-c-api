@@ -677,6 +677,15 @@ ehem_rc ehem_ext_confirm_begin(ehem_ctx *ctx, const char *notify_url,
         ehem_ext_confirm_cancel(c);
         return rc;
     }
+
+    /* Push notice (REQ-AUTH-010): the broker accepted the request — tell
+     * the consumer WHAT is now waiting on the phone (once per push, incl.
+     * after a drift-recovery re-fire). */
+    if (ctx->confirm_notice != NULL) {
+        ctx->confirm_notice(c->scope, ctx->confirm_timeout_ms,
+                            ctx->confirm_notice_arg);
+    }
+
     *out = c;
     return EHEM_OK;
 }

@@ -3,8 +3,8 @@ id: REQ-TOOL-018
 title: hem-tool --mobile — mobile auth for every bearer-needing subcommand
 status: verified
 priority: should
-revision: 2
-source: user decision 2026-08-06 (M9 scope reshape, ARCHITECTURE.md §11; user's working name "--app-auth", finalized "--mobile" to match ehem_login_mobile and the start_point HEM-CFG-3 vocabulary `auth = passphrase | mobile`); rev 2 = STEP-M9-020 no-pairing rework (user decision 2026-08-06: "timeout + hint" — nothing-paired is not detectable in pure mobile mode) + exit codes 13/14 recorded
+revision: 3
+source: user decision 2026-08-06 (M9 scope reshape, ARCHITECTURE.md §11; user's working name "--app-auth", finalized "--mobile" to match ehem_login_mobile and the start_point HEM-CFG-3 vocabulary `auth = passphrase | mobile`); rev 2 = STEP-M9-020 no-pairing rework (user decision 2026-08-06: "timeout + hint" — nothing-paired is not detectable in pure mobile mode) + exit codes 13/14 recorded; rev 3 = STEP-M9-057 push notices (user request 2026-08-06)
 depends_on: ["REQ-AUTH-006", "REQ-AUTH-010", "REQ-TOOL-016"]
 supersedes: null
 superseded_by: null
@@ -76,3 +76,10 @@ the 1.0 polish item the user requested 2026-08-06.
       `keys list --mobile`) approved on the real phone; a second run
       rejected → exit 14. OPEN until the attended run (scheduled at the
       M9-060 gate).
+
+**Rev 3 (STEP-M9-057, user request 2026-08-06):** under `--mobile` the
+tool announces EVERY push on stderr — `mobile: push sent — approve
+"<scope>" on your phone (waiting up to N s)` — one line per scope
+acquisition (multi-scope commands explain each push), via the
+REQ-AUTH-010 confirm_notice hook set in make_ctx. `ext login` keeps its
+own richer push line (the hook is set only under --mobile).

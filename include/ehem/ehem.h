@@ -204,6 +204,20 @@ typedef struct ehem_options {
      * default, per the abi_size discipline) selects the built-in 60 000 ms.
      */
     long           confirm_timeout_ms;  /* 0 = default 60 s */
+
+    /*
+     * Mobile push notice (REQ-AUTH-010, append-only). When confirm_notice
+     * is non-NULL the confirm engine calls it once per DELIVERED push —
+     * right after the notification broker accepted the confirmation
+     * request, before the wait begins — with the scope being confirmed,
+     * the effective wait bound in milliseconds, and confirm_notice_arg
+     * verbatim. One call per scope acquisition, so a multi-scope command
+     * triggers one notice per push. UI hook only: called synchronously on
+     * the requesting thread; it must not call back into the SDK. NULL
+     * (the default) disables it.
+     */
+    void (*confirm_notice)(const char *scope, long timeout_ms, void *arg);
+    void  *confirm_notice_arg;
 } ehem_options;
 
 /*

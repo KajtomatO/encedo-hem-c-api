@@ -3,8 +3,8 @@ id: REQ-AUTH-010
 title: Mobile login mode — ehem_login_mobile and confirm_timeout_ms option
 status: verified
 priority: must
-revision: 2
-source: user decision 2026-07-22 (M8 decomposition); start_point REQUIREMENTS-hem.md HEM-SDK-2 (mobile base auth), HEM-AUTH-2 (block until confirmation or confirm_timeout), HEM-CFG-3 (confirm_timeout config key)
+revision: 3
+source: user decision 2026-07-22 (M8 decomposition); start_point REQUIREMENTS-hem.md HEM-SDK-2 (mobile base auth), HEM-AUTH-2 (block until confirmation or confirm_timeout), HEM-CFG-3 (confirm_timeout config key); rev bump 2026-08-06 = STEP-M9-057 confirm_notice hook (user request at gate prep)
 depends_on: ["REQ-AUTH-001", "REQ-AUTH-002", "REQ-AUTH-009"]
 supersedes: null
 superseded_by: null
@@ -70,3 +70,13 @@ bindings and one place where the two auth modes diverge.
       login`) → push approved → config data returned (hostname
       my.ence.do, user Debug HSM); deny → `EHEM_ERR_USER_REJECTED`
       (exit 4); unanswered → timeout (exit 3).
+
+**STEP-M9-057 addition (2026-08-06, user request):** append-only
+`ehem_options.confirm_notice(scope, timeout_ms, arg)` +
+`confirm_notice_arg` — the confirm engine invokes it once per DELIVERED
+push (after the broker accepted the confirmation request, including
+after a drift-recovery re-fire; never on a failed begin) with the
+REQUESTED scope and the effective wait bound. NULL default = off; the
+library never prints — consumers own the UI (hem-tool prints its
+`mobile:` line from it). Unit: tests/unit/test_confirm.c
+test_confirm_notice_hook.

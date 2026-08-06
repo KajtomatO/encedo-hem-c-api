@@ -148,6 +148,10 @@ with expiry-aware silent refresh.
   itself always needs a passphrase login (the device demands `sub="U"`).
 - The pollable confirm engine (`ehem_ext_confirm_begin/poll/wait/cancel`)
   serves consumers that cannot block.
+- The optional `ehem_options.confirm_notice` hook fires once per
+  DELIVERED push (scope + effective wait) so a UI can announce what is
+  waiting on the phone — hem-tool's `mobile:` lines use it; the library
+  itself never prints.
 
 ### Scopes
 

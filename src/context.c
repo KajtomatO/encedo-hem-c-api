@@ -100,6 +100,8 @@ void ehem_options_init(ehem_options *opts)
     opts->no_credential_retention = 0; /* retain the passphrase for silent refresh */
     opts->checkin_on_login   = 0;      /* no proactive session-start check-in */
     opts->confirm_timeout_ms = 0;      /* 0 = built-in 60 s (REQ-AUTH-010) */
+    opts->confirm_notice     = NULL;   /* no push notices by default */
+    opts->confirm_notice_arg = NULL;
 }
 
 /* Copy options into the context, applying defaults for absent/zero fields.
@@ -159,6 +161,12 @@ static ehem_rc apply_options(ehem_ctx *ctx, const ehem_options *opts)
     }
     if (EHEM_OPT_HAS(opts, confirm_timeout_ms) && opts->confirm_timeout_ms > 0) {
         ctx->confirm_timeout_ms = opts->confirm_timeout_ms;
+    }
+    if (EHEM_OPT_HAS(opts, confirm_notice)) {
+        ctx->confirm_notice = opts->confirm_notice;
+    }
+    if (EHEM_OPT_HAS(opts, confirm_notice_arg)) {
+        ctx->confirm_notice_arg = opts->confirm_notice_arg;
     }
     if (EHEM_OPT_HAS(opts, checkin_on_login)) {
         ctx->checkin_on_login = (opts->checkin_on_login != 0);

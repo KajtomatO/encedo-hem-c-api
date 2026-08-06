@@ -41,6 +41,18 @@ static ehem_ctx *ctx_with(ehem_transport *fake)
     return ctx;
 }
 
+/* Push-notice capture (REQ-AUTH-010 confirm_notice hook, STEP-M9-057). */
+static char g_notice_scope[64];
+static long g_notice_timeout;
+static int  g_notice_calls;
+static void capture_notice(const char *scope, long timeout_ms, void *arg)
+{
+    (void)arg;
+    snprintf(g_notice_scope, sizeof g_notice_scope, "%s", scope);
+    g_notice_timeout = timeout_ms;
+    g_notice_calls++;
+}
+
 /* Queue the three begin() legs: session GET, device authreq, event/new. */
 static void push_begin(ehem_transport *fake)
 {
@@ -67,6 +79,48 @@ static void push_approved(ehem_transport *fake)
     snprintf(reply, sizeof reply, "{\"token\":\"hdr.%s.sig\"}", seg);
     assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200, reply),
                      0);
+}
+
+/* verifies: REQ-AUTH-010 — confirm_notice fires exactly once per DELIVERED
+ * push with the REQUESTED scope and the effective wait bound; never on a
+ * failed begin; NULL default stays silent (every other case in this file). */
+static void test_confirm_notice_hook(void **state)
+{
+    (void)state;
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    ehem_options opts;
+    ehem_ctx *ctx = NULL;
+    ehem_options_init(&opts);
+    opts.transport = fake;
+    opts.confirm_timeout_ms = 12000;
+    opts.confirm_notice = capture_notice;
+    assert_int_equal(ehem_ctx_create("https://hem.local", &opts, &ctx),
+                     EHEM_OK);
+    g_notice_calls = 0;
+
+    push_begin(fake);
+    ehem_ext_confirm *c = NULL;
+    assert_int_equal(ehem_ext_confirm_begin(ctx, NULL, "keymgmt:list", NULL,
+                                            NULL, &c), EHEM_OK);
+    assert_int_equal(g_notice_calls, 1);
+    assert_string_equal(g_notice_scope, "keymgmt:list");
+    assert_int_equal((int)g_notice_timeout, 12000);
+    ehem_ext_confirm_cancel(c);
+    c = NULL;
+
+    /* A failed begin (opaque authreq, terminal 401) never notifies. */
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"epk\":\"" B64_32 "\"}"), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200,
+        "{\"authreq\":\"a.b.c\",\"epk\":\"" B64_32 "\"}"), 0);
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 401, NULL), 0);
+    assert_int_equal(ehem_ext_confirm_begin(ctx, NULL, "s", NULL, NULL, &c),
+                     EHEM_ERR_AUTH_FAILED);
+    assert_int_equal(g_notice_calls, 1);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
 }
 
 static void test_begin_poll_approved_seeds_cache(void **state)
@@ -346,6 +400,7 @@ int main(void)
         cmocka_unit_test(test_denied_is_terminal_without_token_call),
         cmocka_unit_test(test_wait_timeout_and_resume),
         cmocka_unit_test(test_begin_drift_recovery),
+        cmocka_unit_test(test_confirm_notice_hook),
         cmocka_unit_test(test_transient_poll_error_is_retryable),
     };
     if (ehem_global_init() != EHEM_OK) {

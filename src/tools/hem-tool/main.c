@@ -138,6 +138,15 @@ static void print_last_error(ehem_ctx *ctx, ehem_rc rc, const char *what)
     }
 }
 
+/* implements: REQ-TOOL-018 — every mobile push announces what it asks for
+ * (one line per scope acquisition; multi-scope commands push more than once). */
+static void mobile_push_notice(const char *scope, long timeout_ms, void *arg)
+{
+    (void)arg;
+    fprintf(stderr, "mobile: push sent — approve \"%s\" on your phone "
+                    "(waiting up to %ld s)\n", scope, timeout_ms / 1000);
+}
+
 /* Create a context from the CLI connection options. Returns 0 and writes *out
  * on success; nonzero exit code otherwise (message already printed). */
 static int make_ctx(const cli_opts *o, ehem_ctx **out)
@@ -154,6 +163,10 @@ static int make_ctx(const cli_opts *o, ehem_ctx **out)
     if (o->timeout_sec > 0) {
         /* implements: REQ-TOOL-016 (ext login --timeout → confirm wait) */
         opts.confirm_timeout_ms = o->timeout_sec * 1000L;
+    }
+    if (o->mobile) {
+        /* ext login keeps its own richer push line (hook set only here). */
+        opts.confirm_notice = mobile_push_notice;
     }
     if (o->insecure) {
         opts.tls_mode = EHEM_TLS_INSECURE;
