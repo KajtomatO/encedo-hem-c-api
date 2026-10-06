@@ -83,8 +83,9 @@ static void test_live_token_scope_claim(void **state)
     payload = decode_bearer_payload(token);
     assert_non_null(payload);                 /* a well-formed 3-segment JWT */
 
-    /* The device echoes the requested scope and stamps the derivation identity
-     * in `sub` (U = User-key/PBKDF2, M = Manager/Argon2 — see REQ-AUTH-001). */
+    /* The device echoes the requested scope and stamps in `sub` which stored
+     * key matched the token's `iss` (U = UserKey, M = MasterKey — firmware
+     * api_auth.c; see REQ-AUTH-001). */
     assert_true(ehem_json_get_string(payload, "scope", &scope_claim));
     assert_string_equal(scope_claim, LIVE_SCOPE);
     assert_true(ehem_json_get_string(payload, "sub", &sub));

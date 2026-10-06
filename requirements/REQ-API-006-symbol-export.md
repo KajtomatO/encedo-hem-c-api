@@ -3,7 +3,7 @@ id: REQ-API-006
 title: Shared library exports only ehem_-prefixed symbols
 status: verified
 priority: must
-revision: 1
+revision: 2
 source: ARCHITECTURE.md §4 (ABI/versioning); §1 (artifact name and prefix, user decision 2026-07-15)
 depends_on: []
 supersedes: null
@@ -18,8 +18,8 @@ Shared-library builds SHALL export only symbols carrying the `ehem_`
 prefix.
 
 **Rationale:** A PKCS#11 module embedding this SDK gets loaded into
-arbitrary host processes; leaking internal or vendored symbols (cJSON,
-Argon2) invites collisions. Visibility is hidden by default on GCC/Clang;
+arbitrary host processes; leaking internal or vendored symbols (cJSON)
+invites collisions. Visibility is hidden by default on GCC/Clang;
 MinGW/Windows uses an export macro. The `ehem_` prefix is fixed to avoid
 clashing with the `hem_*` seam inside encedo-pkcs11.
 

@@ -132,6 +132,13 @@ vendored code. Watch out: X25519 public keys are exchanged in standard
 base64; wolfCrypt's curve25519 functions may need
 `EC25519_LITTLE_ENDIAN` ordering flags to match RFC 7748 byte order.
 
+*Correction (2026-10-06):* "the Manager's Argon2" above is wrong. The
+current Encedo Manager (`assets/build.js`, `pbkdf2KeyDerive`; encedo-manager
+`b33c236`) derives with the same PBKDF2-HMAC-SHA256 parameters this step
+implemented; the Argon2 description came from legacy Manager files the
+current Manager does not run. Argon2 is not supported (user decision
+2026-10-05). See ARCHITECTURE §12 risk 2.
+
 **Definition of done**
 - [x] Shim compiles into the library on GCC + Clang under `-Werror`; no
       wolfSSL symbol/header leaks into `include/ehem/` (header-check test
