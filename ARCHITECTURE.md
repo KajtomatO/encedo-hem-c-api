@@ -21,9 +21,10 @@ the encedo-hem-api-doc spec.
   vs. confirm timeout vs. expired credential vs. scope denied vs. network
   failure vs. device unreachable).
 - **Auth / session engine** — implements the eJWT challenge–response:
-  GET challenge → derive user key from passphrase (Argon2, `eid` as salt,
-  parameters as used by Encedo Manager — the authoritative reference for
-  the auth flow) → X25519 ECDH against the device's session public key →
+  GET challenge → derive user key from passphrase (PBKDF2-HMAC-SHA256,
+  `eid` as salt, parameters as used by Encedo Manager — the authoritative
+  reference for the auth flow) → X25519 ECDH against the device's session
+  public key →
   HMAC-SHA256-signed JWT → bearer token; caches tokens per scope with
   expiry, refreshes silently before expiration. Mobile-app confirmation
   flow is a late milestone but the session design reserves room for it
@@ -57,10 +58,8 @@ the encedo-hem-api-doc spec.
   three platforms; wrapped behind the transport vtable so it never leaks
   into the API.
 - **Crypto:** wolfSSL (wolfCrypt) — user decision 2026-07-15; provides
-  X25519, HMAC-SHA256, SHA-256, and RNG for the eJWT flow, and can also
-  serve as libcurl's TLS backend. wolfCrypt has no Argon2 (verified against
-  wolfSSL's kdf.h documentation), so the **Argon2 reference implementation
-  (phc-winner-argon2, CC0/Apache-2.0) is vendored** for the KDF step.
+  X25519, HMAC-SHA256, SHA-256, PBKDF2 and RNG for the eJWT flow, and can
+  also serve as libcurl's TLS backend. No other crypto library is needed.
 - **JSON:** cJSON, vendored (MIT, two files) — no extra system dependency
   for a small, stable need.
 - **Unit tests:** CMocka — pure C, cross-platform, built-in mocking.
@@ -116,14 +115,17 @@ the context.
 - **libcurl for HTTPS** — mature, portable; isolated behind the transport
   vtable so it never appears in public headers.
 - **wolfSSL (wolfCrypt) for crypto primitives** (user decision 2026-07-15)
-  — X25519, HMAC-SHA256, SHA-256, RNG; may also serve as libcurl's TLS
-  backend where we build libcurl ourselves.
-- **Vendored phc-winner-argon2** — wolfCrypt provides no Argon2; the
-  reference implementation (CC0/Apache-2.0, MIT-compatible) fills the gap.
-- **Argon2 as the KDF, per Encedo Manager** (user decision 2026-07-15) —
-  Encedo Manager is the authoritative auth-flow reference; the
-  PBKDF2-SHA256 variant seen in the API test suite is not planned unless
-  the device demands it.
+  — X25519, HMAC-SHA256, SHA-256, PBKDF2, RNG; may also serve as libcurl's
+  TLS backend where we build libcurl ourselves.
+- **PBKDF2-HMAC-SHA256 as the login KDF, per Encedo Manager** (user
+  decision 2026-07-15: Encedo Manager is the authoritative auth-flow
+  reference; corrected 2026-10-06) — 600 000 iterations, 32-byte output,
+  salt = the challenge `eid` string. The Manager (`assets/build.js`), the
+  HEM API test suite and the python client all derive this way. **Argon2
+  is not supported** (user decision 2026-10-05). Earlier revisions of this
+  document attributed an Argon2 derivation to the Manager and planned a
+  vendored phc-winner-argon2; that came from legacy Manager files the
+  current Manager does not run, and the library was never vendored.
 - **Vendored cJSON** — small, stable, MIT; avoids a system dependency.
 - **CMocka for unit tests** — pure C, cross-platform, mocking built in.
 - **Windows toolchain: MinGW / MSYS2** (user decision 2026-07-15) — GCC on
@@ -150,8 +152,9 @@ The **Encedo HEM** is a network cryptographic device (hardware encryption
 module) addressed by URL and driven over a REST/HTTPS API of roughly 50
 endpoints in six groups: `auth`, `keymgmt`, `crypto`, `system`, `logger`,
 `storage`. Authentication is a custom **eJWT** challenge–response: the
-client derives an X25519 keypair from the user passphrase (Argon2, device
-`eid` as salt), performs ECDH against the device's per-challenge session
+client derives an X25519 keypair from the user passphrase
+(PBKDF2-HMAC-SHA256, device `eid` as salt), performs ECDH against the
+device's per-challenge session
 key, and submits an HMAC-SHA256-signed JWT; the device returns a scoped
 bearer token with a TTL. Every subsequent call carries the token in the
 `Authorization` header. Some operations require narrower, per-key scopes.
@@ -193,7 +196,7 @@ graph TD
         API --> PROTO["Protocol bindings<br/>auth · keymgmt · crypto · system · logger · storage"]
         SES --> PROTO
         PROTO --> JSON["JSON codec<br/>(vendored cJSON)"]
-        SES --> CRY["Crypto shim<br/>wolfCrypt: X25519, HMAC-SHA256<br/>vendored Argon2"]
+        SES --> CRY["Crypto shim<br/>wolfCrypt: X25519, HMAC-SHA256, PBKDF2"]
         PROTO --> T["Transport vtable"]
         T --> CURL["libcurl HTTPS<br/>(default impl)"]
         T -.-> FAKE["Fake transport<br/>(unit tests)"]
@@ -206,7 +209,7 @@ graph TD
 | Public API | stable C surface, ownership rules, error enum | expose curl/wolfSSL/cJSON types |
 | Session engine | challenge–response, token cache per scope, silent refresh, logout | persist secrets to disk |
 | Protocol bindings | endpoint ↔ struct mapping, device error translation | talk to the network directly |
-| Crypto shim | thin wrapper over wolfCrypt + vendored Argon2 | implement primitives itself |
+| Crypto shim | thin wrapper over wolfCrypt | implement primitives itself |
 | Transport | one function: request in, response out | know about JSON or auth |
 | hem-tool | CLI over the public API only | reach into internals |
 
@@ -255,7 +258,7 @@ sequenceDiagram
     A->>S: ehem_login(ctx, passphrase)
     S->>D: GET /api/auth/token
     D-->>S: challenge {exp, spk, jti, eid, lbl}
-    S->>S: Argon2(passphrase, salt=eid) → X25519 keypair
+    S->>S: PBKDF2(passphrase, salt=eid) → X25519 keypair
     S->>S: ECDH(user_sk, spk) → shared secret
     S->>S: build JWT {jti, aud, exp, iat, iss, scope}, sign HMAC-SHA256
     S->>D: POST /api/auth/token {auth: eJWT}
@@ -265,15 +268,17 @@ sequenceDiagram
     S->>D: GET/POST keymgmt (Authorization: Bearer)
 ```
 
-- **KDF** (amended 2026-07-16, M2 decomposition): PBKDF2-HMAC-SHA256,
-  600 000 iterations, 32-byte output, salt = the challenge `eid` as its
-  raw UTF-8 base64 string — pinned to the python client, which
-  authenticates against the dev device (live-proven 2026-07-16). The
-  Manager instead derives with Argon2 (time=10, mem=8192 KiB, salt =
-  base64-DECODED `eid`); a device only accepts the derivation whose
-  public key registered its UserKey at init, so Argon2 is deferred to an
-  options-selectable KDF if a Manager-inited device must be supported
-  (§12 risk 2, REQ-AUTH-001).
+- **KDF** (amended 2026-07-16, M2 decomposition; corrected 2026-10-06):
+  PBKDF2-HMAC-SHA256, 600 000 iterations, 32-byte output, salt = the
+  challenge `eid` as its raw UTF-8 base64 string (not base64-decoded) —
+  pinned to the python client, which authenticates against the dev device
+  (live-proven 2026-07-16). Encedo Manager (`assets/build.js`,
+  `pbkdf2KeyDerive`) and the HEM API test suite derive identically, so all
+  reference clients produce the same key from the same passphrase —
+  Manager login to the dev device with the same passphrase succeeded
+  (attended check, 2026-10-06). A device accepts only the key registered
+  as its UserKey at init. Argon2 is not supported (§1; §12 risk 2;
+  REQ-AUTH-001).
 - **eJWT:** hand-rolled compact JWT encode (base64url-nopad segments +
   HMAC-SHA256 tag with the ECDH shared secret; hardcoded header
   `{"ecdh":"x25519","alg":"HS256","typ":"JWT"}` per the python client).
@@ -403,10 +408,9 @@ src/                   library sources
   proto_*.c            protocol bindings per API group
   transport.c          vtable + helpers
   transport_curl.c     libcurl implementation
-  crypto_shim.c        wolfCrypt + Argon2 wrappers
+  crypto_shim.c        wolfCrypt wrappers
   jwt.c                eJWT encode/decode
   vendor/cjson/        vendored cJSON
-  vendor/argon2/       vendored phc-winner-argon2
   tools/hem-tool/      CLI (inside src/ so implements-tags are greppable)
 tests/
   unit/
@@ -639,22 +643,28 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
    must comply with GPLv3 or use a commercial license; affects how
    encedo-pkcs11 (MIT) ships. *Resolved by:* Encedo confirming its
    licensing model before the first binary release.
-2. **Login-KDF discrepancy between official clients** (superseded the
-   original "Argon2 parameters not pinned", 2026-07-16): the Manager
-   derives with Argon2 (time=10, mem=8192 KiB, salt = base64-decoded
-   `eid`); the python client uses PBKDF2-HMAC-SHA256 (600 000 iterations,
-   salt = `eid` string) and the latter authenticates against the dev
-   device (live-proven 2026-07-16). The KDF is fixed per device at init
-   time by whichever client registered the UserKey. M2 ships PBKDF2 only;
-   Argon2 becomes an options-selectable KDF when a Manager-inited device
-   must be supported. **RESOLVED (M2 gate, STEP-M2-070, 2026-07-16):** the
-   dev device (my.ence.do) accepts the **PBKDF2-HMAC-SHA256 600k** derivation
-   and issues bearers with **`sub` = `U`** (UserKey identity, not Manager/
-   Argon2 `M`), TTL ~3600 s, requested scope echoed — verified live end to
-   end (`test_auth_live`, `test_config_live` green). The device is
-   UserKey/PBKDF2-initialised; Argon2 support stays deferred until a
-   Manager-initialised device is actually needed. Working parameters recorded
-   in REQ-AUTH-001.
+2. **Login KDF — CLOSED (2026-10-06).** Was "Login-KDF discrepancy between
+   official clients" (2026-07-16, itself superseding "Argon2 parameters
+   not pinned"). There is no discrepancy: the current Encedo Manager
+   (`assets/build.js` v0.68, `pbkdf2KeyDerive`; encedo-manager `b33c236`)
+   derives with PBKDF2-HMAC-SHA256, 600 000 iterations, salt = the `eid`
+   string — the same as the python client, the HEM API test suite and
+   this SDK. The earlier text described Argon2 code in the Manager's
+   legacy files (`assets/encedo.js` v0.67, `assets/core2.js`), which the
+   current Manager does not run. Live: the dev device (my.ence.do) accepts
+   the PBKDF2 login and issues bearers with `sub` = `U`, TTL ~3600 s,
+   requested scope echoed (M2 gate, STEP-M2-070, 2026-07-16;
+   `test_auth_live` again 2026-10-06), and Manager login to the same
+   device with the same passphrase succeeded (attended check,
+   2026-10-06) — the two derivations match. `sub` reports which stored key
+   matched the token's `iss` — `U` UserKey, `M` MasterKey (firmware
+   `api_auth.c:262-265`) — and says nothing about the KDF or the client
+   that initialised the device. **Argon2 is not supported** (user decision
+   2026-10-05). *Not known:* an older Manager release most likely did
+   derive with Argon2; a device initialised by one would reject this
+   SDK's login, and whether any is still in use cannot be told from the
+   repositories. Supporting one would be a new decision through
+   REQUIREMENTS-MANAGEMENT.md §6.2. Parameters: REQ-AUTH-001.
 3. **Per-KID scope-token encoding unknown** — HEM-SDK-3 expects per-KID
    scopes; the auth doc shows only a free-form `scope` claim. *Resolved
    by:* reading the crypto/keymgmt doc pages and device experiments

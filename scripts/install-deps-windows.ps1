@@ -19,8 +19,8 @@
            - git                             source glue
            - wolfssl                         crypto shim, M2+ (best-effort)
 
-    cJSON and phc-winner-argon2 are vendored into the tree (ARCHITECTURE.md
-    Sec.1, Sec.10) and are intentionally NOT installed here.
+    cJSON is vendored into the tree (ARCHITECTURE.md Sec.1, Sec.10) and is
+    intentionally NOT installed here.
 
 .PARAMETER MsysRoot
     MSYS2 install root. Default: C:\msys64.

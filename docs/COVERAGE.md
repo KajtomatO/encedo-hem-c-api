@@ -294,8 +294,10 @@ mapped to where this project records the divergence:
   reconstructed from the tester (REQ-OPS-006/009), empty-success bodies
   (REQ-KEY-004/007, REQ-SYS-004/010), logger-DELETE dead dispatch
   (REQ-SYS-009), exact `keymgmt:use:<kid>` scope truth (REQ-KEY-003 +
-  the OPS REQs), KDF split PBKDF2-vs-Argon2 (REQ-AUTH-001,
-  ARCHITECTURE §12 risk 2), type-string vocabulary (REQ-KEY-005),
+  the OPS REQs), the registries' KDF entry "Argon2 in Manager, PBKDF2 in
+  test suite" (no such split exists — the current Manager derives with
+  PBKDF2 too; corrected 2026-10-06, REQ-AUTH-001, ARCHITECTURE §12
+  risk 2), type-string vocabulary (REQ-KEY-005),
   log-chain verification material (REQ-SYS-009). Not applicable:
   Manager-internal registry noise (scope-string drift, duplicate JS
   keys, missing UI for PQC/ecdh/shutdown/upload_bootldr — the SDK *is*
