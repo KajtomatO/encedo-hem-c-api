@@ -592,7 +592,10 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   delete/reboot on a healthy repo — the July observation was debris
   state; REQ-SYS-008: attended shutdown ran as the gate's last live act,
   device dark until power-cycle). Zero deliberately-open acceptance
-  criteria remain across all 84 REQs.
+  criteria remain across all 84 REQs. **M9 closed 2026-10-07:** CI on
+  push confirmed green (linux + windows-mingw; run 31128228013 on the
+  `v1.0.0` tag push `046f914`, run 37481604417 on `development`
+  `ef8b552`); `v1.0.0` is tagged on `046f914`.
 - **M10 — 1.0+ (post-release firmware surface)** *(deferred out of the
   release by user decision 2026-08-06; scope extended by user decision
   2026-08-07 — every unimplemented firmware feature now has a

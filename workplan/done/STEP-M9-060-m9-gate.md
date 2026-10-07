@@ -8,7 +8,9 @@ traces:
 depends_on: ["STEP-M9-050"]
 evidence:
   commits: ["db2a1ce", "a6f3166"]
-  tests: []
+  tests:
+    - "CI run 31128228013 (v1.0.0 tag push, 046f914, 2026-08-06): Linux gcc+clang + Windows (MinGW) success — https://github.com/KajtomatO/encedo-hem-c-api/actions/runs/31128228013"
+    - "CI run 37481604417 (development, ef8b552, 2026-10-06): same matrix, success — https://github.com/KajtomatO/encedo-hem-c-api/actions/runs/37481604417"
   notes: >
     Gate run 2026-08-06 (attended). Fresh ./dev ci 41/41 GCC+Clang +
     ASan + all gates (docs_coverage + export baseline included).
@@ -26,9 +28,10 @@ evidence:
     Device left: shutdown-dark by design; repo clean (probe cleaned its
     key; sweep leaves 0 EHEMTEST; 3 protected keys incl. the phone
     pairing). ZERO open acceptance criteria across all 84 REQs.
-    PENDING (the one unchecked box): user pushes ~30 local commits;
-    linux + windows-mingw CI must be confirmed green (Windows backlog
-    since STEP-M8-070). Tag v1.0.0 suggested — user tags/pushes.
+    CLOSED 2026-10-07: the pushed backlog ran green on CI (linux +
+    windows-mingw) at the v1.0.0 tag push (046f914, run 31128228013,
+    2026-08-06) and again on development ef8b552 (run 37481604417,
+    2026-10-06); v1.0.0 tagged on 046f914.
 reopened: []
 cancelled: null
 ---
@@ -62,8 +65,11 @@ the user's (feedback: never commit without asking).
       + reject (exit 14) demonstrated (REQ-TOOL-018 criterion closed).
 - [x] REQ-KEY-008 + REQ-SYS-008 open criteria RESOLVED live (user
       chose to run both probes; KEY-008 rev 4, SYS-008 rev 2).
-- [ ] CI green on push confirmed by the user — linux + windows-mingw,
-      covering the backlog since STEP-M8-070.
+- [x] CI green on push — linux + windows-mingw both `success` on the
+      `v1.0.0` tag push (046f914, run 31128228013, 2026-08-06; covers the
+      backlog since STEP-M8-070) and on `development` ef8b552 (run
+      37481604417, 2026-10-06); read from the GitHub Actions API at the
+      user's instruction to close M9 (2026-10-07).
 - [x] TRACE.md regenerated (§4.3); all M9 REQs verified; ZERO open
       criteria project-wide; no orphans/broken anchors.
 - [x] ARCHITECTURE §11 M9 marked gate-passed; KNOWN-ISSUES updated
