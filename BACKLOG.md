@@ -49,10 +49,11 @@ either way.
 
 ## Candidates (no decision taken)
 
-- General config/administration writes — the documented `wipeout` (factory
-  reset), `userkey*` rotation and `gen_csr` — deliberately unbound at 1.0
-  (REQ-SYS-004; `docs/COVERAGE.md`): no HEM-SDK-1..9 consumer needs them.
-  Listed here only so the "candidate if ever wanted" notes have a target.
+- General config/administration writes other than `wipeout` — `userkey*`
+  rotation and `gen_csr` — deliberately unbound at 1.0 (REQ-SYS-004;
+  `docs/COVERAGE.md`): no HEM-SDK-1..9 consumer needs them. Listed here
+  only so the "candidate if ever wanted" notes have a target. (`wipeout`
+  itself became M10 scope by user decision 2026-10-07.)
 
 ## Provenance
 

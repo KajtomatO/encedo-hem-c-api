@@ -368,6 +368,13 @@ sequenceDiagram
   Its orchestration lives in a small `hem-tool-core` static lib the CLI, the
   unit test, and the disruptive live test all share; its live test is
   `disruptive`-gated.
+- **M10 additions (user decision 2026-10-07):** `init-device` and
+  `wipe-device` over the `auth/init` and `wipeout` bindings (attended-only
+  verification), and `recovery` — the diagnose-then-remediate orchestrator
+  over `checkin`, `cert-install` and `tls-recover` (single check-in
+  attempt, no polling). The top-level help gains a **"manual recovery"**
+  section listing `cert-install` and `tls-recover` below the auth-grouped
+  listing, in which `recovery` itself stays.
 - Connection parameters via flags or env (`EHEM_URL`, `EHEM_PASSPHRASE` —
   the passphrase currently accepted via `--passphrase`/env; a stdin prompt
   fallback so it never need appear on the command line is a later refinement).
@@ -396,8 +403,15 @@ sequenceDiagram
   from the default CTest run and from CI unconditionally; requires both
   the label opt-in and `EHEM_ALLOW_DISRUPTIVE=1`. Never automatic
   (goal.txt).
+- **Attended-only** (user decision 2026-10-07, M10): device
+  initialisation and device wipe — the bindings and the hem-tool
+  commands over them — have **no live CTest at all**, not even under the
+  `disruptive` label. They are verified by attended runs whose outcome
+  is recorded as evidence in the owning REQ and step; their offline
+  fake-transport unit tests still apply.
 - Every protocol binding lands together with at least one unit test and,
-  where the device supports it non-destructively, one integration test.
+  where the device supports it non-destructively, one integration test
+  (attended-only bindings: the unit test only).
 
 ## 10. Directory layout
 
@@ -597,15 +611,37 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   push confirmed green (linux + windows-mingw; run 31128228013 on the
   `v1.0.0` tag push `046f914`, run 37481604417 on `development`
   `ef8b552`); `v1.0.0` is tagged on `046f914`.
-- **M10 — device initialisation** *(scope reduced 2026-10-07 by user
-  decision: the `system/upgrade` family and `hem-tool fw-upgrade`,
-  which M10 carried since the 2026-08-06/07 decisions, are parked in
-  [BACKLOG.md](BACKLOG.md))*: **`auth/init`** — device personalisation,
-  GET challenge + POST signed init JWT with the 14-field `cfg` block
-  (moved in from deliberately-unbound, user decision 2026-08-07: the
-  SDK should be able to initialise a wiped device). Decomposition
-  chore: re-check MFW's list against the then-current firmware and
-  pull in anything it now routes.
+- **M10 — device initialisation, wipe and recovery** *(scope reduced
+  2026-10-07 by user decision: the `system/upgrade` family and
+  `hem-tool fw-upgrade`, which M10 carried since the 2026-08-06/07
+  decisions, are parked in [BACKLOG.md](BACKLOG.md); the wipe, tool
+  and recovery items added the same day, user decision 2026-10-07)*:
+  - **`auth/init`** — device personalisation, GET challenge + POST
+    signed init JWT with the 14-field `cfg` block (moved in from
+    deliberately-unbound, user decision 2026-08-07: the SDK should be
+    able to initialise a wiped device); reference: Encedo Manager
+    `assets/build.js` `initFinal`.
+  - **device wipe** — the `wipeout` write of `POST /api/system/config`
+    (factory reset + reboot; deliberately unbound at 1.0, REQ-SYS-004).
+  - **hem-tool `init-device` and `wipe-device`** over the two bindings.
+    Both bindings and both commands are verified **attended only**: no
+    live CTest (not even `disruptive`), attended runs recorded as
+    evidence; offline fake-transport unit tests still apply (§9).
+  - **hem-tool `recovery`** — one command that diagnoses TLS/certificate
+    trouble and runs the matching remediation, built from the recorded
+    incidents: expired certificate (M1 gate 2026-07-16, again
+    2026-10-06 — check-in, then `cert-install` under `--insecure`,
+    verify under system trust; a **single** check-in attempt, no
+    polling — the lazy cloud renewal of 2026-10-07 was a cloud defect
+    Encedo has since fixed), lost TLS material after a wipe
+    (2026-07-22 — `tls-recover` via the provisioning cloud), RTC unset
+    after a cold boot and the ~8 % clock drift (check-in).
+    `cert-install` and `tls-recover` stay as commands and move to a
+    **"manual recovery"** section of the top-level help; `recovery`
+    sits in the normal auth-grouped listing (REQ-TOOL-019 revision at
+    decomposition).
+  - Decomposition chore: re-check MFW's list against the then-current
+    firmware and pull in anything it now routes.
 - **M11 — retired (2026-10-07)**: created 2026-08-07 for
   `system/config/provisioning` and the `diag/*` family; both are parked
   in [BACKLOG.md](BACKLOG.md) together with the reserved design

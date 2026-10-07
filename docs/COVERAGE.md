@@ -197,9 +197,10 @@ Field-level notes:
   UNBOUND-DELIBERATE — no consumer requirement (HEM-SDK-1..9) needs
   device administration; the TLS path exists only because fw v1.2.2
   cannot apply check-in certs itself (REQ-SYS-003/004/013). Recorded at
-  this sweep; a general config/administration binding is a BACKLOG.md
-  candidate if ever needed. POST-response `csr`/`genuine` unparsed
-  (tolerant policy).
+  this sweep. **Update 2026-10-07 (user decision):** the `wipeout` write
+  is M10 scope — DEFERRED-M10, its own REQ drafted at M10 decomposition;
+  the remaining writes (`userkey*`, `gen_csr`, …) are BACKLOG.md
+  candidates. POST-response `csr`/`genuine` unparsed (tolerant policy).
 - **status `tts` — doc type is wrong, SDK right (fw-source-verified at
   this sweep):** firmware emits `tts` as a JSON boolean
   (`cJSON_AddBoolToObject`, api_system.c:92); the doc types it Number.
