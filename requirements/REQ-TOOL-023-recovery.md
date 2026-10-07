@@ -1,10 +1,10 @@
 ---
 id: REQ-TOOL-023
 title: hem-tool recovery — diagnose TLS/certificate trouble and run the matching remediation
-status: draft
+status: approved
 priority: should
 revision: 1
-source: user decision 2026-10-07 ("add to tool 'recovery' … based on previous problems"; single check-in attempt, no polling); incidents: expired device certificate (M1 gate 2026-07-16, REQ-NET-005; again 2026-10-06/07 — cloud renewed late, a cloud defect Encedo fixed after notification), TLS material lost after the 2026-07-22 wipe (REQ-SYS-013/TOOL-015), RTC unset after cold boot and ~8 % clock drift (KNOWN-ISSUES, REQ-AUTH-004/005); REQ-TOOL-003 and REQ-TOOL-015 (the building blocks)
+source: user decision 2026-10-07 ("add to tool 'recovery' … based on previous problems"; single check-in attempt, no polling); incidents: expired device certificate (M1 gate 2026-07-16, REQ-NET-005; again 2026-10-06/07 — cloud renewed late, a cloud defect Encedo fixed after notification), TLS material lost after the 2026-07-22 wipe (REQ-SYS-013/TOOL-015), RTC unset after cold boot and ~8 % clock drift (KNOWN-ISSUES, REQ-AUTH-004/005); REQ-TOOL-003 and REQ-TOOL-015 (the building blocks); approved 2026-10-07 (M10 decomposition, user go-ahead)
 depends_on: ["REQ-TOOL-003", "REQ-TOOL-015", "REQ-SYS-003", "REQ-NET-005", "REQ-TOOL-018"]
 supersedes: null
 superseded_by: null

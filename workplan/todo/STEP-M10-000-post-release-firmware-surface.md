@@ -11,7 +11,7 @@ evidence:
   tests: []
   notes: null
 reopened: []
-cancelled: null
+cancelled: "M10 decomposed 2026-10-07 (§5.3) — replaced by STEP-M10-010..070"
 ---
 
 **Goal:** Milestone M10 per ARCHITECTURE.md §11 — **`auth/init`** device

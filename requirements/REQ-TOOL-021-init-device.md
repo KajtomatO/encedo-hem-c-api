@@ -1,10 +1,10 @@
 ---
 id: REQ-TOOL-021
 title: hem-tool init-device — personalise an uninitialised device
-status: draft
+status: approved
 priority: should
 revision: 1
-source: user decision 2026-10-07 (M10: "add both init-device and wipe-device to the tool"; attended-only); REQ-AUTH-011 (the binding); Encedo Manager assets/build.js initFinal (the authoritative client flow); encedo-hem-api-doc auth/init.md
+source: user decision 2026-10-07 (M10: "add both init-device and wipe-device to the tool"; attended-only); REQ-AUTH-011 (the binding); Encedo Manager assets/build.js initFinal (the authoritative client flow); encedo-hem-api-doc auth/init.md; approved 2026-10-07 (M10 decomposition, user go-ahead)
 depends_on: ["REQ-AUTH-011", "REQ-SYS-003", "REQ-TEST-007"]
 supersedes: null
 superseded_by: null

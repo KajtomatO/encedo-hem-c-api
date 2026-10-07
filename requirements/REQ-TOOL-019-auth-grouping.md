@@ -1,10 +1,10 @@
 ---
 id: REQ-TOOL-019
 title: hem-tool auth-requirement transparency in the command listing
-status: draft
+status: approved
 priority: should
 revision: 2
-source: user decision 2026-08-06 (M9 scope reshape, ARCHITECTURE.md §11); rev 2 = user decision 2026-10-07 (M10: "manual recovery" help section; init-device / wipe-device / recovery added) — meaning change, status reset to draft per §3.3, §6.2 reported in chat 2026-10-07; encedo_firmware api_system.c:1060-1066 (config POST demands sub U/M)
+source: user decision 2026-08-06 (M9 scope reshape, ARCHITECTURE.md §11); rev 2 = user decision 2026-10-07 (M10: "manual recovery" help section; init-device / wipe-device / recovery added) — meaning change, status reset to draft per §3.3, §6.2 reported in chat 2026-10-07; encedo_firmware api_system.c:1060-1066 (config POST demands sub U/M); approved 2026-10-07 (M10 decomposition, user go-ahead)
 depends_on: ["REQ-TOOL-018"]
 supersedes: null
 superseded_by: null

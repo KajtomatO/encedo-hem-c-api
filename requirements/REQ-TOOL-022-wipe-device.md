@@ -1,10 +1,10 @@
 ---
 id: REQ-TOOL-022
 title: hem-tool wipe-device — factory reset with an unbypassable confirmation
-status: draft
+status: approved
 priority: should
 revision: 1
-source: user decision 2026-10-07 (M10: "add both init-device and wipe-device to the tool"; attended-only); REQ-SYS-014 (the binding); ARCHITECTURE.md §8 protected-key confirmation convention
+source: user decision 2026-10-07 (M10: "add both init-device and wipe-device to the tool"; attended-only); REQ-SYS-014 (the binding); ARCHITECTURE.md §8 protected-key confirmation convention; approved 2026-10-07 (M10 decomposition, user go-ahead)
 depends_on: ["REQ-SYS-014", "REQ-TOOL-018", "REQ-TEST-007"]
 supersedes: null
 superseded_by: null

@@ -1,10 +1,10 @@
 ---
 id: REQ-AUTH-011
 title: Device initialisation binding — /api/auth/init challenge and signed cfg commit
-status: draft
+status: approved
 priority: should
 revision: 1
-source: user decision 2026-08-07 (auth/init moved into M10: "the SDK should be able to initialise a wiped device"); user decision 2026-10-07 (M10 scope, attended-only); ARCHITECTURE.md §11 (M10); Encedo Manager assets/build.js initFinal (build.js:655-770 at b33c236 — the authoritative client flow); encedo-hem-api-doc auth/init.md; encedo_firmware api_auth.c:330-368 (GET) and :369-830 (POST; completeness mask 0x3FFF at :705)
+source: user decision 2026-08-07 (auth/init moved into M10: "the SDK should be able to initialise a wiped device"); user decision 2026-10-07 (M10 scope, attended-only); ARCHITECTURE.md §11 (M10); Encedo Manager assets/build.js initFinal (build.js:655-770 at b33c236 — the authoritative client flow); encedo-hem-api-doc auth/init.md; encedo_firmware api_auth.c:330-368 (GET) and :369-830 (POST; completeness mask 0x3FFF at :705); approved 2026-10-07 (M10 decomposition, user go-ahead)
 depends_on: ["REQ-AUTH-001", "REQ-AUTH-002", "REQ-API-005", "REQ-SYS-003", "REQ-TEST-007"]
 supersedes: null
 superseded_by: null

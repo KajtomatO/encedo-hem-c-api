@@ -1,10 +1,10 @@
 ---
 id: REQ-TEST-007
 title: Attended-only verification class — no live CTest for device init and wipe
-status: draft
+status: approved
 priority: must
 revision: 1
-source: user decision 2026-10-07 ("both init and wipe can be tested only manually"); ARCHITECTURE.md §9 (attended-only bullet)
+source: user decision 2026-10-07 ("both init and wipe can be tested only manually"); ARCHITECTURE.md §9 (attended-only bullet); approved 2026-10-07 (M10 decomposition, user go-ahead)
 depends_on: ["REQ-TEST-002"]
 supersedes: null
 superseded_by: null
