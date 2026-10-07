@@ -581,8 +581,9 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   notices, user request). Version **1.0.0**, ABI frozen (SONAME `.so.1`,
   101-symbol export baseline enforced by the gate). Conformance:
   docs/COVERAGE.md dispositions every documented endpoint — no unbound
-  surface remains except the recorded deliberate exclusions and the M10
-  deferrals. Live gate evidence: fresh `./dev ci` 41/41 + ASan;
+  surface remains except the recorded deliberate exclusions and the
+  deferrals (now M10 `auth/init` and `BACKLOG.md`). Live gate evidence:
+  fresh `./dev ci` 41/41 + ASan;
   attended `--mobile` approve/reject on the real phone (exit 0/14, at
   +4 s drift — the STEP-M9-055 window); full `./dev test it` **23/23
   green (337 s)** after one occurrence of the known sustained-load
@@ -596,29 +597,20 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   push confirmed green (linux + windows-mingw; run 31128228013 on the
   `v1.0.0` tag push `046f914`, run 37481604417 on `development`
   `ef8b552`); `v1.0.0` is tagged on `046f914`.
-- **M10 — 1.0+ (post-release firmware surface)** *(deferred out of the
-  release by user decision 2026-08-06; scope extended by user decision
-  2026-08-07 — every unimplemented firmware feature now has a
-  milestone)*: the `system/upgrade` family deferred since M7 (fw
-  upload/check/install triad, ui triad, bootloader upload, usbmode —
-  plus the bare `GET /api/system/upgrade` base route, found live and
-  auth-gated on v1.2.2 at the M9 firmware scan) plus the
-  `hem-tool fw-upgrade` orchestrator (user decision 2026-07-17);
-  **`auth/init`** — device personalisation, GET challenge + POST signed
-  init JWT with the 14-field `cfg` block (moved in from
-  deliberately-unbound, user decision 2026-08-07: the SDK should be
-  able to initialise a wiped device).
-- **M11 — device administration & diagnostics** *(created by user
-  decision 2026-08-07)*: `system/config/provisioning` (factory ATECC
-  certificate write — no longer permanently excluded, but last in
-  line); the `diag/*` family (9 DIAG-build-only endpoints: liveness,
-  TRNG draw, fault injection, wipe_config, corrupt_repo, memdump).
-  **Design decision reserved for M11 decomposition (user note
-  2026-08-07):** diag support must NOT enter the production SDK —
-  candidate shapes are (a) hem-tool-only implementation (the tool
-  talks to `diag/*` directly, no library surface) or (b) a separate
-  diagnostic SDK/library beside the production one. The production
-  `libencedo-hem` stays diag-free either way.
+- **M10 — device initialisation** *(scope reduced 2026-10-07 by user
+  decision: the `system/upgrade` family and `hem-tool fw-upgrade`,
+  which M10 carried since the 2026-08-06/07 decisions, are parked in
+  [BACKLOG.md](BACKLOG.md))*: **`auth/init`** — device personalisation,
+  GET challenge + POST signed init JWT with the 14-field `cfg` block
+  (moved in from deliberately-unbound, user decision 2026-08-07: the
+  SDK should be able to initialise a wiped device). Decomposition
+  chore: re-check MFW's list against the then-current firmware and
+  pull in anything it now routes.
+- **M11 — retired (2026-10-07)**: created 2026-08-07 for
+  `system/config/provisioning` and the `diag/*` family; both are parked
+  in [BACKLOG.md](BACKLOG.md) together with the reserved design
+  constraint (diag support must not enter the production SDK). The
+  number is not reused.
 - **MFW — firmware-pending** *(created by user decision 2026-08-07: one
   generic future milestone for every feature that is documented — or
   shipped dormant — but MISSING from the running firmware; nothing here
@@ -639,6 +631,10 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   - `misc/rnd` — fully commented out (the reason `ehem_random`
     emulates via IV harvest); if a real RNG endpoint ever ships, swap
     the emulation for it.
+
+Unscheduled items — the `system/upgrade` family, `hem-tool fw-upgrade`,
+`system/config/provisioning`, `diag/*` — live in [BACKLOG.md](BACKLOG.md),
+not in a milestone (user decision 2026-10-07).
 
 ## 12. Risks & open questions
 

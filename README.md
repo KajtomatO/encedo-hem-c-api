@@ -31,6 +31,8 @@ module.
   conformance record against the device API documentation.
 - **[KNOWN-ISSUES.md](KNOWN-ISSUES.md)** — firmware bugs and doc
   divergences the SDK works around (device behavior wins).
+- **[BACKLOG.md](BACKLOG.md)** — unscheduled items (firmware/UI upgrade,
+  provisioning, diagnostics) parked outside any milestone.
 - **`hem-tool`** — the bundled CLI is the living usage documentation:
   every binding is drivable from it (see below).
 

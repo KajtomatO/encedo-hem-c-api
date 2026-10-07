@@ -6,6 +6,7 @@ checkout, fw v1.2.2 era) against the SDK surface, field by field.
 
 **Dispositions:** `BOUND` (SDK binding exists), `UNBOUND-DELIBERATE`
 (never planned, with reason), `DEFERRED-M10` (post-1.0 milestone),
+`DEFERRED-BACKLOG` (parked in `BACKLOG.md`, no milestone — 2026-10-07),
 `ABSENT-IN-FW` (documented but not present in firmware v1.2.2).
 Precedence for conflicts is the standing rule (REQUIREMENTS-MANAGEMENT
 §8): real device > Encedo Manager > API doc; live-proven divergences are
@@ -167,7 +168,7 @@ Field-level notes:
   invalid `cfg` object" as a 400 cause on `POST /api/auth/token` —
   `cfg` is an `/api/auth/init` concept; apparent copy-paste error.
 
-## system/ — 14 pages: 8 bound, 2 deliberately unbound, 4 deferred to M10
+## system/ — 14 pages: 8 bound, 6 parked in BACKLOG.md (2026-10-07)
 
 | Page | Endpoint(s) | Disposition | SDK symbol(s) |
 |---|---|---|---|
@@ -180,12 +181,12 @@ Field-level notes:
 | reboot.md | `GET /api/system/reboot` | BOUND | `ehem_system_reboot` |
 | selftest.md | `GET /api/system/selftest` | BOUND | `ehem_system_selftest` |
 | shutdown.md | `GET /api/system/shutdown` | BOUND | `ehem_system_shutdown` |
-| config-provisioning.md | `POST /api/system/config/provisioning` | DEFERRED-M11 | — factory ATECC cert write. Re-dispositioned from UNBOUND-DELIBERATE 2026-08-07 (user decision: every unimplemented fw feature gets a milestone) |
-| diag.md | `GET /api/diag/*` (9 endpoints) | DEFERRED-M11 | — DIAG-build-only, unauthenticated, destructive (wipe/corrupt/memdump); production builds 404. Re-dispositioned 2026-08-07 (user decision) with a reserved design constraint: NOT in the production SDK — hem-tool-only OR a separate diagnostic SDK (decided at M11 decomposition) |
-| upgrade-firmware.md | `POST upload_fw`, `GET check_fw`, `GET install_fw` | DEFERRED-M10 | — |
-| upgrade-ui.md | `POST upload_ui`, `GET check_ui`, `GET install_ui` | DEFERRED-M10 | — |
-| upgrade-bootloader.md | `POST upload_bootldr`, `GET install_bl` (DIAG-only builds) | DEFERRED-M10 | — |
-| upgrade-usbmode.md | `GET /api/system/upgrade/usbmode` | DEFERRED-M10 | — |
+| config-provisioning.md | `POST /api/system/config/provisioning` | DEFERRED-BACKLOG | — factory ATECC cert write. Re-dispositioned from UNBOUND-DELIBERATE 2026-08-07 (user decision: every unimplemented fw feature gets a milestone) |
+| diag.md | `GET /api/diag/*` (9 endpoints) | DEFERRED-BACKLOG | — DIAG-build-only, unauthenticated, destructive (wipe/corrupt/memdump); production builds 404. Re-dispositioned 2026-08-07 (user decision) with a reserved design constraint: NOT in the production SDK — hem-tool-only OR a separate diagnostic SDK (decided at M11 decomposition) |
+| upgrade-firmware.md | `POST upload_fw`, `GET check_fw`, `GET install_fw` | DEFERRED-BACKLOG | — was DEFERRED-M10; parked 2026-10-07 |
+| upgrade-ui.md | `POST upload_ui`, `GET check_ui`, `GET install_ui` | DEFERRED-BACKLOG | — was DEFERRED-M10; parked 2026-10-07 |
+| upgrade-bootloader.md | `POST upload_bootldr`, `GET install_bl` (DIAG-only builds) | DEFERRED-BACKLOG | — was DEFERRED-M10; parked 2026-10-07 |
+| upgrade-usbmode.md | `GET /api/system/upgrade/usbmode` | DEFERRED-BACKLOG | — was DEFERRED-M10; parked 2026-10-07 |
 
 Field-level notes:
 
@@ -196,7 +197,7 @@ Field-level notes:
   UNBOUND-DELIBERATE — no consumer requirement (HEM-SDK-1..9) needs
   device administration; the TLS path exists only because fw v1.2.2
   cannot apply check-in certs itself (REQ-SYS-003/004/013). Recorded at
-  this sweep; a general config/administration binding is an M10
+  this sweep; a general config/administration binding is a BACKLOG.md
   candidate if ever needed. POST-response `csr`/`genuine` unparsed
   (tolerant policy).
 - **status `tts` — doc type is wrong, SDK right (fw-source-verified at
@@ -317,8 +318,9 @@ mapped to where this project records the divergence:
   bound with full field coverage, deliberately unbound with a recorded
   reason (general config writes incl. wipeout, logger DELETE, storage
   /ro//rw variants, search's unauthenticated bypass), or deferred to a
-  milestone — M10: the upgrade family + auth/init; M11:
-  config-provisioning + diag/*; MFW (firmware-pending, one generic
+  milestone — M10: auth/init (the upgrade family, config-provisioning
+  and diag/* are parked in BACKLOG.md since 2026-10-07; M11 retired);
+  MFW (firmware-pending, one generic
   bucket, user decision 2026-08-07): everything documented or shipped
   dormant but missing from the running firmware — logger DELETE,
   Manager's POST keymgmt/list, system/health, stream/*, x509/*,

@@ -3,7 +3,7 @@ id: REQ-SYS-011
 title: Binding for /api/system/config/attestation — device attestation material
 status: verified
 priority: should
-revision: 3
+revision: 4
 source: ARCHITECTURE.md §11 (M7: system group); encedo-hem-api-doc system/config-attestation.md, system/config-provisioning.md (provisioning EXCLUDED — factory-only, 403 once initialised); encedo_firmware api_system.c:2285 api_get_system_config_attestation (fw v1.2.2); approved 2026-07-17
 depends_on: ["REQ-AUTH-002", "REQ-AUTH-003", "REQ-SYS-006"]
 supersedes: null
@@ -34,9 +34,10 @@ material in a caller-owned struct with nullable variant fields.
 - Errors: 409 (install busy / fls_state) → `EHEM_ERR_DEVICE`; 500 with
   `"atecc_N"` body (secure-element I/O failure) → `EHEM_ERR_DEVICE`
   with the body preserved in detail.
-- *(Re-dispositioned 2026-08-07, user decision: provisioning moves to
-  milestone M11 — the exclusion below is no longer permanent, but the
-  factory-context caveats it records still hold.)*
+- *(Re-dispositioned 2026-08-07 (user decision: provisioning moves to
+  milestone M11) and again 2026-10-07 (user decision: M11 retired,
+  provisioning parked in `BACKLOG.md`) — the exclusion below is not
+  permanent, but the factory-context caveats it records still hold.)*
 - **`POST /api/system/config/provisioning` is deliberately NOT bound:**
   factory-first-run-only (403 on any initialised device, one-shot per
   ATECC608) — zero consumer value for an SDK client; recorded here so

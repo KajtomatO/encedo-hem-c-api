@@ -11,7 +11,7 @@ evidence:
   tests: []
   notes: null
 reopened: []
-cancelled: null
+cancelled: "M11 retired 2026-10-07 — provisioning and diag/* parked in BACKLOG.md (user decision); no detailed steps will be created"
 ---
 
 **Goal:** Milestone M11 per ARCHITECTURE.md §11 (created by user
