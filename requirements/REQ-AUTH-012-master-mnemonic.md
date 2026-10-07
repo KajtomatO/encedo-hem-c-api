@@ -1,10 +1,10 @@
 ---
 id: REQ-AUTH-012
 title: Master-secret derivation from a BIP39 mnemonic — Manager-compatible helpers
-status: draft
+status: approved
 priority: should
 revision: 1
-source: user decision 2026-10-07 (master-secret format = Manager-compatible BIP39, derivation in the SDK — after the explanation in chat); Encedo Manager assets/build.js initFinal (:685-697, generate 256-bit mnemonic → toSeed → `seedM.substr(1, 64)`) and handleMasterPassphrase (:6819-6829, same derivation at login with scope system:config); Manager assets/jsbip39_v1.js (:31 PBKDF2_ROUNDS 2048; :131-139 toSeed = PBKDF2-HMAC-SHA512(NFKD(mnemonic), "mnemonic"+passphrase, 2048, 512 bits); :99 check) and assets/wordlist_english_v1.js (the standard 2048-word BIP39 English list); encedo_firmware (the master role is admin-only: api_keymgmt.c:76/301/782/1040/1166 and api_crypto.c:87/283/… reject sub "M"; api_system.c:1066/1188 accept U or M)
+source: user decision 2026-10-07 (master-secret format = Manager-compatible BIP39, derivation in the SDK — after the explanation in chat); Encedo Manager assets/build.js initFinal (:685-697, generate 256-bit mnemonic → toSeed → `seedM.substr(1, 64)`) and handleMasterPassphrase (:6819-6829, same derivation at login with scope system:config); Manager assets/jsbip39_v1.js (:31 PBKDF2_ROUNDS 2048; :131-139 toSeed = PBKDF2-HMAC-SHA512(NFKD(mnemonic), "mnemonic"+passphrase, 2048, 512 bits); :99 check) and assets/wordlist_english_v1.js (the standard 2048-word BIP39 English list); encedo_firmware (the master role is admin-only: api_keymgmt.c:76/301/782/1040/1166 and api_crypto.c:87/283/… reject sub "M"; api_system.c:1066/1188 accept U or M); approved 2026-10-07 (user "ok")
 depends_on: ["REQ-AUTH-011", "REQ-API-005", "REQ-API-006"]
 supersedes: null
 superseded_by: null

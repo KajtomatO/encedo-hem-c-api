@@ -287,6 +287,30 @@ EHEM_API void ehem_cert_install_free(ehem_cert_install_info *info);
  */
 EHEM_API ehem_rc ehem_system_reboot(ehem_ctx *ctx);
 
+/*
+ * Factory-reset the device: authenticated POST /api/system/config with the
+ * body {"wipeout":true} (scope "system:config"; the firmware additionally
+ * demands a passphrase session — token sub "U" or "M" — so a mobile session
+ * is refused with 403 → EHEM_ERR_SCOPE_DENIED). The device answers 200 BEFORE
+ * acting, then erases its configuration ~2 s later and restarts through the
+ * bootloader. Returns EHEM_OK once the device has accepted the wipe.
+ *
+ * IRREVERSIBLE and DISRUPTIVE. Afterwards the device is UNINITIALISED (the
+ * stored user and master keys, the key repository — whose encryption key lived
+ * in the erased configuration — and the audit logs are gone), its TLS key and
+ * certificate are gone (HTTP only: use an http:// URL, then ehem_tls_recover()
+ * once re-initialised), and its RTC is unset after the restart (run
+ * ehem_system_checkin() first). Re-personalise with ehem_device_init()
+ * (REQ-AUTH-011). On success this context's token cache AND retained
+ * credential are dropped — nothing it held is valid any more — so later
+ * authenticated calls fail EHEM_ERR_AUTH_EXPIRED until the next ehem_login().
+ * The library adds no confirmation step: that is the caller's job (hem-tool
+ * wipe-device asks for the device hostname). Verified attended-only
+ * (ARCHITECTURE.md §9): no live test exists for this call.
+ * implements: REQ-SYS-014
+ */
+EHEM_API ehem_rc ehem_system_wipeout(ehem_ctx *ctx);
+
 /* ==========================================================================
  * Self-test (authenticated; the firmware checks no scope — the SDK requests
  * "system:config" and shares that token).

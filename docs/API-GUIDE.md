@@ -281,6 +281,7 @@ rate-sensitive devices).
 | `ehem_system_config_install_cert`, `ehem_cert_install_info`, `ehem_cert_install_free` | install a TLS certificate (reboot required to load it) |
 | `ehem_tls_recover`, `EHEM_DEFAULT_REGISTER_URL` | full TLS restoration via the provisioning cloud (post-wipe) |
 | `ehem_system_reboot` | reboot (drops the token cache) |
+| `ehem_system_wipeout` | factory reset — IRREVERSIBLE: erases config, keys, logs and TLS material; drops the session (attended-only verification) |
 | `ehem_system_selftest`, `ehem_selftest_info`, `ehem_selftest_free` | self-test battery + key-repo statistics |
 | `ehem_system_attestation`, `ehem_attestation_info`, `ehem_attestation_free` | ATECC attestation material (PPA builds) |
 | `ehem_system_shutdown` | stop network/USB — recovery is a PHYSICAL power-cycle |

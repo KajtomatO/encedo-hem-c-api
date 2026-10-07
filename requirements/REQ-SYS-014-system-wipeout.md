@@ -1,7 +1,7 @@
 ---
 id: REQ-SYS-014
 title: Binding for the wipeout write of /api/system/config — device factory reset
-status: approved
+status: implemented
 priority: should
 revision: 1
 source: user decision 2026-10-07 (M10 scope: device wipe); ARCHITECTURE.md §11 (M10); encedo-hem-api-doc system/config.md (`wipeout` field; `false` = 406 no-op sentinel); encedo_firmware api_system.c:1060-1066 (POST config demands scope `system:config` AND token `sub` U or M) and :1089-1099 (200 is sent first, then 2 s delay, `system_full_wipeout()`, bootloader restart); REQ-SYS-004 (the config binding this extends); approved 2026-10-07 (M10 decomposition, user go-ahead)
@@ -43,16 +43,19 @@ Manager each time. The binding is deliberately plain: no confirmation
 logic in the library — that is the tool's job (REQ-TOOL-022).
 
 **Acceptance criteria:**
-- [ ] Unit (fake transport): the body is exactly `{"wipeout":true}`,
+- [x] Unit (fake transport): the body is exactly `{"wipeout":true}`,
       scope `system:config`, bearer present; 200 → `EHEM_OK` and the
       token cache + retained credential are dropped (a following
       authenticated call needs `ehem_login` again); 406, 403, 401 map
-      per REQ-API-003 with `ehem_last_error` detail.
+      per REQ-API-003 with `ehem_last_error` detail. *(STEP-M10-010,
+      2026-10-07: tests/unit/test_config.c test_wipeout_200_drops_session
+      / _406_session_intact / _403; 401 is the shared path's re-acquire +
+      AUTH_FAILED rule, pinned in test_auth.c.)*
 - [ ] **Attended-only** (REQ-TEST-007): no live CTest exists for this
       binding, not even `disruptive`-gated. Evidence to record here when
       performed: date, device, observed sequence (200 → device down →
       back uninitialised: `GET /api/auth/init` returns a challenge).
-- [ ] The public header documents the consequences (uninitialised,
+- [x] The public header documents the consequences (uninitialised,
       HTTP-only, RTC unset, repository gone) and points at
       `ehem_device_init` (REQ-AUTH-011) and `ehem_tls_recover`
-      (REQ-SYS-013).
+      (REQ-SYS-013). *(include/ehem/system.h, STEP-M10-010, 2026-10-07.)*

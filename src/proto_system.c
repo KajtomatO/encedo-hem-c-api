@@ -1,9 +1,10 @@
 /*
  * proto_system.c — bindings for the `system` API group: status, version, the
- * check-in handshake (+ cert harvest), device config, cert install, and reboot.
+ * check-in handshake (+ cert harvest), device config, cert install, reboot,
+ * and the factory-reset wipeout.
  *
  * implements: REQ-SYS-001, REQ-SYS-002, REQ-SYS-003, REQ-SYS-004, REQ-SYS-005,
- *             REQ-SYS-007, REQ-SYS-008, REQ-SYS-011, REQ-SYS-013,
+ *             REQ-SYS-007, REQ-SYS-008, REQ-SYS-011, REQ-SYS-013, REQ-SYS-014,
  *             REQ-SYS-006, REQ-API-005
  *
  * The first real protocol bindings and the template the rest follow: build a
@@ -15,6 +16,7 @@
  * ehem_cert_inspect() reads a chain's leaf identity for the cert-install tool.
  */
 #include "ehem/system.h"
+#include "ehem/auth.h"       /* ehem_logout — wipeout drops the whole session */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -758,6 +760,46 @@ ehem_rc ehem_system_reboot(ehem_ctx *ctx)
      * so the next authenticated call re-logs-in (REQ-SYS-005, REQ-AUTH-002). */
     ehem_auth_invalidate(ctx, NULL);
     ehem_ctx_clear_error(ctx);      /* leave a clean success state */
+    return EHEM_OK;
+}
+
+/* -------------------------------------------------------------------------- */
+/* wipeout (REQ-SYS-014)                                                      */
+/* -------------------------------------------------------------------------- */
+
+ehem_rc ehem_system_wipeout(ehem_ctx *ctx)
+{
+    char *body = NULL;
+    ehem_rc rc;
+
+    if (ctx == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    ehem_ctx_clear_error(ctx);
+
+    /* The firmware acts on the boolean `wipeout` alone (api_system.c:1089) and
+     * ignores every other field once it is present, so the literal body is the
+     * whole request. The same handler demands scope system:config AND a
+     * passphrase session (token sub "U"/"M"): a mobile bearer gets 403. */
+    rc = ehem_proto_request_raw(ctx, EHEM_HTTP_POST, "/api/system/config",
+                                "{\"wipeout\":true}", "system:config",
+                                EHEM_TLS_REQ_DEFAULT, &body);
+    /* The 200 arrives BEFORE the wipe: the firmware answers, waits ~2 s, erases
+     * its configuration and restarts. Like reboot, that 200 carries an empty
+     * body, which the shared path reports as EHEM_ERR_PROTOCOL / status 200. */
+    if (rc == EHEM_OK) {
+        free(body);                 /* tolerate a body, none is expected */
+    } else if (rc == EHEM_ERR_PROTOCOL && ehem_last_error(ctx)->http_status == 200) {
+        rc = EHEM_OK;
+    } else {
+        return rc;                  /* 406 sentinel → DEVICE, 403 → SCOPE_DENIED, … */
+    }
+
+    /* Nothing this context holds is valid against a wiped device — the stored
+     * user key is gone with the configuration. Drop the token cache AND the
+     * retained credential (REQ-AUTH-002 logout semantics): the next
+     * authenticated call fails AUTH_EXPIRED until ehem_login(). */
+    ehem_logout(ctx);
     return EHEM_OK;
 }
 
