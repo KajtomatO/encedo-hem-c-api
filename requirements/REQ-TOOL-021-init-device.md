@@ -3,9 +3,9 @@ id: REQ-TOOL-021
 title: hem-tool init-device — personalise an uninitialised device
 status: approved
 priority: should
-revision: 1
+revision: 2
 source: user decision 2026-10-07 (M10: "add both init-device and wipe-device to the tool"; attended-only); REQ-AUTH-011 (the binding); Encedo Manager assets/build.js initFinal (the authoritative client flow); encedo-hem-api-doc auth/init.md; approved 2026-10-07 (M10 decomposition, user go-ahead)
-depends_on: ["REQ-AUTH-011", "REQ-SYS-003", "REQ-TEST-007"]
+depends_on: ["REQ-AUTH-011", "REQ-AUTH-012", "REQ-SYS-003", "REQ-TEST-007"]
 supersedes: null
 superseded_by: null
 traces:
@@ -22,11 +22,13 @@ the master key, posts it, and prints what the device returned.
 
 - **Inputs:** the user passphrase via the standard `--passphrase` /
   `EHEM_PASSPHRASE` sources (it becomes the device's user password);
-  the master secret via `--master-secret-hex HEX` (32 bytes) — or, when
-  absent, `--master-generate`, which creates 32 random bytes from the
-  OS RNG and prints them **once** as hex with a keep-this warning (the
-  device offers no way to rotate `masterkey` later; a Manager-style
-  BIP39 mnemonic is NOT produced — see the open criterion); the `cfg`
+  the master secret as a Manager-compatible **24-word BIP39 mnemonic**
+  via `--master-words "w1 … w24"` (or `EHEM_MASTER_WORDS`) — or, when
+  absent, `--master-generate`, which has the SDK generate the 24 words
+  (REQ-AUTH-012) and prints them **once** with a keep-this warning (the
+  device offers no way to rotate `masterkey` later); `--master-secret-hex
+  HEX` (32 bytes) remains only as an escape hatch for scripted,
+  non-Manager use (rev 2, user decision 2026-10-07); the `cfg`
   fields as flags: `--user`, `--email`, `--hostname`, `--ip A.B.C.D/N`
   (required); `--storage-mode N`, `--disk0-size N`, `--dnsd`,
   `--no-trusted-ts`, `--no-trusted-backend`, `--no-allow-keysearch`,
@@ -53,13 +55,15 @@ decision 2026-08-07) and the tool is the living usage documentation;
 without this command the only init path is the Manager's web UI.
 
 **Acceptance criteria:**
-- [ ] OPEN, user decision: master-secret format. The Manager generates a
-      24-word BIP39 mnemonic and derives the master key from its seed
-      (`build.js:691-702`); matching that needs a vendored English
-      wordlist + PBKDF2-HMAC-SHA512 seed derivation (tool-only). The
-      draft above takes/produces raw 32-byte hex instead, which the
-      Manager's master-password UI cannot consume. Decide: raw hex (as
-      drafted) or BIP39-compatible.
+- [x] RESOLVED (user decision 2026-10-07, rev 2): master-secret format =
+      Manager-compatible BIP39 (24 English words). Reason: the Manager
+      consumes the words after init — its settings-page master
+      passphrase prompt (`build.js:6819-6829`: change storage / user
+      data / password, manual firmware, manual wipeout) derives the same
+      key and logs in with scope `system:config`; raw hex would cut a
+      tool-initialised device off from that. Hex stays only as the
+      scripted escape hatch. The derivation lives in the SDK
+      (REQ-AUTH-012), not in the tool.
 - [ ] Unit (hem-tool-core, fake transport): the full sequence (check-in
       legs → GET init → POST init) with the Manager-default `cfg`;
       required-flag omissions → exit 2 with zero traffic; 406 → exit 3;

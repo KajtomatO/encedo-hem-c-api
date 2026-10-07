@@ -624,6 +624,11 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   - **device wipe** — the `wipeout` write of `POST /api/system/config`
     (factory reset + reboot; deliberately unbound at 1.0, REQ-SYS-004).
   - **hem-tool `init-device` and `wipe-device`** over the two bindings.
+    The master secret is a Manager-compatible BIP39 24-word mnemonic
+    (user decision 2026-10-07): derivation in the SDK (REQ-AUTH-012,
+    including the Manager's `substr(1, 64)` nibble-shift quirk), raw hex
+    only as a scripted escape hatch — so a device initialised by either
+    client can be administered from the other.
     Both bindings and both commands are verified **attended only**: no
     live CTest (not even `disruptive`), attended runs recorded as
     evidence; offline fake-transport unit tests still apply (§9).
