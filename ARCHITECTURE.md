@@ -65,7 +65,9 @@ the encedo-hem-api-doc spec.
 - **Unit tests:** CMocka — pure C, cross-platform, built-in mocking.
 - **CI:** GitHub Actions — build + unit tests on Linux and Windows from
   day one; integration tests run locally against the dev-machine HEM until
-  CI gets device access (user decision 2026-07-15).
+  CI gets device access (user decision 2026-07-15). M10 adds a release
+  workflow: static hem-tool binaries for both platforms on every push to
+  `main`, GitHub Releases on `v*` tags (user decision 2026-10-07).
 
 **Data flow:** application calls a typed function (e.g. `ehem_key_list`) →
 session engine ensures a valid bearer token for the required scope
@@ -645,6 +647,16 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
     **"manual recovery"** section of the top-level help; `recovery`
     sits in the normal auth-grouped listing (REQ-TOOL-019 revision at
     decomposition).
+  - **Release builds of hem-tool** (user decision 2026-10-07,
+    REQ-BUILD-005): a separate GitHub Actions workflow builds hem-tool as
+    single-file **static** Release binaries for Linux and Windows —
+    libcurl and wolfSSL from pinned sources, wolfSSL as libcurl's TLS
+    backend (the §1 "where we build libcurl ourselves" case) — on every
+    push to `main` (workflow artifacts) and publishes a GitHub Release
+    with `SHA256SUMS` on `v*` tags. Two consequences carried as open
+    criteria: the REQ-NET-005 expired-cert classifier must be proven
+    under the wolfSSL backend, and §12 risk 1 (wolfSSL licensing) needs
+    its decision before the first tagged Release.
   - Decomposition chore: re-check MFW's list against the then-current
     firmware and pull in anything it now routes.
 - **M11 — retired (2026-10-07)**: created 2026-08-07 for
@@ -682,7 +694,12 @@ not in a milestone (user decision 2026-10-07).
 1. **wolfSSL licensing (GPLv3/commercial)** — binaries linking wolfSSL
    must comply with GPLv3 or use a commercial license; affects how
    encedo-pkcs11 (MIT) ships. *Resolved by:* Encedo confirming its
-   licensing model before the first binary release.
+   licensing model before the first binary release. **Now concrete (M10,
+   2026-10-07):** REQ-BUILD-005 ships static hem-tool binaries with
+   wolfSSL inside; the decision — GPLv3 compliance bundle (license text +
+   source offer; hem-tool and the SDK are MIT, compatible) or Encedo's
+   commercial license — is an open criterion there and gates the first
+   `v*` Release. Main-branch artifacts are internal until then.
 2. **Login KDF — CLOSED (2026-10-06).** Was "Login-KDF discrepancy between
    official clients" (2026-07-16, itself superseding "Argon2 parameters
    not pinned"). There is no discrepancy: the current Encedo Manager

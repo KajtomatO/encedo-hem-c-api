@@ -5,7 +5,7 @@ milestone: M10
 implements: []
 traces:
   architecture: ["ARCHITECTURE.md#11-milestones", "ARCHITECTURE.md#9-testing-policy"]
-depends_on: ["STEP-M10-030", "STEP-M10-040", "STEP-M10-060"]
+depends_on: ["STEP-M10-030", "STEP-M10-040", "STEP-M10-060", "STEP-M10-065"]
 evidence:
   commits: []
   tests: []
@@ -49,4 +49,8 @@ surfaced. Commits/tags are the user's.
       ARCHITECTURE §11.
 - [ ] Fresh `./dev ci` (gcc + clang) + ASan + gates green; `./dev test it`
       integration sweep green on the re-initialised device.
+- [ ] Release artifacts of the gate commit (STEP-M10-065 workflow)
+      downloaded and smoke-run (`hem-tool status`, system trust) on
+      Linux and Windows — attended; the licensing decision (REQ-BUILD-005)
+      recorded before any `v*` tag is pushed.
 - [ ] TRACE.md regenerated (§4.3); ARCHITECTURE §11 M10 gate-passed.
