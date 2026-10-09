@@ -100,7 +100,11 @@ distinguish every condition a PKCS#11 backend must map: `EHEM_ERR_NETWORK`,
 `ehem_rc_str()` names any value. Detail for the LAST call —
 HTTP status, the device's error payload, a human-readable message — is
 retrievable from the context via `ehem_last_error()`; the returned struct
-is context-owned and valid until the next call on that context.
+is context-owned and valid until the next call on that context. Its
+`tls_expired` field (added in 1.1, append-only) is 1 when the call failed
+TLS verification because the device certificate has expired — the one
+failure a check-in can cure — so a caller can pick the remediation
+without parsing the message.
 
 HTTP mapping (shared by all bindings): 401 → `EHEM_ERR_AUTH_FAILED`
 (after one silent re-acquisition retry on scoped requests), 403 →

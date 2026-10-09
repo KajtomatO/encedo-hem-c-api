@@ -169,13 +169,34 @@ that need the device (`test it`, `test all`, `tool`) use the `EHEM_*` variables
 when set, otherwise auto-source a git-ignored `./hem.env` (and say so on
 stderr). See `./dev help` for the full surface.
 
+## Download hem-tool
+
+Prebuilt, single-file static binaries of `hem-tool` (libcurl + wolfSSL linked
+in; only the C runtime is dynamic) come from the release workflow
+(`.github/workflows/release.yml`): every push to `main` uploads
+`hem-tool-<version>+g<sha>-{linux,windows}-x86_64.{tar.gz,zip}` as workflow
+artifacts, and a `v*` tag publishes them as a GitHub Release together with
+`SHA256SUMS`. Verify a download before running it:
+
+```sh
+sha256sum -c SHA256SUMS            # Linux
+CertUtil -hashfile <file> SHA256    # Windows
+```
+
+Each archive carries the license notices of everything linked in
+(`LICENSES/`); the wolfSSL licensing decision for public releases is
+tracked in ARCHITECTURE.md §12 risk 1.
+
 ## hem-tool
 
 The bundled CLI drives every binding through the public API. Commands are
-grouped by what they need — none (`status`, `checkin`), any bearer
-(`keys`, `sign`, `random`, `logs`, `selftest`, `cert-install`, `reboot`,
-`tls-recover`, `ext list/login`), or a passphrase only (`ext pair` — the
-device demands `sub="U"` for pairing changes):
+grouped by what they need — none (`status`, `checkin`, `init-device`), any bearer
+(`keys`, `sign`, `random`, `logs`, `selftest`, `reboot`, `ext list/login`),
+or a passphrase only (`ext pair` — the device demands `sub="U"` for pairing
+changes; `wipe-device` and `recovery` — config writes, `sub="U"`/`"M"`) — followed by a
+"manual recovery" section holding the building
+blocks of `recovery` (`cert-install`, `tls-recover`; passphrase only, since
+config writes demand `sub="U"`/`"M"`):
 
 ```bash
 hem-tool status                     # no --url needed: defaults to https://my.ence.do

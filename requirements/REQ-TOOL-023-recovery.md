@@ -1,7 +1,7 @@
 ---
 id: REQ-TOOL-023
 title: hem-tool recovery — diagnose TLS/certificate trouble and run the matching remediation
-status: approved
+status: verified
 priority: should
 revision: 1
 source: user decision 2026-10-07 ("add to tool 'recovery' … based on previous problems"; single check-in attempt, no polling); incidents: expired device certificate (M1 gate 2026-07-16, REQ-NET-005; again 2026-10-06/07 — cloud renewed late, a cloud defect Encedo fixed after notification), TLS material lost after the 2026-07-22 wipe (REQ-SYS-013/TOOL-015), RTC unset after cold boot and ~8 % clock drift (KNOWN-ISSUES, REQ-AUTH-004/005); REQ-TOOL-003 and REQ-TOOL-015 (the building blocks); approved 2026-10-07 (M10 decomposition, user go-ahead)
@@ -61,20 +61,31 @@ time (a day for the 2026-07-22 recovery; ~1 h for the 2026-10-07
 rotation). One command that picks the order removes the archaeology.
 
 **Acceptance criteria:**
-- [ ] Classification needs a public signal for "TLS failed because the
-      certificate expired" — today that is internal
-      (`ehem_transport_last_tls_expired`, src/transport.h). RESOLVE at
-      implementation, user decision: (a) expose it on `ehem_last_error()`
-      (a new field — library-allocated outputs may grow in 1.x,
-      REQ-API-008) or (b) classify from the REQ-NET-005 detail text the
-      SDK already emits.
-- [ ] Unit (hem-tool-core, fake transport): one test per case 1–5 —
-      healthy (status + one check-in, exit 0); expired + chain → the
-      full cert-install sequence, exit 0; expired + no chain → exit 3
-      with NO retry; https down + http `https:false` → the tls-recover
-      sequence, exit 0; both down → exit 4; other TLS failure → exit 5;
-      `--mobile` → exit 2.
-- [ ] Live, attended (non-destructive on a healthy device): `recovery`
-      exits 0 via case 1 with one check-in. The other cases are
-      exercised whenever the incident recurs (recorded here with date).
-- [ ] `--help` explains the five cases and that the cloud is tried once.
+- [x] RESOLVED (STEP-M10-060, 2026-10-09, option a — the user had left
+      the choice to implementation): `ehem_error.tls_expired` appended to
+      the public last-error struct (context-owned, append-only, ABI-safe;
+      REQ-API-004 rev 2, mini §6.2 in chat) and set by the shared request
+      path from the transport's REQ-NET-005 verdict — also when automatic
+      recovery is off, which is how `recovery`'s probe context runs
+      (`no_auto_checkin`), so the verdict surfaces instead of being
+      repaired behind the tool's back. Documented in docs/API-GUIDE.md.
+- [x] Unit (hem-tool-core, three fake transports for the three TLS
+      postures): one test per case 1–5 — healthy (status + one check-in,
+      exit 0); expired + chain → one relaxed check-in, then the full
+      cert-install sequence and a trusted verify, exit 0; expired + no
+      chain → exit 3 with NO retry (the insecure context sees exactly one
+      check-in); https down + http `https:false` → the tls-recover
+      sequence, exit 0; both down → exit 4; other TLS failure → exit 5
+      with nothing written; `--mobile` / no passphrase → exit 2, zero
+      traffic. *(tests/unit/test_recovery.c, 2026-10-09.)*
+- [x] Live, attended (non-destructive on a healthy device): `recovery`
+      exits 0 via case 1 with one check-in. *(2026-10-09, my.ence.do under
+      system trust, binary from STEP-M10-060: "healthy: the device answers
+      under the configured trust" → check-in → "nothing to recover", exit
+      0. Finding: the healthy device's status omits the `https` field over
+      HTTPS, so an absent field is treated as UNKNOWN (exit 5 on the http
+      path), never as "down".)* The other cases are exercised whenever the
+      incident recurs — standing note, recorded here with the date when it
+      happens.
+- [x] `--help` explains the five cases and that the cloud is tried once.
+      *(registry.c entry, STEP-M10-060, 2026-10-09.)*

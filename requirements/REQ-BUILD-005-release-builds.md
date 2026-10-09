@@ -64,20 +64,35 @@ additional.
       `workflow_dispatch` builds a chosen ref. `ci.yml` unchanged.
 - [ ] Static proven in the job: Linux `ldd` shows no libcurl/libwolfssl
       (glibc family only); Windows import table lists only system DLLs.
+      *(Linux proven locally 2026-10-09 by the same package.sh: ldd =
+      libm + libc only; the shared library exports 0 non-`ehem_` symbols
+      thanks to `-Wl,--exclude-libs,ALL`. Workflow run pending the push;
+      Windows pending.)*
 - [ ] Unit suite green on the static Release build, both platforms, in
-      the workflow.
-- [ ] OPEN — REQ-NET-005 under a wolfSSL-backed libcurl: the expired-cert
-      classifier (`src/transport_curl.c:335-343`) keys on the
-      OpenSSL/GnuTLS verify code 10 and the text "expired"; wolfSSL's
-      date failure is `ASN_AFTER_DATE_E` (-150, "ASN date error, current
-      date after"). Extend the classifier (code and/or text) and PROVE it
-      in the workflow against a local HTTPS endpoint serving an expired
-      self-signed certificate — a release binary that cannot classify an
-      expired device certificate silently loses automatic recovery.
+      the workflow. *(Linux locally 2026-10-09: 46/46 on the static -O3
+      build — which surfaced and fixed a -Wformat-truncation in
+      crypto_shim.c that Debug builds never saw.)*
+- [x] RESOLVED (STEP-M10-065, 2026-10-09): the classifier
+      (`src/transport_curl.c`) now also accepts wolfSSL's verdict —
+      `ASN_AFTER_DATE_E` (-151 in 5.6.x/5.7.x, -150 older) via
+      CURLINFO_SSL_VERIFYRESULT, the texts "date error, current date
+      after" / "ASN_AFTER_DATE", and CURLE_SSL_CONNECT_ERROR as the curl
+      code — and `scripts/release/check-expired-classifier.sh` proves it:
+      a valid local CA + an EXPIRED leaf served by `openssl s_server`
+      (wolfSSL refuses to load an expired cert as a trust anchor, so the
+      leaf must be signed by a valid CA), `hem-tool recovery` prints the
+      EXPIRED diagnosis. Proven locally with the static wolfSSL-backed
+      build (curl's wolfSSL text: "server verification failed:
+      certificate has expired."); the workflow's Linux job runs the same
+      script on every build.
 - [ ] System trust works: both release binaries run `hem-tool status`
       against the dev device (public-CA ZeroSSL certificate) with no
       `--cacert` / `--insecure` — attended (no device in CI), recorded
-      here with date and binary version.
+      here with date and binary version. *(Linux ✓ 2026-10-09: the
+      locally built static binary hem-tool-1.0.0+ga285ec7 — wolfSSL
+      backend, compiled-in bundle /etc/ssl/certs/ca-certificates.crt —
+      `status` and `recovery` (healthy path) against my.ence.do under
+      system trust, exit 0. Windows pending.)*
 - [ ] OPEN — user decision before the FIRST tagged Release: wolfSSL
       licensing for distributed binaries (ARCHITECTURE §12 risk 1) —
       GPLv3 compliance (license text + source offer in the archive;

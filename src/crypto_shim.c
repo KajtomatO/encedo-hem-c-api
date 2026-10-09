@@ -248,9 +248,19 @@ static void date_to_iso(const byte *cert_date, int cert_date_sz,
     if (wc_GetDateAsCalendarTime(date, length, format, &t) != 0) {
         return;
     }
-    (void)snprintf(out, cap, "%04d-%02d-%02dT%02d:%02d:%02dZ",
-                   t.tm_year + 1900, t.tm_mon + 1, t.tm_mday,
-                   t.tm_hour, t.tm_min, t.tm_sec);
+    /* Clamp every field to its digit width so the formatted length is provably
+     * 20 + NUL = EHEM_CERT_DATE_CAP (GCC -O3 -Wformat-truncation, which the
+     * Release build of REQ-BUILD-005 runs with, cannot see that itself). */
+    {
+        unsigned y  = (unsigned)(t.tm_year + 1900) % 10000u;
+        unsigned mo = (unsigned)(t.tm_mon + 1) % 100u;
+        unsigned d  = (unsigned)t.tm_mday % 100u;
+        unsigned hh = (unsigned)t.tm_hour % 100u;
+        unsigned mi = (unsigned)t.tm_min % 100u;
+        unsigned s  = (unsigned)t.tm_sec % 100u;
+        (void)snprintf(out, cap, "%04u-%02u-%02uT%02u:%02u:%02uZ",
+                       y, mo, d, hh, mi, s);
+    }
 }
 
 ehem_rc ehem_cert_parse_leaf(const uint8_t *der, size_t der_len,

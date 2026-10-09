@@ -1,0 +1,139 @@
+# Release — single-file STATIC hem-tool binaries for Linux and Windows
+# (REQ-BUILD-005). implements: REQ-BUILD-005
+#
+# Every push to `main` (and a manual run on any ref) builds both archives and
+# uploads them as workflow artifacts; a version tag `v*` additionally publishes
+# a GitHub Release with the archives and SHA256SUMS. The tag must equal the
+# project version (scripts/release/package.sh refuses otherwise).
+#
+# The deps (pinned wolfSSL + libcurl with wolfSSL as its TLS backend, HTTP/HTTPS
+# only) are built from source by scripts/release/build-deps-static.sh and cached
+# on their versions; the project is built Release against them, the unit suite
+# runs on that build, the static check is asserted, and the Linux job proves
+# the REQ-NET-005 expired-certificate classifier under the wolfSSL backend
+# against a local expired-cert endpoint (scripts/release/check-expired-
+# classifier.sh). ci.yml (REQ-BUILD-002) is untouched by this workflow.
+
+name: Release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write     # the Release + its assets on tags
+
+env:
+  WOLFSSL_VERSION: "5.7.2"
+  CURL_VERSION: "8.10.1"
+
+jobs:
+  linux:
+    name: Linux x86_64 (static)
+    runs-on: ubuntu-22.04      # the oldest LTS runner — glibc reach for the binary
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential cmake ninja-build pkg-config libcmocka-dev python3-pip zip
+          python3 -m pip install --user cryptography
+
+      - name: Cache static deps
+        id: deps
+        uses: actions/cache@v4
+        with:
+          path: deps-static
+          key: deps-linux-wolfssl-${{ env.WOLFSSL_VERSION }}-curl-${{ env.CURL_VERSION }}-v1
+
+      - name: Build static wolfSSL + libcurl
+        run: scripts/release/build-deps-static.sh deps-static
+
+      - name: Build, test, package
+        env:
+          RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+        run: scripts/release/package.sh deps-static linux dist
+
+      - name: Prove the expired-certificate classifier (wolfSSL backend)
+        run: scripts/release/check-expired-classifier.sh build-release/hem-tool 8443
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hem-tool-linux-x86_64
+          path: |
+            dist/*.tar.gz
+            dist/SHA256SUMS
+          if-no-files-found: error
+
+  windows:
+    name: Windows x86_64 (static, MinGW)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up MSYS2 / MinGW-w64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-pkgconf
+            mingw-w64-x86_64-cmocka
+            zip git
+
+      - name: Cache static deps
+        id: deps
+        uses: actions/cache@v4
+        with:
+          path: deps-static
+          key: deps-windows-wolfssl-${{ env.WOLFSSL_VERSION }}-curl-${{ env.CURL_VERSION }}-v1
+
+      - name: Build static wolfSSL + libcurl
+        run: scripts/release/build-deps-static.sh deps-static
+
+      - name: Build, test, package
+        env:
+          RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+        run: scripts/release/package.sh deps-static windows dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hem-tool-windows-x86_64
+          path: |
+            dist/*.zip
+            dist/SHA256SUMS
+          if-no-files-found: error
+
+  release:
+    name: GitHub Release (tags)
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Assemble assets + one SHA256SUMS
+        run: |
+          mkdir -p release
+          cp artifacts/hem-tool-linux-x86_64/*.tar.gz artifacts/hem-tool-windows-x86_64/*.zip release/
+          cat artifacts/hem-tool-linux-x86_64/SHA256SUMS artifacts/hem-tool-windows-x86_64/SHA256SUMS > release/SHA256SUMS
+          ( cd release && sha256sum -c SHA256SUMS )
+          ls -l release
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: false
+          body_path: ${{ github.workspace }}/release/SHA256SUMS

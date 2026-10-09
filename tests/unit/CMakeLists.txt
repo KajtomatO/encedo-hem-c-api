@@ -74,6 +74,18 @@ if(TARGET hem-tool-core)
   ehem_add_unit_test(test_recover SOURCES test_recover.c)
   target_link_libraries(test_recover PRIVATE hem-tool-core)
 
+  # REQ-TOOL-022: `wipe-device` — typed-hostname confirmation, --wait (M10).
+  ehem_add_unit_test(test_wipe SOURCES test_wipe.c)
+  target_link_libraries(test_wipe PRIVATE hem-tool-core)
+
+  # REQ-TOOL-021: `init-device` — master-secret sources, cfg defaults, exits (M10).
+  ehem_add_unit_test(test_init_tool SOURCES test_init_tool.c)
+  target_link_libraries(test_init_tool PRIVATE hem-tool-core)
+
+  # REQ-TOOL-023: `recovery` — the five diagnoses and their remediations (M10).
+  ehem_add_unit_test(test_recovery SOURCES test_recovery.c)
+  target_link_libraries(test_recovery PRIVATE hem-tool-core)
+
   # REQ-TOOL-016: `ext` pair/list/login + terminal QR (M8).
   ehem_add_unit_test(test_ext_tool SOURCES test_ext_tool.c)
   target_link_libraries(test_ext_tool PRIVATE hem-tool-core)

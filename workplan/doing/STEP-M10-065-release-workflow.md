@@ -7,9 +7,38 @@ traces:
   architecture: ["ARCHITECTURE.md#1-decisions-fixed", "ARCHITECTURE.md#11-milestones", "ARCHITECTURE.md#12-risks--open-questions"]
 depends_on: []
 evidence:
-  commits: []
-  tests: []
-  notes: null
+  commits: []   # the user commits (never-commit rule); SHA to be backfilled
+  tests:
+    - "LOCAL DRY RUN 2026-10-09 (Linux leg, the exact scripts the workflow calls): scripts/release/build-deps-static.sh → wolfSSL 5.7.2 + curl 8.10.1 static (CMake, wolfSSL TLS backend, HTTP-only); scripts/release/package.sh → Release build, ctest -L unit 46/46 on the static build, ldd = libm/libc only, shared lib exports 0 non-ehem symbols, archive hem-tool-1.0.0+ga285ec7-linux-x86_64.tar.gz (2.4 MB binary + LICENSES/ + README.txt) + SHA256SUMS; scripts/release/check-expired-classifier.sh with the STATIC binary → 'diagnosis: the device certificate has EXPIRED (… server verification failed: certificate has expired.)' = the REQ-NET-005 classifier proven under the wolfSSL backend, no cloud traffic (EHEM_CHECKIN_URL hook)"
+  notes: >
+    2026-10-09. Written: .github/workflows/release.yml (push to main +
+    workflow_dispatch → artifacts; v* tags → GitHub Release with the two
+    archives + one SHA256SUMS, re-verified before publishing; tag == project
+    version enforced by package.sh); scripts/release/build-deps-static.sh
+    (pinned wolfSSL 5.7.2 from the GitHub tag archive + curl 8.10.1, BOTH via
+    CMake — no autotools anywhere; -fPIC; Linux CA bundle+path compiled in,
+    Windows relies on CURLSSLOPT_NATIVE_CA; cache-stamped),
+    scripts/release/package.sh (Release build against the prefix,
+    CURL_USE_STATIC_LIBS, CMAKE_C_STANDARD_LIBRARIES=-lm so the static
+    libwolfssl's pow/log resolve, -static on Windows; unit suite; static
+    assertion via ldd / objdump; licenses + README into the archive;
+    SHA256SUMS), scripts/release/make-expired-cert.py (valid CA + EXPIRED
+    leaf — wolfSSL refuses to LOAD an expired cert as a trust anchor, so a
+    self-signed expired cert cannot be its own CA), scripts/release/
+    check-expired-classifier.sh (openssl s_server + `hem-tool recovery` →
+    the EXPIRED diagnosis line is the proof). SDK/tool changes the dry run
+    forced: transport_curl.c classifier also matches wolfSSL's
+    ASN_AFTER_DATE_E (-151 in 5.6.6) / its text and CURLE_SSL_CONNECT_ERROR;
+    CURLSSLOPT_NATIVE_CA on _WIN32; crypto_shim.c date formatter clamped
+    (-O3 -Wformat-truncation fired — Debug builds never saw it); CMake
+    -Wl,--exclude-libs,ALL on the shared library (REQ-API-006: with static
+    deps every curl/wolfSSL symbol was exported — the export gate caught
+    it); main.c EHEM_CHECKIN_URL test hook; wolfSSL CMake needs
+    -DCMAKE_C_FLAGS=-Wno-error on GCC 13. README "Download hem-tool"
+    section. Regular ./dev ci 46/46 gcc+clang + ./dev check green after all
+    of it. NOT DONE (needs a push / attended / a decision): the workflow run
+    itself on GitHub (Linux + Windows jobs, artifacts), the Windows leg, the
+    tag path, the licensing decision (REQ-BUILD-005 / §12 risk 1).
 reopened: []
 cancelled: null
 ---
@@ -63,14 +92,14 @@ archives + `SHA256SUMS` (tag == project version enforced).
 - [ ] `release.yml` green on a push to main: both archives uploaded as
       artifacts, static checks asserted, unit suite green on the Release
       build on both platforms.
-- [ ] Expired-cert classification proven in the workflow with the
-      wolfSSL-backed libcurl (REQ-BUILD-005 / REQ-NET-005 criterion
-      recorded).
+- [x] Expired-cert classification proven with the wolfSSL-backed libcurl
+      (REQ-BUILD-005 / REQ-NET-005 criterion recorded) — locally with the
+      static build, by the same script the workflow runs (2026-10-09).
 - [ ] Attended: both downloaded binaries run `hem-tool status` against
       the dev device under system trust (recorded in REQ-BUILD-005).
 - [ ] Tag path exercised at least by a dry run (`workflow_dispatch` on a
       throwaway pre-release tag or a `-rc` tag, deleted afterwards if
       wanted) — Release created with archives + SHA256SUMS; version/tag
       mismatch fails.
-- [ ] README Download section; `./dev ci` still green; `implements:
-      REQ-BUILD-005` tag in the workflow header.
+- [x] README Download section; `./dev ci` still green; `implements:
+      REQ-BUILD-005` tag in the workflow header (and in the scripts).

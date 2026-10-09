@@ -1,7 +1,7 @@
 ---
 id: REQ-TOOL-021
 title: hem-tool init-device — personalise an uninitialised device
-status: approved
+status: implemented
 priority: should
 revision: 2
 source: user decision 2026-10-07 (M10: "add both init-device and wipe-device to the tool"; attended-only); REQ-AUTH-011 (the binding); Encedo Manager assets/build.js initFinal (the authoritative client flow); encedo-hem-api-doc auth/init.md; approved 2026-10-07 (M10 decomposition, user go-ahead)
@@ -64,13 +64,17 @@ without this command the only init path is the Manager's web UI.
       tool-initialised device off from that. Hex stays only as the
       scripted escape hatch. The derivation lives in the SDK
       (REQ-AUTH-012), not in the tool.
-- [ ] Unit (hem-tool-core, fake transport): the full sequence (check-in
+- [x] Unit (hem-tool-core, fake transport): the full sequence (check-in
       legs → GET init → POST init) with the Manager-default `cfg`;
       required-flag omissions → exit 2 with zero traffic; 406 → exit 3;
       403 after check-in → exit 4; 400 → exit 5; the master secret never
       appears in output except the one `--master-generate` print.
+      *(STEP-M10-040, 2026-10-09: tests/unit/test_init_tool.c, five
+      cases; the defaults are the Manager's — ip 192.168.7.1/24,
+      storage_mode 81, disk0 8388608, build.js:4189-4201.)*
 - [ ] **Attended-only** (REQ-TEST-007): no live CTest. Evidence to record
       here: date, device, the init result (instanceid, reboot_required),
       and that a subsequent `hem-tool status` + passphrase login worked.
-- [ ] `--help` documents every cfg flag with its default and the
-      irreversibility of the master secret.
+- [x] `--help` documents every cfg flag with its default and the
+      irreversibility of the master secret. *(registry.c OPT_INIT +
+      entry, STEP-M10-040, 2026-10-09.)*

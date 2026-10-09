@@ -1,7 +1,7 @@
 ---
 id: REQ-TOOL-022
 title: hem-tool wipe-device — factory reset with an unbypassable confirmation
-status: approved
+status: implemented
 priority: should
 revision: 1
 source: user decision 2026-10-07 (M10: "add both init-device and wipe-device to the tool"; attended-only); REQ-SYS-014 (the binding); ARCHITECTURE.md §8 protected-key confirmation convention; approved 2026-10-07 (M10 decomposition, user go-ahead)
@@ -44,14 +44,16 @@ with a stronger token than `YES`, because the target is the whole
 device.
 
 **Acceptance criteria:**
-- [ ] Unit (hem-tool-core, fake transport): declined confirmation → exit
+- [x] Unit (hem-tool-core, fake transport): declined confirmation → exit
       3 with zero device writes; wrong hostname → exit 3; correct
       hostname → the wipeout request is sent exactly once; `--yes` does
-      not skip the prompt; `--mobile` → exit 2 naming the sub="U"
-      constraint; `--wait` poll until status answers / exit 4 on
-      exhaustion.
+      not skip the prompt (the command has no such option); `--mobile` →
+      exit 2 naming the sub="U" constraint; `--wait` poll until status
+      answers / exit 4 on exhaustion. *(STEP-M10-030, 2026-10-09:
+      tests/unit/test_wipe.c, six cases.)*
 - [ ] **Attended-only** (REQ-TEST-007): no live CTest. Evidence to record
       here: date, device, typed confirmation, observed restart, device
       back uninitialised.
-- [ ] `--help` and the per-command help (REQ-TOOL-020) document the
+- [x] `--help` and the per-command help (REQ-TOOL-020) document the
       confirmation, the irreversibility and the follow-up commands.
+      *(registry.c entry, STEP-M10-030, 2026-10-09.)*
