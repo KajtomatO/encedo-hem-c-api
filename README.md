@@ -171,21 +171,30 @@ stderr). See `./dev help` for the full surface.
 
 ## Download hem-tool
 
-Prebuilt, single-file static binaries of `hem-tool` (libcurl + wolfSSL linked
-in; only the C runtime is dynamic) come from the release workflow
-(`.github/workflows/release.yml`): every push to `main` uploads
-`hem-tool-<version>+g<sha>-{linux,windows}-x86_64.{tar.gz,zip}` as workflow
-artifacts, and a `v*` tag publishes them as a GitHub Release together with
-`SHA256SUMS`. Verify a download before running it:
+Prebuilt `hem-tool` binaries come from the release workflow
+(`.github/workflows/release.yml`): every push to `main` uploads them as
+workflow artifacts (version suffixed `+g<sha>`), and a `v*` tag publishes
+them as a GitHub Release together with `SHA256SUMS`. libcurl is compiled
+in; **wolfSSL is linked dynamically and is not in the hem-tool archive** —
+no published package bundles it statically (licensing; ARCHITECTURE.md §1).
+A release carries:
+
+| Asset | Contents |
+|---|---|
+| `hem-tool-<version>-{linux,windows}-x86_64.{tar.gz,zip}` | the binary, `README.txt`, `LICENSES/` (MIT SDK/tool, curl, cJSON, BIP39 wordlist, qrcodegen) |
+| `wolfssl-<wv>-{linux,windows}-x86_64.{tar.gz,zip}` | `libwolfssl.so.<N>` / `libwolfssl.dll`, wolfSSL's `COPYING` (GPLv2 or later), `BUILD-CONFIG.txt`, `README.txt` |
+| `wolfssl-<wv>-stable-src.tar.gz` | the unmodified upstream source the library was built from |
+| `SHA256SUMS` | over all of the above |
+
+Unpack the hem-tool archive and the matching wolfSSL asset and put the
+library next to the binary — hem-tool looks in its own directory first,
+then the system's library path (a system wolfSSL with the same soname and
+build configuration works too). Verify downloads before running anything:
 
 ```sh
 sha256sum -c SHA256SUMS            # Linux
 CertUtil -hashfile <file> SHA256    # Windows
 ```
-
-Each archive carries the license notices of everything linked in
-(`LICENSES/`); the wolfSSL licensing decision for public releases is
-tracked in ARCHITECTURE.md §12 risk 1.
 
 ## hem-tool
 
@@ -242,5 +251,8 @@ workplan/        todo/ · doing/ · done/ step files
 ## License
 
 MIT — see [LICENSE](LICENSE). Written from scratch (no code derived from GPL
-PKCS#11 implementations). Note wolfSSL is GPLv3/commercial
-dual-licensed; binaries that link it must comply accordingly.
+PKCS#11 implementations). wolfSSL is GPLv2-or-later/commercial
+dual-licensed (per the pinned release's `COPYING`/`LICENSING`); binaries
+that link it must comply accordingly — the published hem-tool links it
+dynamically, and no published package bundles it statically
+(ARCHITECTURE.md §1, §12 risk 1).

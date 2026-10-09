@@ -66,8 +66,9 @@ the encedo-hem-api-doc spec.
 - **CI:** GitHub Actions — build + unit tests on Linux and Windows from
   day one; integration tests run locally against the dev-machine HEM until
   CI gets device access (user decision 2026-07-15). M10 adds a release
-  workflow: static hem-tool binaries for both platforms on every push to
-  `main`, GitHub Releases on `v*` tags (user decision 2026-10-07).
+  workflow: hem-tool binaries for both platforms (static libcurl, dynamic
+  wolfSSL — the shared wolfSSL ships as its own asset) on every push to
+  `main`, GitHub Releases on `v*` tags (user decisions 2026-10-07/09).
 
 **Data flow:** application calls a typed function (e.g. `ehem_key_list`) →
 session engine ensures a valid bearer token for the required scope
@@ -119,6 +120,13 @@ the context.
 - **wolfSSL (wolfCrypt) for crypto primitives** (user decision 2026-07-15)
   — X25519, HMAC-SHA256, SHA-256, PBKDF2, RNG; may also serve as libcurl's
   TLS backend where we build libcurl ourselves.
+- **wolfSSL is never statically bundled into a published package** (user
+  decision 2026-10-09; licensing — wolfSSL is GPLv2-or-later/commercial):
+  published hem-tool and library packages link wolfSSL dynamically, and the
+  shared wolfSSL ships as a separate asset with its license text, its build
+  configuration and the corresponding source; static packages, when they
+  come, use a different library (M12). libcurl (permissive curl license)
+  may be compiled in.
 - **PBKDF2-HMAC-SHA256 as the login KDF, per Encedo Manager** (user
   decision 2026-07-15: Encedo Manager is the authoritative auth-flow
   reference; corrected 2026-10-06) — 600 000 iterations, 32-byte output,
@@ -180,9 +188,10 @@ Constraints that shape the design:
   trips* (token caching, silent refresh), not throughput.
 - **Platforms:** Linux is the MVP target; Windows (MinGW) builds and unit
   tests from day one; macOS later — nothing in the design may preclude it.
-- **License:** the SDK is MIT. wolfSSL is GPLv3/commercial dual-licensed —
-  binaries linking it must comply or use Encedo's commercial license
-  (risk #1 in §12).
+- **License:** the SDK is MIT. wolfSSL is GPLv2-or-later/commercial
+  dual-licensed (per the pinned 5.7.2 tarball's `COPYING`/`LICENSING`;
+  re-check on every bump) — published binaries link it dynamically and
+  never bundle it statically (§1; risk #1 in §12).
 - **The API doc has known gaps** — its `DISCREPANCIES.md` records
   divergences between documentation, Encedo Manager, and the test suite.
   Precedence order for conflicts: real device > Encedo Manager > API doc.
@@ -648,15 +657,21 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
     sits in the normal auth-grouped listing (REQ-TOOL-019 revision at
     decomposition).
   - **Release builds of hem-tool** (user decision 2026-10-07,
-    REQ-BUILD-005): a separate GitHub Actions workflow builds hem-tool as
-    single-file **static** Release binaries for Linux and Windows —
-    libcurl and wolfSSL from pinned sources, wolfSSL as libcurl's TLS
-    backend (the §1 "where we build libcurl ourselves" case) — on every
-    push to `main` (workflow artifacts) and publishes a GitHub Release
-    with `SHA256SUMS` on `v*` tags. Two consequences carried as open
-    criteria: the REQ-NET-005 expired-cert classifier must be proven
-    under the wolfSSL backend, and §12 risk 1 (wolfSSL licensing) needs
-    its decision before the first tagged Release.
+    REQ-BUILD-005; link mode changed by user decision 2026-10-09): a
+    separate GitHub Actions workflow builds hem-tool as Release binaries
+    for Linux and Windows — libcurl and wolfSSL from pinned sources,
+    wolfSSL as libcurl's TLS backend (the §1 "where we build libcurl
+    ourselves" case), libcurl compiled in, **wolfSSL linked dynamically**
+    and published as its own release asset (shared library + `COPYING` +
+    build configuration + corresponding source; never inside the hem-tool
+    archive — §1) — on every push to `main` (workflow artifacts) and
+    publishes a GitHub Release with `SHA256SUMS` on `v*` tags. The two
+    consequences once carried as open criteria are settled: the
+    REQ-NET-005 expired-cert classifier was proven under the wolfSSL
+    backend (2026-10-09), and §12 risk 1 (wolfSSL licensing) got its
+    decision the same day — no static wolfSSL in any published package;
+    static packages on another library are M12 scope. The rev-1 static
+    dry run was superseded before any push.
   - Decomposition chore: re-check MFW's list against the then-current
     firmware and pull in anything it now routes.
 - **M11 — retired (2026-10-07)**: created 2026-08-07 for
@@ -664,6 +679,46 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   in [BACKLOG.md](BACKLOG.md) together with the reserved design
   constraint (diag support must not enter the production SDK). The
   number is not reused.
+- **M12 — build variants & multi-package releases** *(early draft, user
+  request 2026-10-09; NOT decomposed — its open questions are deferred by
+  the user; placeholder STEP-M12-000)*. Today both SDK variants are always
+  built, hem-tool always links the static SDK, and third-party
+  dependencies link however pkg-config / FindCURL resolve them — there is
+  no switch:
+  - **Link-mode switches** — CMake options choosing which SDK variant(s)
+    to build, whether hem-tool links the SDK statically or dynamically,
+    and whether third-party dependencies (libcurl, the crypto/TLS
+    library) are linked statically or dynamically; candidate names
+    `EHEM_BUILD_SHARED` / `EHEM_BUILD_STATIC`, `EHEM_TOOL_LINK`,
+    `EHEM_DEPS_LINK`, settled at decomposition.
+  - **Crypto/TLS backend switch** — `EHEM_CRYPTO_BACKEND=wolfssl|<tbd>`;
+    wolfSSL stays the default; the alternative library is a pending user
+    decision; static package variants use it, never wolfSSL (§1).
+    Touchpoints: `src/crypto_shim.c` (the only wolfCrypt includer),
+    `ehem_global_init` (`wolfCrypt_Init`), the `transport_curl.c`
+    expired-cert texts, the libcurl TLS backend in
+    `scripts/release/build-deps.sh`, the `public_headers_dep_free` gate.
+  - **Static-wolfSSL warning** — configuring a build whose wolfSSL
+    resolves to a static archive emits a CMake `WARNING` naming the
+    licensing consequence (§12 risk 1); the release scripts refuse to
+    package such a binary (the M10 link-mode assertion stays).
+  - **Multi-variant GitHub release** — {SDK library package, hem-tool} ×
+    {dynamic, static} × {linux-x86_64, windows-x86_64, …}: library
+    packages = headers + `libencedo-hem.{so,a}` / `.dll` + import lib +
+    the CMake package config (fix `cmake/encedo-hem-config.cmake.in`,
+    which lacks the wolfSSL `find_dependency` the static target's link
+    interface needs; decide the pkg-config `.pc` file promised in §1 but
+    declared not shipped in REQ-API-008) + notices; dynamic variants reuse
+    the M10 wolfSSL companion asset; static variants ship only once the
+    alternative backend exists; plus a **full-dynamic hem-tool** variant —
+    libcurl dynamic as well (user note 2026-10-09; the M10 release keeps
+    libcurl static).
+  - *Open questions (deferred):* the alternative library; whether any
+    static variant ships before that backend lands; the `.pc` file; macOS
+    and MSVC; the asset naming scheme; whether `ci.yml` or `release.yml`
+    carries the variant matrix. **Gate (draft):** every variant built in
+    CI with its link mode asserted and the unit suite green; attended
+    `hem-tool status` per variant.
 - **MFW — firmware-pending** *(created by user decision 2026-08-07: one
   generic future milestone for every feature that is documented — or
   shipped dormant — but MISSING from the running firmware; nothing here
@@ -691,15 +746,22 @@ not in a milestone (user decision 2026-10-07).
 
 ## 12. Risks & open questions
 
-1. **wolfSSL licensing (GPLv3/commercial)** — binaries linking wolfSSL
-   must comply with GPLv3 or use a commercial license; affects how
-   encedo-pkcs11 (MIT) ships. *Resolved by:* Encedo confirming its
-   licensing model before the first binary release. **Now concrete (M10,
-   2026-10-07):** REQ-BUILD-005 ships static hem-tool binaries with
-   wolfSSL inside; the decision — GPLv3 compliance bundle (license text +
-   source offer; hem-tool and the SDK are MIT, compatible) or Encedo's
-   commercial license — is an open criterion there and gates the first
-   `v*` Release. Main-branch artifacts are internal until then.
+1. **wolfSSL licensing (GPLv2-or-later/commercial) — decision recorded
+   2026-10-09.** Binaries linking wolfSSL must comply with its GPL or use
+   a commercial license; affects how encedo-pkcs11 (MIT) ships. The pinned
+   5.7.2 tarball's `COPYING` is GPLv2 and its `LICENSING` says "GPLv2 (or
+   at your option any later version) or a standard commercial license"
+   (earlier revisions of this document said GPLv3 — re-check on every pin
+   bump). **Decision (user, 2026-10-09, §1):** no published package
+   bundles wolfSSL statically; hem-tool (REQ-BUILD-005 rev 2) links it
+   dynamically and the shared wolfSSL is published as a separate asset
+   with its `COPYING`, its exact build configuration and the corresponding
+   source tarball; the hem-tool archive carries only MIT/permissive
+   notices. Static packages, when wanted, use a different library (M12).
+   *Still open:* encedo-pkcs11's own shipping shape inherits the same
+   dynamic-link position; the alternative static-build library is an M12
+   decision. The first `v*` Release waits for REQ-BUILD-005 rev 2
+   re-approval.
 2. **Login KDF — CLOSED (2026-10-06).** Was "Login-KDF discrepancy between
    official clients" (2026-07-16, itself superseding "Argon2 parameters
    not pinned"). There is no discrepancy: the current Encedo Manager

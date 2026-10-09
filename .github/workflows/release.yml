@@ -1,18 +1,24 @@
-# Release — single-file STATIC hem-tool binaries for Linux and Windows
+# Release — hem-tool binaries for Linux and Windows that link libcurl STATICALLY
+# and wolfSSL DYNAMICALLY, plus the shared wolfSSL as its own asset
 # (REQ-BUILD-005). implements: REQ-BUILD-005
 #
-# Every push to `main` (and a manual run on any ref) builds both archives and
+# Every push to `main` (and a manual run on any ref) builds the archives and
 # uploads them as workflow artifacts; a version tag `v*` additionally publishes
 # a GitHub Release with the archives and SHA256SUMS. The tag must equal the
 # project version (scripts/release/package.sh refuses otherwise).
 #
-# The deps (pinned wolfSSL + libcurl with wolfSSL as its TLS backend, HTTP/HTTPS
-# only) are built from source by scripts/release/build-deps-static.sh and cached
-# on their versions; the project is built Release against them, the unit suite
-# runs on that build, the static check is asserted, and the Linux job proves
-# the REQ-NET-005 expired-certificate classifier under the wolfSSL backend
-# against a local expired-cert endpoint (scripts/release/check-expired-
-# classifier.sh). ci.yml (REQ-BUILD-002) is untouched by this workflow.
+# No published package bundles wolfSSL statically (ARCHITECTURE.md §1, user
+# decision 2026-10-09): scripts/release/build-deps.sh builds the pinned wolfSSL
+# as a SHARED library and the pinned libcurl (wolfSSL TLS backend, HTTP/HTTPS
+# only) as a static one — cached on the script's own hash, so any recipe change
+# rebuilds; the project is built Release against them, the unit suite runs on
+# that build, the link mode is asserted (wolfSSL dynamic, nothing else),
+# scripts/release/package-wolfssl.sh packages the library with its
+# GPLv2-or-later COPYING, build configuration and corresponding source, and the
+# two archives are smoke-tested side by side. The Linux job also proves the
+# REQ-NET-005 expired-certificate classifier under the wolfSSL backend against a
+# local expired-cert endpoint (scripts/release/check-expired-classifier.sh).
+# ci.yml (REQ-BUILD-002) is untouched by this workflow.
 
 name: Release
 
@@ -25,13 +31,9 @@ on:
 permissions:
   contents: write     # the Release + its assets on tags
 
-env:
-  WOLFSSL_VERSION: "5.7.2"
-  CURL_VERSION: "8.10.1"
-
 jobs:
   linux:
-    name: Linux x86_64 (static)
+    name: Linux x86_64 (dynamic wolfSSL)
     runs-on: ubuntu-22.04      # the oldest LTS runner — glibc reach for the binary
     steps:
       - uses: actions/checkout@v5
@@ -42,34 +44,34 @@ jobs:
           sudo apt-get install -y --no-install-recommends build-essential cmake ninja-build pkg-config libcmocka-dev python3-pip zip
           python3 -m pip install --user cryptography
 
-      - name: Cache static deps
+      - name: Cache deps (pinned shared wolfSSL + static libcurl)
         id: deps
         uses: actions/cache@v4
         with:
-          path: deps-static
-          key: deps-linux-wolfssl-${{ env.WOLFSSL_VERSION }}-curl-${{ env.CURL_VERSION }}-v1
+          path: deps
+          key: deps-${{ runner.os }}-${{ hashFiles('scripts/release/build-deps.sh') }}
 
-      - name: Build static wolfSSL + libcurl
-        run: scripts/release/build-deps-static.sh deps-static
+      - name: Build shared wolfSSL + static libcurl
+        run: scripts/release/build-deps.sh deps
 
-      - name: Build, test, package
+      - name: Build, test, package (hem-tool + wolfSSL asset), smoke-test
         env:
           RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
-        run: scripts/release/package.sh deps-static linux dist
+        run: scripts/release/package.sh deps linux dist
 
       - name: Prove the expired-certificate classifier (wolfSSL backend)
         run: scripts/release/check-expired-classifier.sh build-release/hem-tool 8443
 
       - uses: actions/upload-artifact@v4
         with:
-          name: hem-tool-linux-x86_64
+          name: release-linux-x86_64
           path: |
             dist/*.tar.gz
             dist/SHA256SUMS
           if-no-files-found: error
 
   windows:
-    name: Windows x86_64 (static, MinGW)
+    name: Windows x86_64 (dynamic wolfSSL, MinGW)
     runs-on: windows-latest
     defaults:
       run:
@@ -88,26 +90,26 @@ jobs:
             mingw-w64-x86_64-ninja
             mingw-w64-x86_64-pkgconf
             mingw-w64-x86_64-cmocka
-            zip git
+            zip unzip git
 
-      - name: Cache static deps
+      - name: Cache deps (pinned shared wolfSSL + static libcurl)
         id: deps
         uses: actions/cache@v4
         with:
-          path: deps-static
-          key: deps-windows-wolfssl-${{ env.WOLFSSL_VERSION }}-curl-${{ env.CURL_VERSION }}-v1
+          path: deps
+          key: deps-${{ runner.os }}-${{ hashFiles('scripts/release/build-deps.sh') }}
 
-      - name: Build static wolfSSL + libcurl
-        run: scripts/release/build-deps-static.sh deps-static
+      - name: Build shared wolfSSL + static libcurl
+        run: scripts/release/build-deps.sh deps
 
-      - name: Build, test, package
+      - name: Build, test, package (hem-tool + wolfSSL asset), smoke-test
         env:
           RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
-        run: scripts/release/package.sh deps-static windows dist
+        run: scripts/release/package.sh deps windows dist
 
       - uses: actions/upload-artifact@v4
         with:
-          name: hem-tool-windows-x86_64
+          name: release-windows-x86_64
           path: |
             dist/*.zip
             dist/SHA256SUMS
@@ -126,8 +128,9 @@ jobs:
       - name: Assemble assets + one SHA256SUMS
         run: |
           mkdir -p release
-          cp artifacts/hem-tool-linux-x86_64/*.tar.gz artifacts/hem-tool-windows-x86_64/*.zip release/
-          cat artifacts/hem-tool-linux-x86_64/SHA256SUMS artifacts/hem-tool-windows-x86_64/SHA256SUMS > release/SHA256SUMS
+          cp artifacts/release-linux-x86_64/*.tar.gz artifacts/release-windows-x86_64/*.zip release/
+          cat artifacts/release-linux-x86_64/SHA256SUMS artifacts/release-windows-x86_64/SHA256SUMS > release/SHA256SUMS
+          test -z "$(awk '{print $2}' release/SHA256SUMS | sort | uniq -d)"   # no asset name twice
           ( cd release && sha256sum -c SHA256SUMS )
           ls -l release
 

@@ -50,7 +50,10 @@ surfaced. Commits/tags are the user's.
 - [ ] Fresh `./dev ci` (gcc + clang) + ASan + gates green; `./dev test it`
       integration sweep green on the re-initialised device.
 - [ ] Release artifacts of the gate commit (STEP-M10-065 workflow)
-      downloaded and smoke-run (`hem-tool status`, system trust) on
-      Linux and Windows — attended; the licensing decision (REQ-BUILD-005)
-      recorded before any `v*` tag is pushed.
+      downloaded — the hem-tool archive and the wolfSSL companion asset
+      unpacked side by side — and smoke-run (`hem-tool status`, system
+      trust) on Linux and Windows — attended. The licensing decision is
+      recorded (REQ-BUILD-005 rev 2, user decision 2026-10-09: wolfSSL
+      dynamic, never bundled statically); no `v*` tag before that revision
+      is re-approved.
 - [ ] TRACE.md regenerated (§4.3); ARCHITECTURE §11 M10 gate-passed.

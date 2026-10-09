@@ -171,9 +171,11 @@ install(FILES
 
 # --- hem-tool CLI ---------------------------------------------------------
 # Thin consumer of the PUBLIC API only (REQ-TOOL-001); links the static lib so
-# the tool is self-contained (no runtime .so lookup), with curl coming through
-# the static lib's interface link. Building it can be turned off for a
-# library-only consumer.
+# the tool carries the SDK itself (no libencedo-hem.so lookup at run time);
+# the SDK's own dependencies, curl and wolfSSL, come through the static lib's
+# interface link and are dynamic or not per the build — the release build
+# links wolfSSL dynamically (REQ-BUILD-005). Building it can be turned off for
+# a library-only consumer.
 option(EHEM_BUILD_TOOL "Build the hem-tool CLI" ON)
 if(EHEM_BUILD_TOOL)
   # The cert-install orchestration (REQ-TOOL-003) lives in a small static lib so
