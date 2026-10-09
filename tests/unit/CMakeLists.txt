@@ -126,6 +126,13 @@ ehem_add_unit_test(test_ejwt SOURCES test_ejwt.c)
 # REQ-AUTH-001, REQ-AUTH-002: login sequence + scope-keyed token cache.
 ehem_add_unit_test(test_auth SOURCES test_auth.c)
 
+# REQ-AUTH-012: BIP39 mnemonic → the Manager's master secret (fixtures produced
+# by the Manager's own JavaScript).
+ehem_add_unit_test(test_bip39 SOURCES test_bip39.c)
+
+# REQ-AUTH-011: device initialisation binding via the fake transport (M10).
+ehem_add_unit_test(test_init SOURCES test_init.c)
+
 # REQ-NET-002 + REQ-AUTH-001: public headers must not reference libcurl/wolfSSL.
 add_test(NAME public_headers_dep_free
   COMMAND ${CMAKE_COMMAND}

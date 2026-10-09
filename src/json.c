@@ -168,6 +168,14 @@ bool ehem_json_add_int64(ehem_json *obj, const char *key, int64_t val)
     return cJSON_AddNumberToObject(obj, key, (double)val) != NULL;
 }
 
+bool ehem_json_add_bool(ehem_json *obj, const char *key, bool val)
+{
+    if (obj == NULL || key == NULL) {
+        return false;
+    }
+    return cJSON_AddBoolToObject(obj, key, val ? 1 : 0) != NULL;
+}
+
 ehem_json *ehem_json_add_object(ehem_json *obj, const char *key)
 {
     if (obj == NULL || key == NULL) {

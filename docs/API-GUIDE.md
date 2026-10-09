@@ -217,6 +217,8 @@ rate-sensitive devices).
 |---|---|
 | `ehem_login`, `ehem_logout` | lazy passphrase session; logout scrubs credentials + cache |
 | `ehem_login_mobile` | lazy mobile (push-confirm) session mode |
+| `ehem_device_init`, `ehem_init_params`, `ehem_init_params_init`, `ehem_init_info`, `ehem_init_info_free` | personalise a wiped device (`/api/auth/init`: init JWT signed by the master key; the returned `system:config` bearer is cached) — attended-only verification |
+| `ehem_mnemonic_generate`, `ehem_mnemonic_free`, `ehem_master_secret_from_mnemonic`, `EHEM_MASTER_SECRET_SIZE` | Manager-compatible BIP39 master secret: 24 English words → 32 bytes, including the Manager's nibble-shift quirk |
 | `ehem_ext_init`, `ehem_ext_init_info`, `ehem_ext_init_free` | begin pairing: device emits the request JWT |
 | `ehem_ext_validate`, `ehem_ext_validate_info`, `ehem_ext_validate_free` | finalise pairing (imports the authenticator key) |
 | `ehem_ext_mac`, `ehem_ext_mac_info`, `ehem_ext_mac_free` | stateless device liveness/identity proof |

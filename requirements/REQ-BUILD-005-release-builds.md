@@ -1,10 +1,10 @@
 ---
 id: REQ-BUILD-005
 title: Release builds of hem-tool — static binaries from CI, artifacts on main, GitHub Releases on tags
-status: draft
+status: approved
 priority: should
 revision: 1
-source: user decision 2026-10-07 ("github ci actions to build and release the cli tool"; answers the same day: build on every push to main, publish a Release on tags; fully static binaries; Release-type build + SHA256SUMS); ARCHITECTURE.md §1 (wolfSSL "may also serve as libcurl's TLS backend where we build libcurl ourselves"), §11 (M10), §12 risk 1 (wolfSSL licensing); REQ-BUILD-002 (the existing CI stays as is)
+source: user decision 2026-10-07 ("github ci actions to build and release the cli tool"; answers the same day: build on every push to main, publish a Release on tags; fully static binaries; Release-type build + SHA256SUMS); ARCHITECTURE.md §1 (wolfSSL "may also serve as libcurl's TLS backend where we build libcurl ourselves"), §11 (M10), §12 risk 1 (wolfSSL licensing); REQ-BUILD-002 (the existing CI stays as is); approved 2026-10-08 (user "ok")
 depends_on: ["REQ-BUILD-001", "REQ-BUILD-002", "REQ-NET-003", "REQ-NET-005"]
 supersedes: null
 superseded_by: null

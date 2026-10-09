@@ -86,7 +86,9 @@ set(EHEM_SOURCES
   src/proto_storage.c
   src/keytype.c
   src/crypto_shim.c
-  src/ejwt.c)
+  src/ejwt.c
+  src/bip39.c
+  src/vendor/bip39/wordlist_english.c)
 
 add_library(encedo-hem        SHARED ${EHEM_SOURCES} $<TARGET_OBJECTS:ehem-cjson>)
 add_library(encedo-hem-static STATIC ${EHEM_SOURCES} $<TARGET_OBJECTS:ehem-cjson>)

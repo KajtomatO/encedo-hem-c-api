@@ -100,6 +100,7 @@ bool ehem_json_get_bool  (const ehem_json *obj, const char *key, bool *out);
 ehem_json *ehem_json_new_object(void);
 bool ehem_json_add_string(ehem_json *obj, const char *key, const char *val);
 bool ehem_json_add_int64 (ehem_json *obj, const char *key, int64_t val);
+bool ehem_json_add_bool  (ehem_json *obj, const char *key, bool val);
 
 /*
  * Add a new empty child object under `key` and return it, for building nested

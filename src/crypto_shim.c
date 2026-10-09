@@ -27,6 +27,8 @@
 #include <wolfssl/wolfcrypt/signature.h>    /* wc_SignatureVerify */
 #include <wolfssl/wolfcrypt/error-crypt.h>  /* SIG_VERIFY_E, ASN_PARSE_E */
 #include <wolfssl/wolfcrypt/aes.h>          /* AES-128-CBC (scheme A, M8) */
+#include <wolfssl/wolfcrypt/sha256.h>       /* wc_Sha256Hash (BIP39 checksum) */
+#include <wolfssl/wolfcrypt/random.h>       /* WC_RNG (mnemonic entropy, M10) */
 
 ehem_rc ehem_kdf_pbkdf2_sha256(const uint8_t *passwd, size_t passwd_len,
                                const uint8_t *salt, size_t salt_len,
@@ -39,6 +41,48 @@ ehem_rc ehem_kdf_pbkdf2_sha256(const uint8_t *passwd, size_t passwd_len,
     }
     int rc = wc_PBKDF2(out, passwd, (int)passwd_len, salt, (int)salt_len,
                        (int)iterations, (int)out_len, WC_SHA256);
+    return rc == 0 ? EHEM_OK : EHEM_ERR_PROTOCOL;
+}
+
+ehem_rc ehem_kdf_pbkdf2_sha512(const uint8_t *passwd, size_t passwd_len,
+                               const uint8_t *salt, size_t salt_len,
+                               uint32_t iterations,
+                               uint8_t *out, size_t out_len)
+{
+    if (passwd == NULL || salt == NULL || out == NULL ||
+        out_len == 0 || iterations == 0) {
+        return EHEM_ERR_ARG;
+    }
+    int rc = wc_PBKDF2(out, passwd, (int)passwd_len, salt, (int)salt_len,
+                       (int)iterations, (int)out_len, WC_SHA512);
+    return rc == 0 ? EHEM_OK : EHEM_ERR_PROTOCOL;
+}
+
+ehem_rc ehem_sha256(const uint8_t *in, size_t in_len,
+                    uint8_t out[EHEM_SHA256_SIZE])
+{
+    static const uint8_t empty = 0;
+    if (out == NULL || (in == NULL && in_len != 0)) {
+        return EHEM_ERR_ARG;
+    }
+    if (in == NULL) {
+        in = &empty;              /* wolfCrypt rejects a NULL pointer even for 0 bytes */
+    }
+    return wc_Sha256Hash(in, (word32)in_len, out) == 0 ? EHEM_OK : EHEM_ERR_PROTOCOL;
+}
+
+ehem_rc ehem_random_bytes(uint8_t *out, size_t n)
+{
+    WC_RNG rng;
+    int rc;
+    if (out == NULL || n == 0) {
+        return EHEM_ERR_ARG;
+    }
+    if (wc_InitRng(&rng) != 0) {
+        return EHEM_ERR_PROTOCOL;
+    }
+    rc = wc_RNG_GenerateBlock(&rng, out, (word32)n);
+    wc_FreeRng(&rng);
     return rc == 0 ? EHEM_OK : EHEM_ERR_PROTOCOL;
 }
 
