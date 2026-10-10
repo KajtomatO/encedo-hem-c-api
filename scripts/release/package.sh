@@ -106,6 +106,13 @@ if [ "$OS" = "windows" ]; then
   if echo "$DLLS" | grep -E -q 'curl|libgcc|winpthread|libssl|libcrypto|zlib'; then
     echo "a non-system DLL other than wolfSSL is imported"; exit 1
   fi
+  # UCRT64 (ARCHITECTURE.md §1): the C runtime is the Universal CRT
+  # (api-ms-win-crt-*.dll / ucrtbase.dll), never the MINGW64-era msvcrt.dll.
+  echo "$DLLS" | grep -E -q '^(api-ms-win-crt-|ucrtbase\.dll)' \
+    || { echo "hem-tool.exe imports no Universal CRT — not a UCRT64 build"; exit 1; }
+  if echo "$DLLS" | grep -q -x 'msvcrt.dll'; then
+    echo "hem-tool.exe imports msvcrt.dll — not a UCRT64 build"; exit 1
+  fi
 else
   BIN="$BUILD/hem-tool"
   RP="$(readelf -d "$BIN" | sed -n -E 's/.*\((RUNPATH|RPATH)\).*\[(.*)\].*/\2/p')"
@@ -134,12 +141,12 @@ sed -n '1,/^ \*\/$/p' src/tools/hem-tool/vendor/qrcodegen/qrcodegen.c > "$STAGE/
 grep -q 'Permission is hereby granted' "$STAGE/LICENSES/LICENSE.qrcodegen" \
   || { echo "qrcodegen MIT header not found"; exit 1; }
 cat > "$STAGE/README.txt" <<EOF
-hem-tool ${LABEL} (${OS}, x86_64) — the Encedo HEM device CLI.
+hem-tool ${LABEL} (${OS}, x86_64) - the Encedo HEM device CLI.
 
 hem-tool links libcurl ${CURL_VERSION} (wolfSSL as its TLS backend, HTTP/HTTPS
 only) STATICALLY and wolfSSL ${WOLFSSL_VERSION} DYNAMICALLY. wolfSSL is NOT in
 this archive: download ${WNAME}.${EXT} from the same release and put
-${WLIB_NAME} next to hem-tool —
+${WLIB_NAME} next to hem-tool -
 ${LOOKUP}.
 A system wolfSSL with the same ${SAME} and build configuration (see that
 asset's BUILD-CONFIG.txt) works too. Verify downloads against SHA256SUMS:
@@ -151,7 +158,7 @@ Usage: hem-tool help            (commands grouped by what they need)
 Device URL via --url or EHEM_URL (default https://my.ence.do); passphrase via
 --passphrase or EHEM_PASSPHRASE.
 
-Licenses: see LICENSES/ — hem-tool and the Encedo HEM C SDK are MIT; libcurl
+Licenses: see LICENSES/ - hem-tool and the Encedo HEM C SDK are MIT; libcurl
 (curl license), cJSON (MIT), the BIP39 wordlist (MIT) and qrcodegen (MIT) are
 compiled in. wolfSSL (GPLv2 or later, or a commercial license from wolfSSL
 Inc.) is a separate download; its license text, build configuration and
@@ -163,8 +170,14 @@ if [ "$OS" = "windows" ]; then
   cat >> "$STAGE/README.txt" <<'EOF'
 
 Windows: hem-tool.exe and libwolfssl.dll use the Universal C Runtime (built in
-MSYS2 UCRT64) — part of Windows 10 / Server 2016 and later; older Windows
+MSYS2 UCRT64) - part of Windows 10 / Server 2016 and later; older Windows
 needs update KB2999226.
+
+If libwolfssl.dll is missing, Windows refuses to start hem-tool.exe before
+any of its code runs: depending on the console you get a system error dialog
+or no message at all, and the exit code is -1073741515 (0xC0000135,
+STATUS_DLL_NOT_FOUND; PowerShell: $LASTEXITCODE). Put libwolfssl.dll next to
+hem-tool.exe.
 EOF
 fi
 

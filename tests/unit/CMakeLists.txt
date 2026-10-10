@@ -169,4 +169,16 @@ add_test(NAME docs_coverage
     -DEHEM_DOCS_FILE=${PROJECT_SOURCE_DIR}/docs/API-GUIDE.md
     -P ${CMAKE_CURRENT_SOURCE_DIR}/check_docs_coverage.cmake)
 set_tests_properties(docs_coverage PROPERTIES LABELS unit)
+
+# REQ-API-009: every string/character literal in the SDK and hem-tool sources
+# is ASCII (a small lexer — comments keep their typography; vendored code is
+# third-party and excluded).
+file(GLOB_RECURSE EHEM_ASCII_SOURCES CONFIGURE_DEPENDS
+  ${PROJECT_SOURCE_DIR}/src/*.c ${PROJECT_SOURCE_DIR}/src/*.h
+  ${PROJECT_SOURCE_DIR}/include/*.h)
+list(FILTER EHEM_ASCII_SOURCES EXCLUDE REGEX "/vendor/")
+add_executable(check_ascii_strings check_ascii_strings.c)
+target_compile_options(check_ascii_strings PRIVATE ${EHEM_WARNING_FLAGS})
+add_test(NAME ascii_strings COMMAND check_ascii_strings ${EHEM_ASCII_SOURCES})
+set_tests_properties(ascii_strings PROPERTIES LABELS unit)
 ehem_add_unit_test(test_logger_storage SOURCES test_logger_storage.c)

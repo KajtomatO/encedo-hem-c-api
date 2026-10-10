@@ -17,8 +17,9 @@
 #include "crypto_shim.h"
 #include "json.h"
 
-/* The fixed JOSE header — a hardcoded byte string, never re-serialized. */
-static const char EJWT_HEADER[] = "{\"ecdh\":\"x25519\",\"alg\":\"HS256\",\"typ\":\"JWT\"}";
+/* The fixed JOSE header — a hardcoded byte string, never re-serialized
+ * (ejwt.h explains why every field is needed). */
+static const char EJWT_HEADER[] = EHEM_EJWT_HEADER;
 
 static const char B64_STD_ALPHA[] =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";

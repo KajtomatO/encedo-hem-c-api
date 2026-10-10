@@ -43,7 +43,7 @@ static void wreport(FILE *err, ehem_ctx *ctx, ehem_rc rc, const char *what)
         fprintf(err, " (HTTP %ld)", e->http_status);
     }
     if (e->message[0] != '\0') {
-        fprintf(err, " — %s", e->message);
+        fprintf(err, " - %s", e->message);
     }
     fputc('\n', err);
 }
@@ -108,14 +108,14 @@ int hem_wipe_device_run(ehem_ctx *ctx, const hem_wipe_opts *o)
      * carries the authenticator kid), and a run that cannot authenticate
      * must not even read the identity. */
     if (o->mobile) {
-        fprintf(err, "error: wipe-device cannot use --mobile — the device "
+        fprintf(err, "error: wipe-device cannot use --mobile - the device "
                      "accepts the wipe only from a passphrase session "
                      "(token sub=\"U\" or \"M\"); pass --passphrase / set "
                      "EHEM_PASSPHRASE\n");
         return HEM_WIPE_USAGE;
     }
     if (o->passphrase == NULL || o->passphrase[0] == '\0') {
-        fprintf(err, "error: no passphrase — pass --passphrase / set "
+        fprintf(err, "error: no passphrase - pass --passphrase / set "
                      "EHEM_PASSPHRASE\n");
         return HEM_WIPE_USAGE;
     }
@@ -133,7 +133,7 @@ int hem_wipe_device_run(ehem_ctx *ctx, const hem_wipe_opts *o)
     if (cfg->hostname == NULL || cfg->hostname[0] == '\0' ||
         strlen(cfg->hostname) >= sizeof hostname) {
         ehem_system_config_free(cfg);
-        fprintf(err, "error: the device reports no usable hostname — "
+        fprintf(err, "error: the device reports no usable hostname - "
                      "refusing to wipe without an identity to confirm\n");
         return HEM_WIPE_RUNTIME;
     }
@@ -158,7 +158,7 @@ int hem_wipe_device_run(ehem_ctx *ctx, const hem_wipe_opts *o)
                  "aborts: ", hostname);
     fflush(out);
     if (!read_line(in, line, sizeof line) || strcmp(line, hostname) != 0) {
-        fprintf(out, "aborted — nothing was changed\n");
+        fprintf(out, "aborted - nothing was changed\n");
         return HEM_WIPE_DECLINED;
     }
 
@@ -188,7 +188,7 @@ int hem_wipe_device_run(ehem_ctx *ctx, const hem_wipe_opts *o)
             continue;
         }
         if (seen_down) {
-            fprintf(out, "device back (https: %s) — uninitialised; next: "
+            fprintf(out, "device back (https: %s) - uninitialised; next: "
                          "init-device\n",
                     (st->has_https && st->https) ? "yes" : "no");
             ehem_system_status_free(st);
@@ -196,7 +196,7 @@ int hem_wipe_device_run(ehem_ctx *ctx, const hem_wipe_opts *o)
         }
         ehem_system_status_free(st);
     }
-    fprintf(err, "error: the device did not answer again within the wait — "
+    fprintf(err, "error: the device did not answer again within the wait - "
                  "check it (power-cycle?) and run `hem-tool --url http://<host> "
                  "status`\n");
     return HEM_WIPE_TIMEOUT;

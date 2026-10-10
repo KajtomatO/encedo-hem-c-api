@@ -104,6 +104,9 @@ WOLFSSL_ARGS=(-DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PREFIX"
 {
   echo "# wolfSSL ${WOLFSSL_VERSION} built by scripts/release/build-deps.sh on $(uname -sm)"
   echo "# $( (${CC:-cc} --version 2>/dev/null || gcc --version 2>/dev/null || true) | head -1 ); $(cmake --version | head -1)"
+  # uname says MINGW64_NT in every 64-bit MSYS2 environment; MSYSTEM and the
+  # compiler's path tell UCRT64 from the deprecated MINGW64.
+  [ -z "${MSYSTEM:-}" ] || echo "# MSYS2 environment: ${MSYSTEM} (compiler: $(command -v "${CC:-cc}" || command -v gcc))"
   printf '%q ' cmake -S "wolfssl-${WOLFSSL_VERSION}-stable" -B wolfssl-build "${GEN[@]}" "${WOLFSSL_ARGS[@]}"
   echo
 } > "$PREFIX/wolfssl-build-config.txt"
@@ -167,6 +170,12 @@ case "$(uname -s)" in
     echo "$DLLS" | sed 's/^/  /'
     if echo "$DLLS" | grep -E -q 'libgcc|winpthread'; then
       echo "libwolfssl.dll depends on a MinGW runtime DLL — not shippable on its own"; exit 1
+    fi
+    # UCRT64: the C runtime is the Universal CRT, never msvcrt.dll.
+    echo "$DLLS" | grep -E -q '^(api-ms-win-crt-|ucrtbase\.dll)' \
+      || { echo "libwolfssl.dll imports no Universal CRT — not a UCRT64 build"; exit 1; }
+    if echo "$DLLS" | grep -q -x 'msvcrt.dll'; then
+      echo "libwolfssl.dll imports msvcrt.dll — not a UCRT64 build"; exit 1
     fi
     ;;
 esac

@@ -42,7 +42,7 @@ static void ireport(FILE *err, ehem_ctx *ctx, ehem_rc rc, const char *what)
         fprintf(err, " (HTTP %ld)", e->http_status);
     }
     if (e->message[0] != '\0') {
-        fprintf(err, " — %s", e->message);
+        fprintf(err, " - %s", e->message);
     }
     fputc('\n', err);
 }
@@ -96,7 +96,7 @@ int hem_init_device_run(ehem_ctx *ctx, const hem_init_opts *o)
 
     /* 1. Inputs — zero traffic on a usage error. */
     if (o->passphrase == NULL || o->passphrase[0] == '\0') {
-        fprintf(err, "error: no passphrase — pass --passphrase / set "
+        fprintf(err, "error: no passphrase - pass --passphrase / set "
                      "EHEM_PASSPHRASE (it becomes the device's user password)\n");
         return HEM_INIT_USAGE;
     }
@@ -133,7 +133,7 @@ int hem_init_device_run(ehem_ctx *ctx, const hem_init_opts *o)
             return HEM_INIT_RUNTIME;
         }
         fprintf(out,
-                "==================== MASTER MNEMONIC — KEEP THESE 24 WORDS ====================\n"
+                "==================== MASTER MNEMONIC - KEEP THESE 24 WORDS ====================\n"
                 "%s\n"
                 "===============================================================================\n"
                 "They are the device's master persona (Encedo Manager's master passphrase).\n"
@@ -163,7 +163,7 @@ int hem_init_device_run(ehem_ctx *ctx, const hem_init_opts *o)
         rc = ehem_system_checkin(ctx, &ci);
         ehem_checkin_result_free(ci);
         if (rc != EHEM_OK) {
-            fprintf(err, "warning: check-in failed (%s) — continuing, the RTC "
+            fprintf(err, "warning: check-in failed (%s) - continuing, the RTC "
                          "may already be set\n", ehem_rc_str(rc));
         }
     }
@@ -258,7 +258,7 @@ int hem_init_device_run(ehem_ctx *ctx, const hem_init_opts *o)
             }
         }
         fprintf(err, "error: the device did not answer again within the wait "
-                     "— check it and run `hem-tool status`\n");
+                     "- check it and run `hem-tool status`\n");
         ehem_init_info_free(info);
         return HEM_INIT_RUNTIME;
     }

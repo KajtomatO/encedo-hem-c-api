@@ -551,7 +551,7 @@ ehem_rc ehem_auth_ensure_token(ehem_ctx *ctx, const char *scope,
     /* Need to acquire; only possible while a credential is retained. */
     if (a == NULL || a->passphrase == NULL) {
         return ehem_ctx_fail(ctx, EHEM_ERR_AUTH_EXPIRED, 0, NULL,
-                             "no credential retained for scope '%s' — call "
+                             "no credential retained for scope '%s' - call "
                              "ehem_login()", scope);
     }
 
@@ -841,14 +841,14 @@ static ehem_rc init_explain(ehem_ctx *ctx, ehem_rc rc, const char *leg)
     const char *why;
 
     switch (st) {
-    case 403: why = "device RTC not set — run a check-in first"; rc = EHEM_ERR_DEVICE; break;
-    case 406: why = "device already initialised — wipe it first"; break;
+    case 403: why = "device RTC not set - run a check-in first"; rc = EHEM_ERR_DEVICE; break;
+    case 406: why = "device already initialised - wipe it first"; break;
     case 409: why = "device self-test state is not 0 (fls_state)"; break;
-    case 400: why = "cfg rejected — a field is missing or failed validation"; break;
+    case 400: why = "cfg rejected - a field is missing or failed validation"; break;
     case 401: why = "init JWT rejected (signature or jti)"; break;
     default:  return rc;
     }
-    return ehem_ctx_fail(ctx, rc, st, NULL, AUTH_INIT_PATH " %s: HTTP %ld — %s",
+    return ehem_ctx_fail(ctx, rc, st, NULL, AUTH_INIT_PATH " %s: HTTP %ld - %s",
                          leg, st, why);
 }
 
@@ -990,7 +990,8 @@ ehem_rc ehem_device_init(ehem_ctx *ctx, const ehem_init_params *params,
     }
 
     /* 3. The init JWT: claims in the Manager's order (build.js:731-738), the
-     *    minimal header, HMAC-SHA256 keyed with the master shared secret. */
+     *    full eJWT header (the firmware refuses a header without `alg` —
+     *    ejwt.h), HMAC-SHA256 keyed with the master shared secret. */
     now = auth_now();
     if (rc == EHEM_OK) {
         payload = ehem_json_new_object();
@@ -1007,7 +1008,7 @@ ehem_rc ehem_device_init(ehem_ctx *ctx, const ehem_init_params *params,
         ehem_json_free(payload);
     }
     if (rc == EHEM_OK) {
-        rc = ehem_ejwt_sign(EHEM_EJWT_HEADER_MIN, payload_json, shared,
+        rc = ehem_ejwt_sign(EHEM_EJWT_HEADER, payload_json, shared,
                             sizeof shared, &jwt);
     }
     ehem_zeroize(seed, sizeof seed);

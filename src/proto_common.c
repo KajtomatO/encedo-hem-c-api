@@ -189,7 +189,7 @@ ehem_rc ehem_proto_request_raw(ehem_ctx *ctx, ehem_http_method method,
             rc = ehem_ctx_fail(ctx, orig_rc, 0, NULL,
                                "%s: %s (check-in completed and the device "
                                "accepted a certificate update, but it still "
-                               "serves the old certificate — a device reboot "
+                               "serves the old certificate - a device reboot "
                                "may be required to apply it)",
                                path, orig_detail);
             ctx->last_error.tls_expired = 1;

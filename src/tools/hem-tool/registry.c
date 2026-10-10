@@ -43,7 +43,7 @@ static const hem_cmd_option OPT_LOGS_GET[] = {
 };
 static const hem_cmd_option OPT_SIGN[] = {
     { "--alg ALG",        "algorithm selector (e.g. Ed25519, "
-                          "SHA256WithECDSA); omitted → derived from the "
+                          "SHA256WithECDSA); omitted -> derived from the "
                           "key type" },
     { "--in FILE",        "read the message from FILE (default: stdin; "
                           "max 2048 bytes)" },
@@ -74,12 +74,12 @@ static const hem_cmd_option OPT_TLS_RECOVER[] = {
     { "--force",          "recover even when the device reports HTTPS up" },
 };
 static const hem_cmd_option OPT_INIT[] = {
-    { "--user NAME",      "cfg.user — the device user identity (required)" },
+    { "--user NAME",      "cfg.user - the device user identity (required)" },
     { "--email ADDR",     "cfg.email (required)" },
     { "--hostname HOST",  "cfg.hostname, e.g. my.ence.do (required)" },
     { "--ip A.B.C.D/N",   "cfg.ip (default 192.168.7.1/24)" },
     { "--master-words W", "the 24-word BIP39 master mnemonic (or "
-                          "EHEM_MASTER_WORDS) — Manager-compatible" },
+                          "EHEM_MASTER_WORDS) - Manager-compatible" },
     { "--master-generate","have the SDK create the 24 words; printed ONCE" },
     { "--master-secret-hex HEX", "raw 32-byte master secret (scripted use; "
                           "not usable from the Manager's prompts)" },
@@ -124,9 +124,9 @@ static const hem_command COMMANDS[] = {
       "personalise an UNINITIALISED device (attended; use its http:// URL)",
       "Initialises a wiped device the way Encedo Manager does: check-in\n"
       "(sets the RTC), then POST /api/auth/init with the user key derived\n"
-      "from the passphrase (it becomes the user password — not a credential\n"
+      "from the passphrase (it becomes the user password - not a credential\n"
       "here) and the master key from a 24-word BIP39 mnemonic.\n"
-      "--master-generate creates the words and prints them ONCE — keep them,\n"
+      "--master-generate creates the words and prints them ONCE - keep them,\n"
       "the master key can never be rotated. cfg defaults are the Manager's\n"
       "(ip 192.168.7.1/24, storage-mode 81, disk0-size 8388608, trust flags\n"
       "on, dnsd off, origin *). Exit 3 = already initialised, 4 = RTC unset,\n"
@@ -140,7 +140,7 @@ static const hem_command COMMANDS[] = {
       "it, REBOOTS the device, and verifies. Distinct exit codes per\n"
       "failure mode; runs credential-less up to the 'already current' check.\n"
       "Passphrase-ONLY: the install is a config write, which the firmware\n"
-      "allows for sub=\"U\"/\"M\" tokens only — a mobile bearer gets 403.\n"
+      "allows for sub=\"U\"/\"M\" tokens only - a mobile bearer gets 403.\n"
       "Building block of `recovery`, which picks it when the cert expired.",
       HEM_AUTH_PASSPHRASE_ONLY, N(OPT_CERT_INSTALL), HEM_SECTION_MANUAL_RECOVERY },
 
@@ -160,7 +160,7 @@ static const hem_command COMMANDS[] = {
 
     { "keys", "gen", "keys gen TYPE --label LABEL [--descr STR] [--mode MODE]",
       "generate a key of TYPE on the device",
-      "Generates a key (e.g. ED25519, SECP256R1, AES256 — the device\n"
+      "Generates a key (e.g. ED25519, SECP256R1, AES256 - the device\n"
       "validates the type) and prints the new key id. For NIST-P/K curves\n"
       "the tool defaults --mode to ECDH,ExDSA so the key can sign (the\n"
       "device's own default is ECDH-only).",
@@ -170,7 +170,7 @@ static const hem_command COMMANDS[] = {
       "delete keys, protected keys guarded by an exact-label YES ritual",
       "Deletes the selected keys. Bulk selection NEVER touches protected\n"
       "keys (TLS material, paired phones); removing one requires naming its\n"
-      "exact label and typing the literal YES at a per-key prompt — --yes\n"
+      "exact label and typing the literal YES at a per-key prompt - --yes\n"
       "is deliberately ignored for them.",
       HEM_AUTH_BEARER, N(OPT_KEYS_RM), HEM_SECTION_MAIN },
 
@@ -230,16 +230,16 @@ static const hem_command COMMANDS[] = {
 
     { NULL, "reboot", "reboot [--wait]",
       "reboot the device (DISRUPTIVE)",
-      "Reboots the device — DISRUPTIVE: interrupts every user of it. With\n"
+      "Reboots the device - DISRUPTIVE: interrupts every user of it. With\n"
       "--wait, polls until the device answers again (two-phase: first seen\n"
       "down, then back; ~180 s bound).",
       HEM_AUTH_BEARER, N(OPT_REBOOT), HEM_SECTION_MAIN },
 
     { NULL, "wipe-device", "wipe-device [--wait]",
       "FACTORY-RESET the device (IRREVERSIBLE; typed-hostname confirmation)",
-      "Erases EVERYTHING on the device — all keys, the user and master\n"
+      "Erases EVERYTHING on the device - all keys, the user and master\n"
       "passwords, the TLS key and certificate, the audit logs, the paired\n"
-      "phones — and restarts it UNINITIALISED (http:// only). Prints the\n"
+      "phones - and restarts it UNINITIALISED (http:// only). Prints the\n"
       "device identity and proceeds only when you type its hostname; there\n"
       "is no --yes. Passphrase-ONLY (a config write: sub=\"U\"/\"M\" only).\n"
       "Afterwards: `init-device`, then `recovery`. Exit 3 = declined.",
@@ -277,7 +277,7 @@ static const hem_command COMMANDS[] = {
 
     { NULL, "random", "random N [--kid KID] [--raw]",
       "read N bytes (1..4096) of device hardware RNG",
-      "Reads device hardware-RNG bytes (harvested from AES-CBC IVs —\n"
+      "Reads device hardware-RNG bytes (harvested from AES-CBC IVs -\n"
       "REQ-OPS-002) as lowercase hex, or raw with --raw. Uses --kid's AES\n"
       "key, else creates and removes a transient EHEMTEST key.",
       HEM_AUTH_BEARER, N(OPT_RANDOM), HEM_SECTION_MAIN },
@@ -385,7 +385,7 @@ static void print_group(FILE *f, int cls, hem_cmd_section sec, const char *heade
 
 void hem_help_top(FILE *f, const char *version)
 {
-    fprintf(f, "hem-tool %s — Encedo HEM device CLI\n"
+    fprintf(f, "hem-tool %s - Encedo HEM device CLI\n"
                "usage: hem-tool [options] <command> [command options]\n"
                "       hem-tool help <command>   (or: <command> --help)\n\n",
             version != NULL ? version : "");
@@ -396,7 +396,7 @@ void hem_help_top(FILE *f, const char *version)
                 "commands needing NO credentials:");
     fputc('\n', f);
     print_group(f, HEM_AUTH_BEARER, HEM_SECTION_MAIN,
-                "commands needing a bearer — passphrase or --mobile:");
+                "commands needing a bearer - passphrase or --mobile:");
     fputc('\n', f);
     print_group(f, HEM_AUTH_PASSPHRASE_ONLY, HEM_SECTION_MAIN,
                 "commands needing a PASSPHRASE (the device demands sub=\"U\"):");
@@ -413,9 +413,9 @@ void hem_help_top(FILE *f, const char *version)
 static void print_command_help(FILE *f, const hem_command *c)
 {
     if (c->family != NULL) {
-        fprintf(f, "hem-tool %s %s — %s\n\n", c->family, c->name, c->summary);
+        fprintf(f, "hem-tool %s %s - %s\n\n", c->family, c->name, c->summary);
     } else {
-        fprintf(f, "hem-tool %s — %s\n\n", c->name, c->summary);
+        fprintf(f, "hem-tool %s - %s\n\n", c->name, c->summary);
     }
     fprintf(f, "usage: hem-tool [options] %s\n", c->synopsis);
     fprintf(f, "auth:  %s\n\n", hem_auth_class_str(c->auth));
@@ -424,13 +424,13 @@ static void print_command_help(FILE *f, const hem_command *c)
         fprintf(f, "\noptions:\n");
         print_options(f, c->options, c->option_count);
     }
-    fprintf(f, "\nconnection/auth options are shared — see `hem-tool --help`\n");
+    fprintf(f, "\nconnection/auth options are shared - see `hem-tool --help`\n");
 }
 
 static void print_family_help(FILE *f, const char *family)
 {
     size_t i;
-    fprintf(f, "hem-tool %s — subcommands:\n\n", family);
+    fprintf(f, "hem-tool %s - subcommands:\n\n", family);
     for (i = 0; i < COMMAND_COUNT; i++) {
         const hem_command *c = &COMMANDS[i];
         if (c->family != NULL && strcmp(c->family, family) == 0) {
@@ -470,7 +470,7 @@ const char *hem_tool_resolve_url(const char *flag_url, const char *env_url,
         return env_url;
     }
     fprintf(err != NULL ? err : stderr,
-            "notice: no --url/EHEM_URL — using the default device URL "
+            "notice: no --url/EHEM_URL - using the default device URL "
             HEM_TOOL_DEFAULT_URL "\n");
     return HEM_TOOL_DEFAULT_URL;
 }

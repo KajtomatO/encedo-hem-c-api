@@ -28,7 +28,7 @@ static void report(FILE *err, ehem_ctx *ctx, ehem_rc rc, const char *what)
         fprintf(err, " (HTTP %ld)", e->http_status);
     }
     if (e->message[0] != '\0') {
-        fprintf(err, " — %s", e->message);
+        fprintf(err, " - %s", e->message);
     }
     fputc('\n', err);
 }
@@ -43,7 +43,7 @@ static int healthy(const hem_recovery_opts *o, FILE *out, FILE *err, int https_f
     /* https_flag: 1 = reports on, 0 = reports off, -1 = not reported (the
      * healthy dev device omits the field over HTTPS). */
     fprintf(out, "healthy: the device answers under the configured trust%s\n",
-            https_flag == 0 ? " (it reports https: off — plain-http device URL?)" : "");
+            https_flag == 0 ? " (it reports https: off - plain-http device URL?)" : "");
     fprintf(out, "check-in: syncing the device clock...\n");
     rc = ehem_system_checkin(o->ctx_https, &ci);
     ehem_checkin_result_free(ci);
@@ -72,7 +72,7 @@ static int expired(const hem_recovery_opts *o, FILE *out, FILE *err,
         return HEM_RECOVERY_USAGE;
     }
     fprintf(out, "check-in (relaxed TLS): asking the cloud for a renewed "
-                 "certificate — one attempt...\n");
+                 "certificate - one attempt...\n");
     rc = ehem_system_checkin(o->ctx_insecure, &ci);
     if (rc != EHEM_OK) {
         report(err, o->ctx_insecure, rc, "check-in");
@@ -82,14 +82,14 @@ static int expired(const hem_recovery_opts *o, FILE *out, FILE *err,
         ehem_checkin_result_free(ci);
         fprintf(out, "the cloud has not issued a renewal yet: the check-in "
                      "delivered no certificate chain. The cloud is tried once "
-                     "per run — rerun `hem-tool recovery` later (the 2026-10-07 "
+                     "per run - rerun `hem-tool recovery` later (the 2026-10-07 "
                      "renewal arrived ~45 min after the first post-expiry "
                      "check-in). Until then: --insecure for urgent calls.\n");
         return HEM_RECOVERY_NO_RENEWAL;
     }
     ehem_checkin_result_free(ci);
 
-    fprintf(out, "renewal delivered — installing it (cert-install, insecure "
+    fprintf(out, "renewal delivered - installing it (cert-install, insecure "
                  "leg; REBOOTS the device)...\n");
     memset(&co, 0, sizeof co);
     co.passphrase    = o->passphrase;
@@ -100,7 +100,7 @@ static int expired(const hem_recovery_opts *o, FILE *out, FILE *err,
     co.err           = err;
     ci_rc = hem_cert_install_run(o->ctx_insecure, &co);
     if (ci_rc != HEM_CERT_OK) {
-        fprintf(err, "error: cert-install failed (exit %d) — see above\n", ci_rc);
+        fprintf(err, "error: cert-install failed (exit %d) - see above\n", ci_rc);
         return HEM_RECOVERY_RUNTIME;
     }
 
@@ -128,14 +128,14 @@ int hem_recovery_run(const hem_recovery_opts *o)
 
     /* Fail fast, zero traffic. */
     if (o->mobile) {
-        fprintf(err, "error: recovery cannot use --mobile — its install legs "
+        fprintf(err, "error: recovery cannot use --mobile - its install legs "
                      "are config writes the device accepts only from a "
                      "passphrase session (token sub=\"U\" or \"M\"); pass "
                      "--passphrase / set EHEM_PASSPHRASE\n");
         return HEM_RECOVERY_USAGE;
     }
     if (o->passphrase == NULL || o->passphrase[0] == '\0') {
-        fprintf(err, "error: no passphrase — pass --passphrase / set "
+        fprintf(err, "error: no passphrase - pass --passphrase / set "
                      "EHEM_PASSPHRASE\n");
         return HEM_RECOVERY_USAGE;
     }
@@ -161,7 +161,7 @@ int hem_recovery_run(const hem_recovery_opts *o)
     }
 
     /* 3/4/5. Not expired: look at the device over plain http. */
-    fprintf(out, "https probe failed (%s: %s) — looking over http://...\n",
+    fprintf(out, "https probe failed (%s: %s) - looking over http://...\n",
             ehem_rc_str(rc), detail);
     if (o->ctx_http == NULL) {
         fprintf(err, "error: no http:// context available\n");
@@ -171,7 +171,7 @@ int hem_recovery_run(const hem_recovery_opts *o)
     rc = ehem_system_status(o->ctx_http, &st);
     if (rc != EHEM_OK) {
         fprintf(err, "error: the device answers neither over https nor over "
-                     "http (%s) — unreachable: check power/cabling and "
+                     "http (%s) - unreachable: check power/cabling and "
                      "power-cycle it (the known sustained-load stall needs "
                      "that), then rerun\n", ehem_last_error(o->ctx_http)->message);
         return HEM_RECOVERY_UNREACHABLE;
@@ -186,8 +186,8 @@ int hem_recovery_run(const hem_recovery_opts *o)
                      "https probe failed for a reason that is not an expired "
                      "certificate (%s). Not auto-recoverable: check the "
                      "hostname and the trust store (--cacert FILE), inspect "
-                     "with `hem-tool --insecure status`, or — only if you KNOW "
-                     "the TLS material is gone — run `hem-tool --url http://"
+                     "with `hem-tool --insecure status`, or - only if you KNOW "
+                     "the TLS material is gone - run `hem-tool --url http://"
                      "<host> tls-recover` yourself. Nothing was changed.\n",
                 https_flag == 1 ? "reports HTTPS up"
                                 : "does not report its HTTPS state",
@@ -196,7 +196,7 @@ int hem_recovery_run(const hem_recovery_opts *o)
     }
 
     /* Case 3: TLS material lost — the post-wipe state. */
-    fprintf(out, "diagnosis: HTTPS is down (the device reports https: off) — "
+    fprintf(out, "diagnosis: HTTPS is down (the device reports https: off) - "
                  "TLS material lost; running tls-recover (provisioning cloud, "
                  "REBOOTS the device)...\n");
     {

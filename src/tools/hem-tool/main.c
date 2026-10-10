@@ -138,7 +138,7 @@ static void print_cert_notice(const ehem_ctx *ctx)
 {
     if (ehem_cert_refreshed(ctx)) {
         fprintf(stderr,
-                "notice: device TLS certificate was invalid (expired) — "
+                "notice: device TLS certificate was invalid (expired) - "
                 "refreshed via check-in; connection re-verified\n");
     }
 }
@@ -166,7 +166,7 @@ static void print_last_error(ehem_ctx *ctx, ehem_rc rc, const char *what)
 static void mobile_push_notice(const char *scope, long timeout_ms, void *arg)
 {
     (void)arg;
-    fprintf(stderr, "mobile: push sent — approve \"%s\" on your phone "
+    fprintf(stderr, "mobile: push sent - approve \"%s\" on your phone "
                     "(waiting up to %ld s)\n", scope, timeout_ms / 1000);
 }
 
@@ -208,7 +208,7 @@ static int make_ctx(const cli_opts *o, ehem_ctx **out)
     ehem_rc rc;
 
     if (o->url == NULL || o->url[0] == '\0') {
-        fprintf(stderr, "error: no device URL — pass --url or set EHEM_URL\n");
+        fprintf(stderr, "error: no device URL - pass --url or set EHEM_URL\n");
         return 2;
     }
     fill_opts(o, &opts);
@@ -655,7 +655,7 @@ static int cmd_reboot(const cli_opts *o, int wait_back)
     int ret;
 
     if (!o->mobile && (o->passphrase == NULL || o->passphrase[0] == '\0')) {
-        fprintf(stderr, "error: no passphrase — pass --passphrase / set "
+        fprintf(stderr, "error: no passphrase - pass --passphrase / set "
                         "EHEM_PASSPHRASE, or use --mobile\n");
         return 2;
     }
@@ -674,7 +674,7 @@ static int cmd_reboot(const cli_opts *o, int wait_back)
     }
     print_cert_notice(ctx);
     ehem_ctx_destroy(ctx);
-    fprintf(stderr, "reboot accepted — the device restarts now\n");
+    fprintf(stderr, "reboot accepted - the device restarts now\n");
 
     if (!wait_back) {
         fprintf(stderr, "it should answer again in ~30-60 s "
@@ -824,7 +824,7 @@ static int cmd_recovery(const cli_opts *o)
     int ret;
 
     if (o->url == NULL || o->url[0] == '\0') {
-        fprintf(stderr, "error: no device URL — pass --url or set EHEM_URL\n");
+        fprintf(stderr, "error: no device URL - pass --url or set EHEM_URL\n");
         return 2;
     }
     /* The probe: the configured trust, automatic recovery OFF so the TLS

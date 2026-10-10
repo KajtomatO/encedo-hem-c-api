@@ -211,7 +211,7 @@ int hem_ext_pair_run(ehem_ctx *ctx, const hem_ext_pair_opts *o)
         /* implements: REQ-TOOL-018 — pairing is passphrase-ONLY: the device
          * demands sub="U" for the pairing trio (REQ-AUTH-006), and mobile
          * bearers carry sub=base64(kid) (REQ-AUTH-007). */
-        fprintf(err, "error: ext pair cannot use --mobile — the device "
+        fprintf(err, "error: ext pair cannot use --mobile - the device "
                      "accepts pairing changes only from a passphrase login "
                      "(sub=\"U\"); pass --passphrase / set EHEM_PASSPHRASE\n");
         return HEM_EXT_USAGE;
@@ -231,7 +231,7 @@ int hem_ext_pair_run(ehem_ctx *ctx, const hem_ext_pair_opts *o)
     /* Clock sync first — the device clock drifts (KNOWN-ISSUES) and every
      * JWT in the flow is time-checked. Best effort. */
     if (ehem_system_checkin(ctx, &ci) != EHEM_OK) {
-        fprintf(err, "warning: check-in failed (%s) — continuing\n",
+        fprintf(err, "warning: check-in failed (%s) - continuing\n",
                 ehem_last_error(ctx)->message);
     }
     ehem_checkin_result_free(ci);
@@ -276,7 +276,7 @@ int hem_ext_pair_run(ehem_ctx *ctx, const hem_ext_pair_opts *o)
             attempts * (delay_ms / 1000u));
     if (o->no_qr || hem_ext_qr_render(payload, out) != 0) {
         if (!o->no_qr) {
-            fprintf(err, "warning: QR rendering failed — payload follows\n");
+            fprintf(err, "warning: QR rendering failed - payload follows\n");
         }
         fprintf(out, "%s\n", payload);
     }
@@ -298,7 +298,7 @@ int hem_ext_pair_run(ehem_ctx *ctx, const hem_ext_pair_opts *o)
         sleep_ms(delay_ms);
     }
     if (pr == NULL || pr->pending) {
-        fprintf(err, "error: QR not scanned in time — run ext pair again\n");
+        fprintf(err, "error: QR not scanned in time - run ext pair again\n");
         ret = HEM_EXT_TIMEOUT;
         goto done;
     }
@@ -317,7 +317,7 @@ int hem_ext_pair_run(ehem_ctx *ctx, const hem_ext_pair_opts *o)
                                        val->kid, val->code);
     if (rc != EHEM_OK) {
         fprintf(err, "error: register/finalise failed: %s (the device HAS "
-                     "imported the key — remove kid %s with `keys rm` "
+                     "imported the key - remove kid %s with `keys rm` "
                      "before retrying)\n",
                 ehem_last_error(ctx)->message, val->kid);
         goto done;
@@ -411,7 +411,7 @@ int hem_ext_login_run(ehem_ctx *ctx, const hem_ext_login_opts *o)
             size_t n = page->listed;
             ehem_key_page_free(page);
             if (n == 0) {
-                fprintf(err, "error: no authenticator is paired — run "
+                fprintf(err, "error: no authenticator is paired - run "
                              "`hem-tool ext pair` first\n");
                 return HEM_EXT_NOAUTH;
             }
@@ -424,7 +424,7 @@ int hem_ext_login_run(ehem_ctx *ctx, const hem_ext_login_opts *o)
         return HEM_EXT_RUNTIME;
     }
 
-    fprintf(out, "Push sent — approve scope \"%s\" on your phone...\n",
+    fprintf(out, "Push sent - approve scope \"%s\" on your phone...\n",
             scope);
 
     if (strcmp(scope, "system:config") == 0) {

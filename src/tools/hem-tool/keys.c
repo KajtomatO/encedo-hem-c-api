@@ -264,7 +264,7 @@ int hem_keys_pub_run(ehem_ctx *ctx, const hem_keys_pub_opts *o)
         }
         fprintf(out, "\n");
     } else {
-        fprintf(out, "material: (none — symmetric key exports no public "
+        fprintf(out, "material: (none - symmetric key exports no public "
                      "material)\n");
     }
 
@@ -528,7 +528,7 @@ int hem_keys_rm_run(ehem_ctx *ctx, const hem_keys_rm_opts *o)
     }
 
     /* Partition report (REQ-TOOL-006 §2). */
-    fprintf(out, "%lu key(s) total — ", (unsigned long)n);
+    fprintf(out, "%lu key(s) total - ", (unsigned long)n);
     if (o->all) {
         fprintf(out, "ALL keys (excluding protected device keys)\n");
     } else {

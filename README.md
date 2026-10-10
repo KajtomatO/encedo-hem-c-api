@@ -192,7 +192,10 @@ A release carries:
 Unpack the hem-tool archive and the matching wolfSSL asset and put the
 library next to the binary — hem-tool looks in its own directory first,
 then the system's library path (a system wolfSSL with the same soname and
-build configuration works too). Verify downloads before running anything:
+build configuration works too). On Windows a missing `libwolfssl.dll` stops
+`hem-tool.exe` before any of its code runs — often with no message, exit code
+-1073741515 (`0xC0000135`, STATUS_DLL_NOT_FOUND). Verify downloads before
+running anything:
 
 ```sh
 sha256sum -c SHA256SUMS            # Linux

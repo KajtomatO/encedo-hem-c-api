@@ -47,14 +47,14 @@ cp -L "$LIB" "$STAGE/$LIBNAME"            # a real file, never a symlink
 cp "$PREFIX/COPYING.wolfssl" "$STAGE/COPYING"
 cp "$PREFIX/wolfssl-build-config.txt" "$STAGE/BUILD-CONFIG.txt"
 cat > "$STAGE/README.txt" <<EOF
-wolfSSL ${V} (${OS}, x86_64) — the TLS/crypto library hem-tool loads at run time.
+wolfSSL ${V} (${OS}, x86_64) - the TLS/crypto library hem-tool loads at run time.
 
-Contents: ${LIBNAME}; COPYING (GNU GPL version 2 — wolfSSL is licensed "GPLv2
+Contents: ${LIBNAME}; COPYING (GNU GPL version 2 - wolfSSL is licensed "GPLv2
 or, at your option, any later version", or commercially by wolfSSL Inc.);
 BUILD-CONFIG.txt (the exact CMake configure line and toolchain this library was
 built with); this file.
 
-Use: put ${LIBNAME} in the same directory as hem-tool —
+Use: put ${LIBNAME} in the same directory as hem-tool -
 ${HOWTO}.
 hem-tool was compiled against the headers of THIS build: a substitute library
 must be built with the same options (BUILD-CONFIG.txt) or its struct layouts
@@ -71,7 +71,7 @@ EOF
 if [ "$OS" = "windows" ]; then
   cat >> "$STAGE/README.txt" <<'EOF'
 
-Windows: built in MSYS2 UCRT64 — the DLL uses the Universal C Runtime, part of
+Windows: built in MSYS2 UCRT64 - the DLL uses the Universal C Runtime, part of
 Windows 10 / Server 2016 and later; older Windows needs update KB2999226.
 EOF
 fi

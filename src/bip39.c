@@ -177,7 +177,7 @@ ehem_rc ehem_bip39_to_master_secret(const char *words,
         goto out;
     }
     if (hash[0] != bits[EHEM_BIP39_ENTROPY_SIZE]) {
-        say(reason, reason_cap, "checksum mismatch — a word is wrong or out of order");
+        say(reason, reason_cap, "checksum mismatch - a word is wrong or out of order");
         goto invalid;
     }
 

@@ -210,7 +210,7 @@ archives + `SHA256SUMS` (tag == project version enforced).
       tag → a GitHub PRE-release with the six assets and the annotation +
       checksums as its text (delete it afterwards if wanted); a mismatched
       or lightweight tag fails before publishing (both proven locally
-      2026-10-10). Needs REQ-BUILD-005 rev 3 approved first.
+      2026-10-10). REQ-BUILD-005 rev 3 approved 2026-10-10.
 - [ ] README Download section (archive + companion asset); `./dev ci` still
       green; `implements: REQ-BUILD-005` tag in the workflow header and in
       all three scripts.

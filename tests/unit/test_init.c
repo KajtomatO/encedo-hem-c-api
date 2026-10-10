@@ -4,7 +4,8 @@
  *
  * verifies: REQ-AUTH-011 (GET challenge → PBKDF2 user key + master key →
  *           MASTER-signed init JWT → POST sequence; the posted JWT carries the
- *           Manager's minimal header, the claims jti / aud / exp = the
+ *           full eJWT header the firmware requires (alg + ecdh — what the
+ *           Manager really sends), the claims jti / aud / exp = the
  *           challenge's / iat / iss = master public key / cfg with all 13
  *           mandatory fields and the Manager defaults, and an HMAC-SHA256 tag
  *           the test recomputes from ECDH(master, spk); the returned
@@ -158,11 +159,17 @@ static void test_init_full(void **state)
     static char h[256], pl[2048], sig[128];
     split_jwt(jwt, h, sizeof h, pl, sizeof pl, sig, sizeof sig);
 
-    /* Header: the Manager's minimal one. */
+    /* Header: byte-exact what the Manager sends. The firmware refuses a header
+     * without "alg":"HS256" with 401 before checking the signature (the bare
+     * {"ecdh":"x25519"} this test once pinned failed the first live init), and
+     * keys the HMAC with ECDH only when "ecdh":"x25519" is present. */
     uint8_t hdr[256];
     size_t hn = ehem_b64url_decode(h, strlen(h), hdr, sizeof hdr);
-    assert_int_equal(hn, strlen(EHEM_EJWT_HEADER_MIN));
-    assert_memory_equal(hdr, EHEM_EJWT_HEADER_MIN, hn);
+    assert_int_equal(hn, strlen(EHEM_EJWT_HEADER));
+    assert_memory_equal(hdr, EHEM_EJWT_HEADER, hn);
+    hdr[hn] = '\0';
+    assert_non_null(strstr((const char *)hdr, "\"alg\":\"HS256\""));
+    assert_non_null(strstr((const char *)hdr, "\"ecdh\":\"x25519\""));
 
     /* The personas, recomputed exactly as the binding must have done. */
     uint8_t seed[32], user_priv[32], user_pub[32], master_priv[32], master_pub[32];
