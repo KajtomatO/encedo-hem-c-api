@@ -113,7 +113,7 @@ int hem_sign_run(ehem_ctx *ctx, const hem_sign_opts *o)
         msg_len = read_message(f, msg, sizeof msg);
     }
     if (msg_len == 0) {
-        fprintf(err, "error: empty message — the device rejects a "
+        fprintf(err, "error: empty message - the device rejects a "
                      "zero-length input\n");
         return HEM_SIGN_USAGE;
     }
@@ -150,7 +150,7 @@ int hem_sign_run(ehem_ctx *ctx, const hem_sign_opts *o)
         (void)ehem_key_type_parse(d->type, &info);
         alg = default_alg(info.family);
         if (alg == NULL) {
-            fprintf(err, "error: key type '%s' has no signing algorithm — "
+            fprintf(err, "error: key type '%s' has no signing algorithm - "
                          "pass --alg explicitly if this is wrong\n", d->type);
             ehem_key_details_free(d);
             return HEM_SIGN_RUNTIME;

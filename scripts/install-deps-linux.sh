@@ -13,8 +13,8 @@
 #                                  M2 may switch to a FetchContent build with
 #                                  a pinned wolfCrypt config, see §12 risk)
 #
-# cJSON and phc-winner-argon2 are *vendored* into the source tree
-# (ARCHITECTURE.md §1, §10), so they are deliberately NOT installed here.
+# cJSON is *vendored* into the source tree (ARCHITECTURE.md §1, §10), so it
+# is deliberately NOT installed here.
 #
 # Primary target is Debian/Ubuntu (apt); dnf, pacman and zypper are handled
 # best-effort for contributor convenience. Idempotent — safe to re-run.

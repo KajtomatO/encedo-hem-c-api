@@ -105,7 +105,7 @@ ehem_rc ehem_ext_init(ehem_ctx *ctx, const char *epk_b64,
     if (ehem_auth_is_mobile(ctx)) {
         return ehem_ctx_fail(ctx, EHEM_ERR_SCOPE_DENIED, 0, NULL,
                              "ext/init: pairing requires a passphrase "
-                             "session — the device demands sub=\"U\" and "
+                             "session - the device demands sub=\"U\" and "
                              "mobile bearers carry the authenticator kid; "
                              "call ehem_login() (no push was sent)");
     }
@@ -178,7 +178,7 @@ ehem_rc ehem_ext_validate(ehem_ctx *ctx, const char *pid_b64,
     if (ehem_auth_is_mobile(ctx)) {
         return ehem_ctx_fail(ctx, EHEM_ERR_SCOPE_DENIED, 0, NULL,
                              "ext/validate: pairing requires a passphrase "
-                             "session — the device demands sub=\"U\" and "
+                             "session - the device demands sub=\"U\" and "
                              "mobile bearers carry the authenticator kid; "
                              "call ehem_login() (no push was sent)");
     }
@@ -214,7 +214,7 @@ ehem_rc ehem_ext_validate(ehem_ctx *ctx, const char *pid_b64,
          * not distinguish them (empty payload); name both in the detail. */
         if (ehem_last_error(ctx)->http_status == 406) {
             return ehem_ctx_fail(ctx, EHEM_ERR_DEVICE, 406, NULL,
-                                 "auth/ext/validate: import refused (406) — "
+                                 "auth/ext/validate: import refused (406) - "
                                  "ExtAuth slots full (max 8) or this "
                                  "authenticator key is already paired");
         }
@@ -271,7 +271,7 @@ ehem_rc ehem_ext_mac(ehem_ctx *ctx, const char *epk_b64,
     if (ehem_auth_is_mobile(ctx)) {
         return ehem_ctx_fail(ctx, EHEM_ERR_SCOPE_DENIED, 0, NULL,
                              "ext/mac: pairing requires a passphrase "
-                             "session — the device demands sub=\"U\" and "
+                             "session - the device demands sub=\"U\" and "
                              "mobile bearers carry the authenticator kid; "
                              "call ehem_login() (no push was sent)");
     }
@@ -490,12 +490,12 @@ ehem_rc ehem_ext_token(ehem_ctx *ctx, const char *authreply_jwt,
         long status = ehem_last_error(ctx)->http_status;
         if (status == 401) {
             return ehem_ctx_fail(ctx, EHEM_ERR_AUTH_FAILED, 401, NULL,
-                                 "auth/ext/token: reply JWT rejected (401 — "
+                                 "auth/ext/token: reply JWT rejected (401 - "
                                  "bad signature, expired, or replayed nonce)");
         }
         if (status == 406) {
             return ehem_ctx_fail(ctx, EHEM_ERR_AUTH_FAILED, 406, NULL,
-                                 "auth/ext/token: reply not acceptable (406 — "
+                                 "auth/ext/token: reply not acceptable (406 - "
                                  "unknown authenticator, unsupported scheme, "
                                  "or scope ciphertext failed to authenticate)");
         }

@@ -109,7 +109,7 @@ int hem_random_run(ehem_ctx *ctx, const hem_random_opts *o)
     if (kid == created_kid) {
         del_rc = ehem_key_delete(ctx, created_kid);
         if (del_rc != EHEM_OK) {
-            fprintf(err, "warning: could not delete the transient key %s — "
+            fprintf(err, "warning: could not delete the transient key %s - "
                          "remove it with 'hem-tool keys rm'\n", created_kid);
         }
     }

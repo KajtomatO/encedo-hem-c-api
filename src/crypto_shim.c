@@ -27,6 +27,8 @@
 #include <wolfssl/wolfcrypt/signature.h>    /* wc_SignatureVerify */
 #include <wolfssl/wolfcrypt/error-crypt.h>  /* SIG_VERIFY_E, ASN_PARSE_E */
 #include <wolfssl/wolfcrypt/aes.h>          /* AES-128-CBC (scheme A, M8) */
+#include <wolfssl/wolfcrypt/sha256.h>       /* wc_Sha256Hash (BIP39 checksum) */
+#include <wolfssl/wolfcrypt/random.h>       /* WC_RNG (mnemonic entropy, M10) */
 
 ehem_rc ehem_kdf_pbkdf2_sha256(const uint8_t *passwd, size_t passwd_len,
                                const uint8_t *salt, size_t salt_len,
@@ -39,6 +41,48 @@ ehem_rc ehem_kdf_pbkdf2_sha256(const uint8_t *passwd, size_t passwd_len,
     }
     int rc = wc_PBKDF2(out, passwd, (int)passwd_len, salt, (int)salt_len,
                        (int)iterations, (int)out_len, WC_SHA256);
+    return rc == 0 ? EHEM_OK : EHEM_ERR_PROTOCOL;
+}
+
+ehem_rc ehem_kdf_pbkdf2_sha512(const uint8_t *passwd, size_t passwd_len,
+                               const uint8_t *salt, size_t salt_len,
+                               uint32_t iterations,
+                               uint8_t *out, size_t out_len)
+{
+    if (passwd == NULL || salt == NULL || out == NULL ||
+        out_len == 0 || iterations == 0) {
+        return EHEM_ERR_ARG;
+    }
+    int rc = wc_PBKDF2(out, passwd, (int)passwd_len, salt, (int)salt_len,
+                       (int)iterations, (int)out_len, WC_SHA512);
+    return rc == 0 ? EHEM_OK : EHEM_ERR_PROTOCOL;
+}
+
+ehem_rc ehem_sha256(const uint8_t *in, size_t in_len,
+                    uint8_t out[EHEM_SHA256_SIZE])
+{
+    static const uint8_t empty = 0;
+    if (out == NULL || (in == NULL && in_len != 0)) {
+        return EHEM_ERR_ARG;
+    }
+    if (in == NULL) {
+        in = &empty;              /* wolfCrypt rejects a NULL pointer even for 0 bytes */
+    }
+    return wc_Sha256Hash(in, (word32)in_len, out) == 0 ? EHEM_OK : EHEM_ERR_PROTOCOL;
+}
+
+ehem_rc ehem_random_bytes(uint8_t *out, size_t n)
+{
+    WC_RNG rng;
+    int rc;
+    if (out == NULL || n == 0) {
+        return EHEM_ERR_ARG;
+    }
+    if (wc_InitRng(&rng) != 0) {
+        return EHEM_ERR_PROTOCOL;
+    }
+    rc = wc_RNG_GenerateBlock(&rng, out, (word32)n);
+    wc_FreeRng(&rng);
     return rc == 0 ? EHEM_OK : EHEM_ERR_PROTOCOL;
 }
 
@@ -204,9 +248,19 @@ static void date_to_iso(const byte *cert_date, int cert_date_sz,
     if (wc_GetDateAsCalendarTime(date, length, format, &t) != 0) {
         return;
     }
-    (void)snprintf(out, cap, "%04d-%02d-%02dT%02d:%02d:%02dZ",
-                   t.tm_year + 1900, t.tm_mon + 1, t.tm_mday,
-                   t.tm_hour, t.tm_min, t.tm_sec);
+    /* Clamp every field to its digit width so the formatted length is provably
+     * 20 + NUL = EHEM_CERT_DATE_CAP (GCC -O3 -Wformat-truncation, which the
+     * Release build of REQ-BUILD-005 runs with, cannot see that itself). */
+    {
+        unsigned y  = (unsigned)(t.tm_year + 1900) % 10000u;
+        unsigned mo = (unsigned)(t.tm_mon + 1) % 100u;
+        unsigned d  = (unsigned)t.tm_mday % 100u;
+        unsigned hh = (unsigned)t.tm_hour % 100u;
+        unsigned mi = (unsigned)t.tm_min % 100u;
+        unsigned s  = (unsigned)t.tm_sec % 100u;
+        (void)snprintf(out, cap, "%04u-%02u-%02uT%02u:%02u:%02uZ",
+                       y, mo, d, hh, mi, s);
+    }
 }
 
 ehem_rc ehem_cert_parse_leaf(const uint8_t *der, size_t der_len,

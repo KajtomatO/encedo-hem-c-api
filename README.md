@@ -31,6 +31,8 @@ module.
   conformance record against the device API documentation.
 - **[KNOWN-ISSUES.md](KNOWN-ISSUES.md)** — firmware bugs and doc
   divergences the SDK works around (device behavior wins).
+- **[BACKLOG.md](BACKLOG.md)** — unscheduled items (firmware/UI upgrade,
+  provisioning, diagnostics) parked outside any milestone.
 - **`hem-tool`** — the bundled CLI is the living usage documentation:
   every binding is drivable from it (see below).
 
@@ -82,16 +84,17 @@ Useful configure options:
 
 ### Windows (MSYS2 / MinGW-w64)
 
-Open the **“MSYS2 MINGW64”** shell (after running the install script) and build
-exactly as above:
+Open the **“MSYS2 UCRT64”** shell (after running the install script) and build
+exactly as above — UCRT64 is the environment CI uses; MSYS2 deprecated
+MINGW64:
 
 ```bash
 cmake -B build -G Ninja && cmake --build build
 ```
 
 Or, to build **from an ordinary PowerShell prompt** (no MSYS2 shell needed),
-use the helper scripts — they run cmake/ctest inside the MinGW64 environment
-for you, so libcurl/wolfSSL are found:
+use the helper scripts — they run cmake/ctest inside the MSYS2 UCRT64
+environment for you, so libcurl/wolfSSL are found:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\build-windows.ps1   # configure + build
@@ -102,7 +105,8 @@ A plain `cmake -B build` from PowerShell often picks up an unrelated
 cmake/gcc on `PATH` (e.g. Strawberry Perl's), which has no libcurl and fails
 with `Could NOT find CURL`. `build-windows.ps1` avoids that, and wipes a build
 directory that was accidentally configured with the wrong compiler. Both take
-`-BuildDir`, `-MsysRoot`, and `-Env` (mingw64|ucrt64); `test-windows.ps1` takes
+`-BuildDir`, `-MsysRoot`, and `-Env` (ucrt64, the default, or the deprecated
+mingw64 for an existing setup); `test-windows.ps1` takes
 `-Label unit|integration|disruptive`. Pass `-?` for full help.
 
 ### Cross-compiling for Windows from Linux
@@ -167,13 +171,48 @@ that need the device (`test it`, `test all`, `tool`) use the `EHEM_*` variables
 when set, otherwise auto-source a git-ignored `./hem.env` (and say so on
 stderr). See `./dev help` for the full surface.
 
+## Download hem-tool
+
+Prebuilt `hem-tool` binaries come from the release workflow
+(`.github/workflows/release.yml`; how to cut a release:
+[docs/RELEASING.md](docs/RELEASING.md)): every push to `main` uploads them as
+workflow artifacts (version suffixed `+g<sha>`), and a `v*` tag publishes
+them as a GitHub Release together with `SHA256SUMS` (a `v<version>-rc<N>`
+tag publishes a pre-release; the release text is the annotated tag's
+message). libcurl is compiled in; **wolfSSL is linked dynamically and is not in the hem-tool archive** —
+no published package bundles it statically (licensing; ARCHITECTURE.md §1).
+A release carries:
+
+| Asset | Contents |
+|---|---|
+| `hem-tool-<version>-{linux,windows}-x86_64.{tar.gz,zip}` | the binary, `README.txt`, `LICENSES/` (MIT SDK/tool, curl, cJSON, BIP39 wordlist, qrcodegen) |
+| `wolfssl-<wv>-{linux,windows}-x86_64.{tar.gz,zip}` | `libwolfssl.so.<N>` / `libwolfssl.dll`, wolfSSL's `COPYING` (GPLv2 or later), `BUILD-CONFIG.txt`, `README.txt` |
+| `wolfssl-<wv>-stable-src.tar.gz` | the unmodified upstream source the library was built from |
+| `SHA256SUMS` | over all of the above |
+
+Unpack the hem-tool archive and the matching wolfSSL asset and put the
+library next to the binary — hem-tool looks in its own directory first,
+then the system's library path (a system wolfSSL with the same soname and
+build configuration works too). On Windows a missing `libwolfssl.dll` stops
+`hem-tool.exe` before any of its code runs — often with no message, exit code
+-1073741515 (`0xC0000135`, STATUS_DLL_NOT_FOUND). Verify downloads before
+running anything:
+
+```sh
+sha256sum -c SHA256SUMS            # Linux
+CertUtil -hashfile <file> SHA256    # Windows
+```
+
 ## hem-tool
 
 The bundled CLI drives every binding through the public API. Commands are
-grouped by what they need — none (`status`, `checkin`), any bearer
-(`keys`, `sign`, `random`, `logs`, `selftest`, `cert-install`, `reboot`,
-`tls-recover`, `ext list/login`), or a passphrase only (`ext pair` — the
-device demands `sub="U"` for pairing changes):
+grouped by what they need — none (`status`, `checkin`, `init-device`), any bearer
+(`keys`, `sign`, `random`, `logs`, `selftest`, `reboot`, `ext list/login`),
+or a passphrase only (`ext pair` — the device demands `sub="U"` for pairing
+changes; `wipe-device` and `recovery` — config writes, `sub="U"`/`"M"`) — followed by a
+"manual recovery" section holding the building
+blocks of `recovery` (`cert-install`, `tls-recover`; passphrase only, since
+config writes demand `sub="U"`/`"M"`):
 
 ```bash
 hem-tool status                     # no --url needed: defaults to https://my.ence.do
@@ -219,5 +258,8 @@ workplan/        todo/ · doing/ · done/ step files
 ## License
 
 MIT — see [LICENSE](LICENSE). Written from scratch (no code derived from GPL
-PKCS#11 implementations). Note wolfSSL is GPLv3/commercial
-dual-licensed; binaries that link it must comply accordingly.
+PKCS#11 implementations). wolfSSL is GPLv2-or-later/commercial
+dual-licensed (per the pinned release's `COPYING`/`LICENSING`); binaries
+that link it must comply accordingly — the published hem-tool links it
+dynamically, and no published package bundles it statically
+(ARCHITECTURE.md §1, §12 risk 1).

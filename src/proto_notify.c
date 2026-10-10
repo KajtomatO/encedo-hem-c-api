@@ -493,7 +493,7 @@ ehem_rc ehem_notify_event_check(ehem_ctx *ctx, const char *notify_url,
         if (!ehem_json_get_string(root, "authreply", &s)) {
             rc = ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, status, body,
                                "notify/event/check: 200 with neither "
-                               "'authreply' nor 'deny' — unknown broker shape");
+                               "'authreply' nor 'deny' - unknown broker shape");
             ehem_json_free(root);
             free(body);
             free(r);

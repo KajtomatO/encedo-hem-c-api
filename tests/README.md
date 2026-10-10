@@ -6,7 +6,8 @@ CTest labels partition the suites (ARCHITECTURE.md §9):
 |-------|------|--------------|
 | `unit` | Offline, fake transport, no network | Every build, both platforms, CI |
 | `integration` | Real HEM device over HTTPS | Only when `EHEM_TEST_URL` is set (REQ-TEST-002) |
-| `disruptive` | Mutates device availability/state (reboot / firmware / wipe) | Never automatically; needs `EHEM_TEST_URL` **and** `EHEM_ALLOW_DISRUPTIVE=1` |
+| `disruptive` | Mutates device availability/state (reboot / firmware) | Never automatically; needs `EHEM_TEST_URL` **and** `EHEM_ALLOW_DISRUPTIVE=1` |
+| *(none — attended-only)* | Device wipe and device initialisation (`ehem_system_wipeout`, `ehem_device_init`, hem-tool `wipe-device` / `init-device`) | **No CTest at all**, not even `disruptive` (REQ-TEST-007, user decision 2026-10-07): attended runs only, recorded in the owning REQ and step; their fake-transport unit tests still run under `unit` |
 
 ## Running unit tests
 

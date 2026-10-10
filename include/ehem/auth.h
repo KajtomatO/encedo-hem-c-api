@@ -22,6 +22,9 @@
 #ifndef EHEM_AUTH_H
 #define EHEM_AUTH_H
 
+#include <stdbool.h>
+#include <stdint.h>
+
 #include "ehem/ehem.h"
 
 #ifdef __cplusplus
@@ -83,6 +86,141 @@ EHEM_API ehem_rc ehem_logout(ehem_ctx *ctx);
  *     kind of session.
  */
 EHEM_API ehem_rc ehem_login_mobile(ehem_ctx *ctx);
+
+/* ==========================================================================
+ * Device initialisation (REQ-AUTH-011) and the Manager-compatible master
+ * secret (REQ-AUTH-012). Both are verified ATTENDED-ONLY (ARCHITECTURE.md §9):
+ * no live test exists for them; hem-tool init-device drives them by hand.
+ * implements: REQ-AUTH-011, REQ-AUTH-012
+ * ========================================================================== */
+
+#define EHEM_MASTER_SECRET_SIZE 32
+
+/*
+ * Generate a fresh 24-word BIP39 English mnemonic (256 bits of entropy from
+ * the crypto backend's DRBG) — the master persona the way Encedo Manager
+ * creates one at init. *words_out is a library-allocated, NUL-terminated string
+ * of lowercase words joined by single spaces; release it with
+ * ehem_mnemonic_free() (which scrubs it). The device offers NO way to rotate
+ * the master key later, so the caller must keep these words. `ctx` may be NULL
+ * (then no error detail is recorded). EHEM_ERR_ARG on a NULL words_out.
+ */
+EHEM_API ehem_rc ehem_mnemonic_generate(ehem_ctx *ctx, char **words_out);
+
+/* Scrub and free a mnemonic from ehem_mnemonic_generate(). NULL is a no-op. */
+EHEM_API void ehem_mnemonic_free(char *words);
+
+/*
+ * Derive the 32-byte master secret from a 24-word BIP39 English mnemonic
+ * EXACTLY as Encedo Manager does (assets/build.js initFinal and the
+ * master-passphrase prompt, assets/jsbip39_v1.js): the words are validated
+ * (any whitespace between them, lowercase words from the English list, BIP39
+ * checksum), the standard seed is PBKDF2-HMAC-SHA512(mnemonic, "mnemonic",
+ * 2048 rounds, 64 bytes), and the secret is the Manager's `substr(1, 64)`
+ * slice of that seed's hex — a nibble-shifted 32 bytes. Feed the result to
+ * ehem_init_params.master_secret; it is also the master persona of any device
+ * the Manager initialised from the same words. An invalid mnemonic returns
+ * EHEM_ERR_ARG with the reason in ehem_last_error(ctx) (when ctx is non-NULL)
+ * and writes nothing. Intermediates are zeroized; the caller owns the secret.
+ */
+EHEM_API ehem_rc ehem_master_secret_from_mnemonic(ehem_ctx *ctx, const char *words,
+                                                  uint8_t secret[EHEM_MASTER_SECRET_SIZE]);
+
+/*
+ * Inputs for ehem_device_init(). Initialise with ehem_init_params_init() (it
+ * stamps abi_size and zeroes every field — zero/NULL means "the Manager's
+ * default", so the struct can grow append-only like ehem_options), then set:
+ *
+ *   passphrase          REQUIRED — the user persona: becomes the device's user
+ *                       password (cfg.userkey = X25519 public key of the
+ *                       REQ-AUTH-001 derivation, so ehem_login() with the same
+ *                       passphrase works afterwards);
+ *   master_secret       REQUIRED — EHEM_MASTER_SECRET_SIZE bytes, the master
+ *                       persona (cfg.masterkey); signs the init JWT. From
+ *                       ehem_master_secret_from_mnemonic() for Manager
+ *                       compatibility, or any 32 bytes the caller keeps;
+ *   user, email,        REQUIRED — cfg.user (device user identity), cfg.email,
+ *   hostname, ip        cfg.hostname, cfg.ip ("A.B.C.D/prefix");
+ *   storage_mode        REQUIRED (> 0) — cfg.storage_mode;
+ *   storage_disk0size   REQUIRED (> 0) — cfg.storage_disk0size, bytes;
+ *   origin              cfg.origin (CORS); NULL → "*" (Manager default);
+ *   dnsd                nonzero → cfg.dnsd true; default false;
+ *   no_trusted_ts,      nonzero → the corresponding cfg boolean FALSE; zero
+ *   no_trusted_backend, keeps the Manager's default of true;
+ *   no_allow_keysearch
+ *   gen_csr             nonzero → cfg.gen_csr true (the device generates a TLS
+ *                       CSR, returned in ehem_init_info.csr); default false;
+ *   ctx_id              cfg.ctx; default 0.
+ *
+ * The 13 fields the firmware's completeness mask demands are always sent.
+ */
+typedef struct ehem_init_params {
+    size_t         abi_size;            /* set by ehem_init_params_init() */
+    const char    *passphrase;
+    const uint8_t *master_secret;       /* EHEM_MASTER_SECRET_SIZE bytes */
+    const char    *user;
+    const char    *email;
+    const char    *hostname;
+    const char    *ip;
+    int            storage_mode;
+    int64_t        storage_disk0size;
+    const char    *origin;
+    int            dnsd;
+    int            no_trusted_ts;
+    int            no_trusted_backend;
+    int            no_allow_keysearch;
+    int            gen_csr;
+    int            ctx_id;
+} ehem_init_params;
+
+/* Zero the params and stamp abi_size. Call before setting fields. */
+EHEM_API void ehem_init_params_init(ehem_init_params *params);
+
+/* What the device returned from a successful init. Free with
+ * ehem_init_info_free(). The bearer the device also returns (sub "U", scope
+ * "system:config") is not exposed: it is placed in the context's token cache. */
+typedef struct ehem_init_info {
+    bool  reboot_required;   /* hostname/IP/storage changed from the defaults */
+    char *instanceid;        /* the new device UUID (always present) */
+    char *csr;               /* PEM TLS CSR when gen_csr succeeded, else NULL */
+    char *genuine;           /* fresh attestation token, NULL if absent */
+} ehem_init_info;
+
+/*
+ * Personalise an UNINITIALISED device — POST /api/auth/init — the way Encedo
+ * Manager's initFinal does it (REQ-AUTH-011):
+ *   1. GET /api/auth/init (no auth) → challenge {exp, spk, jti, genuine, eid};
+ *   2. user key: PBKDF2-HMAC-SHA256(passphrase, salt = eid, 600 000, 32 B) →
+ *      X25519 keypair (REQ-AUTH-001); master key: X25519 keypair from
+ *      master_secret;
+ *   3. init JWT, SIGNED BY THE MASTER KEY: header {"ecdh":"x25519"}, claims
+ *      {jti, aud: spk, exp: the challenge's exp, iat, iss: master public key,
+ *      cfg: {...}}, HMAC-SHA256 keyed with ECDH(master, spk);
+ *   4. POST {"init": "<jwt>"} → {reboot_required, instanceid, token, csr,
+ *      genuine}.
+ * On success the context holds a passphrase session for the new user persona
+ * (as if ehem_login(passphrase) had been called, same retention rule) with the
+ * returned "system:config" bearer already cached — a following config write
+ * (e.g. ehem_system_config_install_cert) needs no login round-trip.
+ *
+ * Preconditions the device enforces, in order — each is reported with a
+ * plain-language ehem_last_error() detail: RTC set (else HTTP 403 →
+ * EHEM_ERR_DEVICE: run ehem_system_checkin() first — this call does NOT
+ * check in by itself), not already initialised (406 → EHEM_ERR_DEVICE: wipe it
+ * first, ehem_system_wipeout), self-test state 0 (409 → EHEM_ERR_DEVICE). The
+ * POST adds 401 (JWT/jti rejected → EHEM_ERR_AUTH_FAILED) and 400 (a cfg field
+ * failed validation → EHEM_ERR_DEVICE, nothing written). A wiped device has no
+ * TLS material: create the context with its http:// URL, then restore HTTPS
+ * with ehem_tls_recover() after the init (and a reboot if reboot_required).
+ * masterkey cannot be rotated later — only a wipe + re-init changes it. Secret
+ * intermediates are zeroized; the master secret is never retained. `out` may be
+ * NULL when the reply details are not needed.
+ */
+EHEM_API ehem_rc ehem_device_init(ehem_ctx *ctx, const ehem_init_params *params,
+                                  ehem_init_info **out);
+
+/* Release an init result. NULL is a no-op. */
+EHEM_API void ehem_init_info_free(ehem_init_info *info);
 
 /* --------------------------------------------------------------------------
  * ExtAuth pairing (REQ-AUTH-006) — register an external authenticator

@@ -78,7 +78,7 @@ int hem_tls_recover_run(ehem_ctx *ctx, const hem_recover_opts *o)
     /* Fail fast BEFORE any probe: recovery MUTATES the device, so a run
      * that cannot possibly authenticate should produce zero traffic. */
     if (!o->mobile && (o->passphrase == NULL || o->passphrase[0] == '\0')) {
-        fprintf(err, "error: no passphrase — pass --passphrase / set "
+        fprintf(err, "error: no passphrase - pass --passphrase / set "
                      "EHEM_PASSPHRASE, or use --mobile\n");
         return HEM_RECOVER_USAGE;
     }
@@ -98,7 +98,7 @@ int hem_tls_recover_run(ehem_ctx *ctx, const hem_recover_opts *o)
         rc = ehem_system_checkin(ctx, &ci);
         ehem_checkin_result_free(ci);
         if (rc != EHEM_OK) {
-            fprintf(err, "warning: check-in failed (%s) — continuing, the "
+            fprintf(err, "warning: check-in failed (%s) - continuing, the "
                          "clock may already be set\n", ehem_rc_str(rc));
         }
     }
@@ -145,7 +145,7 @@ int hem_tls_recover_run(ehem_ctx *ctx, const hem_recover_opts *o)
             }
         }
         fprintf(err, "error: device did not return serving HTTPS within the "
-                     "wait — check it and re-run\n");
+                     "wait - check it and re-run\n");
         return HEM_RECOVER_TIMEOUT;
     }
     ehem_cert_install_free(info);

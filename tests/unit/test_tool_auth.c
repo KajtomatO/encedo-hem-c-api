@@ -218,6 +218,34 @@ static void test_keys_list_mobile_outcomes(void **state)
     fake_transport_free(fake);
 }
 
+/* --- the registry class guard (REQ-TOOL-019 rev 2) ----------------------- */
+
+/* --mobile on a PASSPHRASE_ONLY command is refused before any traffic, with
+ * the sub="U" reason (and "M" for the config-writing recovery blocks);
+ * bearer commands and no-auth commands pass; unknown commands pass. */
+static void test_auth_class_guard(void **state)
+{
+    (void)state;
+    FILE *err = tmpfile();
+    assert_non_null(err);
+
+    assert_int_equal(hem_tool_check_auth_class(hem_registry_find("cert-install", NULL), true, err), 2);
+    assert_int_equal(hem_tool_check_auth_class(hem_registry_find("tls-recover", NULL), true, err), 2);
+    assert_int_equal(hem_tool_check_auth_class(hem_registry_find("ext", "pair"), true, err), 2);
+    char *msg = slurp(err);
+    assert_non_null(strstr(msg, "cert-install cannot use --mobile"));
+    assert_non_null(strstr(msg, "sub=\"U\" or \"M\""));
+    assert_non_null(strstr(msg, "ext pair cannot use --mobile"));
+    free(msg);
+
+    assert_int_equal(hem_tool_check_auth_class(hem_registry_find("cert-install", NULL), false, err), 0);
+    assert_int_equal(hem_tool_check_auth_class(hem_registry_find("keys", "list"), true, err), 0);
+    assert_int_equal(hem_tool_check_auth_class(hem_registry_find("reboot", NULL), true, err), 0);
+    assert_int_equal(hem_tool_check_auth_class(hem_registry_find("status", NULL), true, err), 0);
+    assert_int_equal(hem_tool_check_auth_class(NULL, true, err), 0);
+    fclose(err);
+}
+
 /* --- ext pair stays passphrase-only --------------------------------------- */
 
 static void test_ext_pair_mobile_rejected(void **state)
@@ -255,6 +283,7 @@ int main(void)
         cmocka_unit_test(test_exit_mapper),
         cmocka_unit_test(test_keys_list_mobile_outcomes),
         cmocka_unit_test(test_ext_pair_mobile_rejected),
+        cmocka_unit_test(test_auth_class_guard),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

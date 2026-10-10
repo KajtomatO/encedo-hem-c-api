@@ -323,6 +323,64 @@ Discovered while building and attending the M8 mobile-auth milestone
    authenticator (tests) copies the authreq `exp` instead, so tests see
    the full lifetime.
 
+## OPEN — Release hem-tool with a foreign libwolfssl crashes ("stack smashing detected")
+
+**Status:** open; the fix is M12 scope (user decision 2026-10-10 — not
+M10). **Affected:** the REQ-BUILD-005 release binaries (1.1.0), and any
+consumer of the SDK built against one wolfSSL and run with another.
+
+### Symptom
+
+2026-10-10, v1.1.0-rc4 Linux archive: `hem-tool init-device` printed its
+first lines and aborted with `*** stack smashing detected ***`. The same
+binary works when the companion `libwolfssl.so.42` sits next to it.
+
+### Cause
+
+hem-tool looks for `libwolfssl.so.42` in its own directory first (RUNPATH
+`$ORIGIN`), then in the system library path. Without the companion file it
+loaded the host's Ubuntu wolfSSL 5.6.6, which has the same soname but a
+different version and build configuration. The SDK allocates wolfCrypt
+structs itself (`crypto_shim.c`), and their sizes depend on both: `Hmac`
+is 784 bytes in the 5.7.2 release build and 896 in 5.6.6 (`DecodedCert`
+1528 vs 2576, `Aes` 880 vs 1104, `ed25519_key` 112 vs 384, `ed448_key` 184
+vs 632). `wc_HmacInit` overran the stack `Hmac`. Reproduced offline: the
+release-built `test_crypto` passes 8/8 with the bundled library and aborts
+in `test_hmac_sha256` against the system one. A same-version library built
+with other options is just as unsafe. On Windows the same applies to a
+different `libwolfssl.dll` found on `PATH` (e.g. MSYS2's) when the
+companion DLL is not next to `hem-tool.exe`.
+
+### Workaround
+
+Put the library from the release's `wolfssl-<version>-<os>-x86_64` asset
+next to the binary (README.txt, docs/RELEASING.md). A system wolfSSL works
+only with the same soname AND build configuration (`BUILD-CONFIG.txt`).
+
+### Plan
+
+M12 (ARCHITECTURE §11): `ehem_global_init` refuses a wolfSSL other than
+the one the SDK was built against — a version check plus a known-answer
+self-test of the SDK's own wolfCrypt structs.
+
+## OPEN — A wipe does not always remove the TLS material (fw v1.2.2)
+
+**Status:** open (observation, cause unknown). **Affected:** REQ-SYS-014,
+REQ-TOOL-022 texts; no functional failure.
+
+The 2026-07-22 wipe of the test device (fw v1.2.2-DIAG) left it serving
+HTTP only, and `tls-recover` had to re-provision HTTPS. The two 2026-10-10
+wipes of a second unit (fw v1.2.2) left it uninitialised but still serving
+HTTPS with a certificate that verifies under system trust (`status`:
+`inited: no`, `https: yes`). The `wipe-device` warning and the
+`ehem_system_wipeout` documentation (include/ehem/system.h) still say the
+TLS key and certificate are erased, and the tool still suggests an
+`http://` URL afterwards — that works either way. Whether the firmware
+build (DIAG vs production) or the unit's provisioning state makes the
+difference is not known. hem-tool no longer suggests `recovery` after init
+or wipe (REQ-TOOL-021 rev 3, REQ-TOOL-022 rev 2); run it only if HTTPS
+does not verify.
+
 ## RESOLVED — Windows (MinGW) X25519 crash: missing wolfCrypt_Init()
 
 **Status:** resolved 2026-07-16 (same day it was shelved). **Affected:**

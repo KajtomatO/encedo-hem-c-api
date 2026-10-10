@@ -17,8 +17,9 @@
 #include "crypto_shim.h"
 #include "json.h"
 
-/* The fixed JOSE header — a hardcoded byte string, never re-serialized. */
-static const char EJWT_HEADER[] = "{\"ecdh\":\"x25519\",\"alg\":\"HS256\",\"typ\":\"JWT\"}";
+/* The fixed JOSE header — a hardcoded byte string, never re-serialized
+ * (ejwt.h explains why every field is needed). */
+static const char EJWT_HEADER[] = EHEM_EJWT_HEADER;
 
 static const char B64_STD_ALPHA[] =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -135,6 +136,65 @@ size_t ehem_b64url_decode(const char *in, size_t in_len, uint8_t *out, size_t ou
     return b64_decode(in, in_len, out, out_cap, B64_URL_ALPHA);
 }
 
+/*
+ * Shared tail of every compact token: "<b64url(header)>.<b64url(payload)>.
+ * <b64url(HMAC-SHA256)>" — the signing input is the first two segments joined
+ * by '.', keyed with `key`, tag base64url no-pad (32 bytes → 43 chars).
+ */
+static ehem_rc sign_compact(const char *header, size_t header_len,
+                            const char *payload_json,
+                            const uint8_t *key, size_t key_len,
+                            char **out_jwt)
+{
+    /* Header segment (base64url, no pad). */
+    char header_seg[256];
+    size_t header_n = ehem_b64url_encode((const uint8_t *)header, header_len,
+                                         header_seg, sizeof header_seg);
+
+    /* Payload segment (base64url, no pad). */
+    size_t payload_len = strlen(payload_json);
+    size_t payload_seg_cap = ehem_b64url_encoded_len(payload_len) + 1;
+    char *payload_seg = malloc(payload_seg_cap);
+    size_t payload_n = payload_seg
+        ? ehem_b64url_encode((const uint8_t *)payload_json, payload_len,
+                             payload_seg, payload_seg_cap)
+        : (size_t)-1;
+    if (header_n == (size_t)-1 || payload_seg == NULL || payload_n == (size_t)-1) {
+        free(payload_seg);
+        return payload_seg == NULL ? EHEM_ERR_NOMEM : EHEM_ERR_PROTOCOL;
+    }
+
+    size_t sign_len = header_n + 1 + payload_n;
+    size_t sig_len = ehem_b64url_encoded_len(EHEM_SHA256_SIZE);   /* 43 */
+    char *jwt = malloc(sign_len + 1 + sig_len + 1);
+    if (jwt == NULL) {
+        free(payload_seg);
+        return EHEM_ERR_NOMEM;
+    }
+
+    memcpy(jwt, header_seg, header_n);
+    jwt[header_n] = '.';
+    memcpy(jwt + header_n + 1, payload_seg, payload_n);
+    free(payload_seg);
+
+    uint8_t mac[EHEM_SHA256_SIZE];
+    ehem_rc rc = ehem_hmac_sha256(key, key_len, (const uint8_t *)jwt, sign_len, mac);
+    if (rc != EHEM_OK) {
+        free(jwt);
+        return rc;
+    }
+
+    jwt[sign_len] = '.';
+    if (ehem_b64url_encode(mac, EHEM_SHA256_SIZE,
+                           jwt + sign_len + 1, sig_len + 1) == (size_t)-1) {
+        free(jwt);
+        return EHEM_ERR_PROTOCOL;
+    }
+
+    *out_jwt = jwt;
+    return EHEM_OK;
+}
+
 ehem_rc ehem_ejwt_build(const char *jti, const char *spk,
                         const char *scope,
                         const uint8_t user_pub[32], const uint8_t shared[32],
@@ -182,62 +242,29 @@ ehem_rc ehem_ejwt_build(const char *jti, const char *spk,
         return EHEM_ERR_NOMEM;
     }
 
-    /* Header segment (base64url, no pad) — the header bytes are constant. */
-    char header_seg[128];
-    size_t header_n = ehem_b64url_encode((const uint8_t *)EJWT_HEADER,
-                                         sizeof EJWT_HEADER - 1,
-                                         header_seg, sizeof header_seg);
-
-    /* Payload segment (base64url, no pad). */
-    size_t payload_len = strlen(payload_json);
-    size_t payload_seg_cap = ehem_b64url_encoded_len(payload_len) + 1;
-    char *payload_seg = malloc(payload_seg_cap);
-    size_t payload_n = payload_seg
-        ? ehem_b64url_encode((const uint8_t *)payload_json, payload_len,
-                             payload_seg, payload_seg_cap)
-        : (size_t)-1;
+    /* Final token: the constant login header + this payload, HMAC-SHA256 keyed
+     * with the shared secret (sign_compact). */
+    ehem_rc rc = sign_compact(EJWT_HEADER, sizeof EJWT_HEADER - 1, payload_json,
+                              shared, EHEM_X25519_KEYSIZE, out_ejwt);
     ehem_json_string_free(payload_json);
-    if (header_n == (size_t)-1 || payload_seg == NULL || payload_n == (size_t)-1) {
-        free(payload_seg);
-        return payload_seg == NULL ? EHEM_ERR_NOMEM : EHEM_ERR_PROTOCOL;
-    }
-
-    /* Final token: "<header>.<payload>.<sig>". The signing input is the first
-     * two segments joined by '.'; the signature is HMAC-SHA256 over it, keyed
-     * with the shared secret, base64url no-pad (32 bytes → 43 chars). */
-    size_t sign_len = header_n + 1 + payload_n;
-    size_t sig_len = ehem_b64url_encoded_len(EHEM_SHA256_SIZE);   /* 43 */
-    char *ejwt = malloc(sign_len + 1 + sig_len + 1);
-    if (ejwt == NULL) {
-        free(payload_seg);
-        return EHEM_ERR_NOMEM;
-    }
-
-    memcpy(ejwt, header_seg, header_n);
-    ejwt[header_n] = '.';
-    memcpy(ejwt + header_n + 1, payload_seg, payload_n);
-    free(payload_seg);
-
-    uint8_t mac[EHEM_SHA256_SIZE];
-    ehem_rc rc = ehem_hmac_sha256(shared, EHEM_X25519_KEYSIZE,
-                                  (const uint8_t *)ejwt, sign_len, mac);
-    if (rc != EHEM_OK) {
-        free(ejwt);
-        return rc;
-    }
-
-    ejwt[sign_len] = '.';
-    if (ehem_b64url_encode(mac, EHEM_SHA256_SIZE,
-                           ejwt + sign_len + 1, sig_len + 1) == (size_t)-1) {
-        free(ejwt);
-        return EHEM_ERR_PROTOCOL;
-    }
-
-    *out_ejwt = ejwt;
-    return EHEM_OK;
+    return rc;
 }
 
 void ehem_ejwt_free(char *ejwt)
 {
     free(ejwt);
+}
+
+ehem_rc ehem_ejwt_sign(const char *header_json, const char *payload_json,
+                       const uint8_t *key, size_t key_len, char **out_jwt)
+{
+    if (out_jwt == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    *out_jwt = NULL;
+    if (header_json == NULL || payload_json == NULL || key == NULL || key_len == 0) {
+        return EHEM_ERR_ARG;
+    }
+    return sign_compact(header_json, strlen(header_json), payload_json,
+                        key, key_len, out_jwt);
 }

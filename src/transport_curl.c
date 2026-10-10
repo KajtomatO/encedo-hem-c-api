@@ -224,6 +224,13 @@ static void apply_tls_verify(CURL *h, const curl_state *st,
     }
     curl_easy_setopt(h, CURLOPT_SSL_VERIFYPEER, peer);
     curl_easy_setopt(h, CURLOPT_SSL_VERIFYHOST, host);
+#if defined(_WIN32) && defined(CURLSSLOPT_NATIVE_CA)
+    /* Windows: import the system certificate store as a trust source
+     * (libcurl 7.71+; honoured by the OpenSSL and wolfSSL backends). The static
+     * release build (REQ-BUILD-005) ships no CA bundle — this IS its
+     * EHEM_TLS_SYSTEM trust. */
+    curl_easy_setopt(h, CURLOPT_SSL_OPTIONS, (long)CURLSSLOPT_NATIVE_CA);
+#endif
 
     if (st->tls_mode == EHEM_TLS_CA_FILE) {
         curl_easy_setopt(h, CURLOPT_CAINFO,
@@ -333,13 +340,20 @@ static ehem_rc curl_send(void *state, const ehem_request *req, ehem_response *re
         snprintf(st->detail, sizeof st->detail, "%s", msg);
         /* Classify the one recoverable verification failure (REQ-NET-005):
          * peer certificate EXPIRED. Primary signal is the TLS backend's verify
-         * result (OpenSSL/GnuTLS X509_V_ERR_CERT_HAS_EXPIRED == 10 via
-         * CURLINFO_SSL_VERIFYRESULT); fallback is the error text. Any other
-         * verification failure (self-signed, wrong host) stays unclassified. */
-        if (cc == CURLE_PEER_FAILED_VERIFICATION) {
+         * result via CURLINFO_SSL_VERIFYRESULT — OpenSSL/GnuTLS
+         * X509_V_ERR_CERT_HAS_EXPIRED == 10; wolfSSL (the release build's
+         * backend, REQ-BUILD-005) ASN_AFTER_DATE_E == -151 (5.6.x/5.7.x; it was
+         * -150 in older releases) — fallback is the error text: OpenSSL says
+         * "certificate has expired", wolfSSL "ASN date error, current date
+         * after". Any other verification failure (self-signed, wrong host)
+         * stays unclassified. */
+        if (cc == CURLE_PEER_FAILED_VERIFICATION || cc == CURLE_SSL_CONNECT_ERROR) {
             long vr = 0;
             curl_easy_getinfo(h, CURLINFO_SSL_VERIFYRESULT, &vr);
-            if (vr == 10 || strstr(msg, "expired") != NULL) {
+            if (vr == 10 || vr == -151 || vr == -150 ||
+                strstr(msg, "expired") != NULL ||
+                strstr(msg, "date error, current date after") != NULL ||
+                strstr(msg, "ASN_AFTER_DATE") != NULL) {
                 st->tls_expired = true;
             }
         }

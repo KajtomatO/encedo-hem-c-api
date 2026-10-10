@@ -1686,7 +1686,7 @@ ehem_rc ehem_mldsa_verify(ehem_ctx *ctx, const char *kid,
          * is its (buggy) failure report, not a protocol breakdown. */
         return ehem_ctx_fail(ctx, EHEM_ERR_DEVICE, status, NULL,
                              "crypto/mldsa/verify: device reported failure "
-                             "(raw status %ld — fw v1.2.2 emits its crypto "
+                             "(raw status %ld - fw v1.2.2 emits its crypto "
                              "error code here)", status);
     }
     return rc;
