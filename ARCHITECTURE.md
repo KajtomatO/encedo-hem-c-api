@@ -696,6 +696,12 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   release hem-tool — fix in M12; a wipe does not always remove the TLS
   material). MFW re-checked: firmware still v1.2.2 — unchanged. Next:
   merge to `main` and the annotated `v1.1.0` tag (docs/RELEASING.md).
+  **Released 2026-10-10:** `v1.1.0` on `main` 78ca2fb (run 38063406319,
+  six assets). The gate missed the user-facing docs — README.md still
+  said "1.0 track" and docs/COVERAGE.md still listed `auth/init` as
+  DEFERRED-M10; both were brought up to 1.1.0 after the tag, and every
+  gate now carries that docs check (REQUIREMENTS-MANAGEMENT.md §5.3,
+  docs/RELEASING.md).
 - **M11 — retired (2026-10-07)**: created 2026-08-07 for
   `system/config/provisioning` and the `diag/*` family; both are parked
   in [BACKLOG.md](BACKLOG.md) together with the reserved design

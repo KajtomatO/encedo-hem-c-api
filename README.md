@@ -5,16 +5,24 @@ A portable **C99 client library** (the *Encedo HEM C SDK*, symbol prefix
 device over its REST/HTTPS API. Its first consumer is the `encedo-pkcs11`
 module.
 
-> **Status: 1.0 track.** The SDK covers the device API end to end: the
-> full eJWT auth flow (passphrase and mobile push-confirmation), key
-> management (list/search/get/create/delete/update/import/derive), every
-> crypto operation (ExDSA sign/verify, ECDH, HMAC, AES incl. wrap/unwrap,
+> **Status: 1.1.0 released (2026-10-10)** —
+> [latest release](https://github.com/KajtomatO/encedo-hem-c-api/releases/latest),
+> with prebuilt `hem-tool` binaries for Linux and Windows. The SDK covers
+> the device API end to end: the full eJWT auth flow (passphrase and
+> mobile push-confirmation), device initialisation and factory reset
+> (new in 1.1), key management
+> (list/search/get/create/delete/update/import/derive), every crypto
+> operation (ExDSA sign/verify, ECDH, HMAC, AES incl. wrap/unwrap,
 > ML-KEM, ML-DSA, hardware random), system/logger/storage bindings, and
-> the TLS-lifecycle tooling (check-in, cert-install, full recovery) —
-> each binding live-verified against a real HEM.
+> the TLS-lifecycle tooling (check-in, cert-install, TLS re-provisioning,
+> and hem-tool's one-command `recovery`) — each binding verified against
+> a real HEM (init and wipe in attended runs only).
 > [docs/COVERAGE.md](docs/COVERAGE.md) maps every documented endpoint to
-> its binding; the deliberately-unbound remainder (device provisioning,
-> the firmware-upgrade family) is recorded there and scheduled post-1.0.
+> its binding; what is still unbound (firmware/UI upgrade, factory
+> provisioning, diagnostics) is parked in [BACKLOG.md](BACKLOG.md). The
+> 1.0 ABI is unchanged in 1.1 (SONAME `.so.1`, additive only). Next
+> milestone: M12, build variants and multi-package releases (early
+> draft — ARCHITECTURE.md §11).
 > See [ARCHITECTURE.md](ARCHITECTURE.md) for the design and
 > [REQUIREMENTS-MANAGEMENT.md](REQUIREMENTS-MANAGEMENT.md) for how the
 > work is tracked.
@@ -30,7 +38,10 @@ module.
 - **[docs/COVERAGE.md](docs/COVERAGE.md)** — endpoint-by-endpoint
   conformance record against the device API documentation.
 - **[KNOWN-ISSUES.md](KNOWN-ISSUES.md)** — firmware bugs and doc
-  divergences the SDK works around (device behavior wins).
+  divergences the SDK works around (device behavior wins), plus the
+  known issues of the released binaries.
+- **[docs/RELEASING.md](docs/RELEASING.md)** — how a release is cut:
+  rc pre-releases, the final tag, the release notes, the checks.
 - **[BACKLOG.md](BACKLOG.md)** — unscheduled items (firmware/UI upgrade,
   provisioning, diagnostics) parked outside any milestone.
 - **`hem-tool`** — the bundled CLI is the living usage documentation:
@@ -136,11 +147,13 @@ ctest --test-dir build -L unit --output-on-failure
       ctest --test-dir build -L integration --output-on-failure
   ```
 
-- **`disruptive`** — mutates device availability or state (reboot / firmware /
-  wipe). Run deliberately and attended, never in unattended CI; requires
-  both the label and `EHEM_ALLOW_DISRUPTIVE=1`. First such test:
-  `test_cert_install_live` (the `hem-tool cert-install` flow — it may reboot
-  the device).
+- **`disruptive`** — mutates device availability or state (reboot,
+  certificate install, storage unlock/lock). Run deliberately and attended, never
+  in unattended CI; requires both the label and `EHEM_ALLOW_DISRUPTIVE=1`.
+  Example: `test_cert_install_live` (the `hem-tool cert-install` flow — it
+  may reboot the device). Device **wipe and initialisation have no test at
+  all**, not even `disruptive` — they are verified in attended runs only
+  (REQ-TEST-007); their offline unit tests still run under `unit`.
 
   ```bash
   EHEM_TEST_URL="https://my-hem.example" EHEM_TEST_PASSPHRASE="…" \
@@ -172,6 +185,8 @@ when set, otherwise auto-source a git-ignored `./hem.env` (and say so on
 stderr). See `./dev help` for the full surface.
 
 ## Download hem-tool
+
+**Latest:** [GitHub Releases](https://github.com/KajtomatO/encedo-hem-c-api/releases/latest).
 
 Prebuilt `hem-tool` binaries come from the release workflow
 (`.github/workflows/release.yml`; how to cut a release:
@@ -219,6 +234,19 @@ hem-tool status                     # no --url needed: defaults to https://my.en
 hem-tool keys list --mobile         # any bearer command can push to the paired
                                     # phone instead of taking a passphrase
 hem-tool help keys rm               # per-command help (== hem-tool keys rm --help)
+hem-tool recovery                   # diagnose + fix TLS / certificate / clock trouble
+```
+
+Device lifecycle (new in 1.1, attended — both change the device's
+identity):
+
+```bash
+hem-tool wipe-device --wait         # factory reset; type the hostname to confirm
+hem-tool --url http://<host> init-device --passphrase P \
+         --user U --email E --hostname H --master-generate
+                                    # personalise a wiped device: P becomes its
+                                    # user password; the 24 master words are
+                                    # printed ONCE - keep them
 ```
 
 Connection comes from `--url`/`EHEM_URL` (default `https://my.ence.do` —
@@ -246,11 +274,12 @@ target_link_libraries(app PRIVATE encedo-hem::encedo-hem-static)  # static
 
 ```
 include/ehem/   public headers (ehem_ prefix) — the per-symbol reference
-docs/           API-GUIDE.md · COVERAGE.md
-src/            library sources (+ vendored cjson, tools/hem-tool)
+docs/           API-GUIDE.md · COVERAGE.md · RELEASING.md
+src/            library sources (+ vendored cjson and BIP39 wordlist, tools/hem-tool)
 tests/          unit/ · integration/ · disruptive/ · support/
 cmake/          MinGW toolchain, package config
-scripts/        dependency installers
+scripts/        dependency installers, Windows build helpers, release/ (CI release builds)
+.github/        workflows: ci.yml (unit CI), release.yml (release builds)
 requirements/   REQ-*.md + generated TRACE.md
 workplan/        todo/ · doing/ · done/ step files
 ```

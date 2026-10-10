@@ -100,7 +100,19 @@ Before tagging:
 - the milestone gate has passed (ARCHITECTURE.md §11), and an rc of the
   same code was tested;
 - `CMakeLists.txt` carries the version you are about to tag;
+- **the user-facing docs describe this version** — they are what the
+  repository page shows once `main` moves, and the tag freezes them:
+  - `README.md`: the Status block (version, date, scope, the next
+    milestone), new commands and APIs in their sections (hem-tool
+    examples, test labels), the Documentation list and the Layout;
+  - `docs/COVERAGE.md`: every endpoint the release binds marked BOUND
+    with its symbols (`docs/API-GUIDE.md` is kept complete by a CTest
+    gate, the other two are not);
+  - `KNOWN-ISSUES.md`: anything users of the binaries will hit;
 - CI is green on `development`.
+
+The release text (the tag message) is written last, from the README
+Status block and the milestone's ARCHITECTURE.md §11 entry.
 
 Then:
 
