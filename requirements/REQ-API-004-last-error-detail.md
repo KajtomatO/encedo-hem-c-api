@@ -3,7 +3,7 @@ id: REQ-API-004
 title: Retrievable last-error detail on the context
 status: verified
 priority: must
-revision: 1
+revision: 2   # 2026-10-09 (STEP-M10-060, mini §6.2 in chat): `tls_expired` field APPENDED to ehem_error — the public form of the REQ-NET-005 expired-certificate classification, needed by hem-tool `recovery` (REQ-TOOL-023). Context-owned struct, append-only → ABI-safe (REQ-API-008); no criterion changes, status kept.
 source: ARCHITECTURE.md §4 (Errors)
 depends_on: ["REQ-API-003"]
 supersedes: null

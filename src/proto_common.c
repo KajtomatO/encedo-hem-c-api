@@ -173,9 +173,11 @@ ehem_rc ehem_proto_request_raw(ehem_ctx *ctx, ehem_http_method method,
         crc = ehem_checkin_run(ctx, /*relax_device_tls=*/1, NULL);
         if (crc != EHEM_OK) {
             free(bearer);
-            return ehem_ctx_fail(ctx, orig_rc, 0, NULL,
-                                 "%s: %s (automatic check-in recovery failed: %s)",
-                                 path, orig_detail, ehem_last_error(ctx)->message);
+            rc = ehem_ctx_fail(ctx, orig_rc, 0, NULL,
+                               "%s: %s (automatic check-in recovery failed: %s)",
+                               path, orig_detail, ehem_last_error(ctx)->message);
+            ctx->last_error.tls_expired = 1;   /* the verdict that started this */
+            return rc;
         }
         rc = do_send(ctx, t, method, path, json_body, bearer, tls_override,
                      /*fresh_connection=*/1, &resp);
@@ -184,19 +186,26 @@ ehem_rc ehem_proto_request_raw(ehem_ctx *ctx, ehem_http_method method,
             ctx->cert_refreshed = true;
         } else if (ehem_transport_last_tls_expired(t)) {
             free(bearer);
-            return ehem_ctx_fail(ctx, orig_rc, 0, NULL,
-                                 "%s: %s (check-in completed and the device "
-                                 "accepted a certificate update, but it still "
-                                 "serves the old certificate — a device reboot "
-                                 "may be required to apply it)",
-                                 path, orig_detail);
+            rc = ehem_ctx_fail(ctx, orig_rc, 0, NULL,
+                               "%s: %s (check-in completed and the device "
+                               "accepted a certificate update, but it still "
+                               "serves the old certificate — a device reboot "
+                               "may be required to apply it)",
+                               path, orig_detail);
+            ctx->last_error.tls_expired = 1;
+            return rc;
         }
     }
 
     if (rc != EHEM_OK) {
+        int expired = ehem_transport_last_tls_expired(t);
         free(bearer);
-        return ehem_ctx_fail(ctx, rc, 0, NULL, "%s: %s",
-                             path, ehem_transport_last_detail(t));
+        rc = ehem_ctx_fail(ctx, rc, 0, NULL, "%s: %s",
+                           path, ehem_transport_last_detail(t));
+        /* Public classification of the one recoverable TLS failure
+         * (ehem_error.tls_expired) — also when auto-recovery is off. */
+        ctx->last_error.tls_expired = expired ? 1 : 0;
+        return rc;
     }
 
     /*

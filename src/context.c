@@ -199,6 +199,7 @@ void ehem_ctx_clear_error(ehem_ctx *ctx)
     ctx->err_payload               = NULL;
     ctx->last_error.http_status    = 0;
     ctx->last_error.device_payload = NULL;
+    ctx->last_error.tls_expired    = 0;
     ctx->err_message[0]            = '\0';
     ctx->last_error.message        = ctx->err_message;
 }
@@ -222,6 +223,7 @@ ehem_rc ehem_ctx_fail(ehem_ctx *ctx, ehem_rc rc, long http_status,
     va_end(ap);
     ctx->last_error.message     = ctx->err_message;
     ctx->last_error.http_status = http_status;
+    ctx->last_error.tls_expired = 0;   /* the request path sets it after a TLS verdict */
 
     /* Replace any prior device payload with a fresh copy. */
     free(ctx->err_payload);

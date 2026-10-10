@@ -52,6 +52,15 @@ disruptive cert-install live run is NOT required for the gate (may stay
 deferred per REQ-TOOL-003). After the gate: regenerate TRACE.md (§4.3)
 once the user has committed the M2 work.
 
+*Correction (2026-10-06):* the evidence above reads `sub` = `U` as
+"UserKey/PBKDF2" and records "Argon2 deferred". `sub` only reports which
+stored key matched the token's `iss` (`U` UserKey, `M` MasterKey — firmware
+`api_auth.c:262-265`); it says nothing about the KDF. The current Encedo
+Manager (`assets/build.js`; encedo-manager `b33c236`) derives with PBKDF2 as
+well, so there was no discrepancy to defer; Argon2 is not supported (user
+decision 2026-10-05). The live results themselves stand. See ARCHITECTURE
+§12 risk 2.
+
 **Definition of done**
 - [x] Live: login succeeds, an authenticated binding returns device data,
       cache reuse observed (test_auth_live asserts token==token2 on the second

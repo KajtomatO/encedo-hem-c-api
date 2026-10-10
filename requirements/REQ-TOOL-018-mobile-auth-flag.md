@@ -31,6 +31,15 @@ global `--mobile` flag selecting mobile push confirmation
   pairing trio (REQ-AUTH-006), and mobile bearers carry
   `sub=base64(kid)` (REQ-AUTH-007). No-auth commands (`status`,
   `checkin`) ignore the flag like they ignore `--passphrase` today.
+  *(Rev 3, 2026-10-09 — M10 finding, REQ-TOOL-019: `cert-install` and
+  `tls-recover` are passphrase-only as well — their install legs are
+  `POST /api/system/config`, which firmware v1.2.2 allows for `sub` U/M
+  only (`api_system.c:1060-1066`); with `--mobile` they would have
+  failed with 403 at the install leg. `reboot` is unaffected (scope-only
+  check). The rejection is now generic: main.c checks the registry's
+  auth class before any traffic — `hem_tool_check_auth_class` — so
+  "every bearer-needing subcommand" means every command whose class is
+  BEARER; PASSPHRASE_ONLY commands refuse the flag up front.)*
 - **Confirmation semantics** (rev 2): `--timeout SEC` maps to
   `ehem_options.confirm_timeout_ms` (default 60 s); rejected-on-phone
   and timeout produce distinct tool-wide exits on every subcommand —

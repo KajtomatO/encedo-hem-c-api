@@ -3,7 +3,7 @@
  * exchange, and a scope-keyed bearer-token cache with silent refresh.
  *
  * implements: REQ-AUTH-001, REQ-AUTH-002, REQ-AUTH-004, REQ-AUTH-005,
- *             REQ-AUTH-010
+ *             REQ-AUTH-010, REQ-AUTH-011, REQ-AUTH-012
  *
  * Mirrors the reference python client's Auth (encedo-hem-python-api auth.py):
  * ehem_login() records the credential (lazily, no network); the first
@@ -22,6 +22,7 @@
 #include <string.h>
 #include <time.h>
 
+#include "bip39.h"           /* REQ-AUTH-012 master mnemonic (M10) */
 #include "crypto_shim.h"
 #include "ejwt.h"
 #include "json.h"
@@ -745,4 +746,345 @@ ehem_rc ehem_logout(ehem_ctx *ctx)
     ehem_auth_destroy(ctx->auth);
     ctx->auth = NULL;
     return EHEM_OK;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Master mnemonic (REQ-AUTH-012)                                             */
+/* -------------------------------------------------------------------------- */
+
+ehem_rc ehem_mnemonic_generate(ehem_ctx *ctx, char **words_out)
+{
+    char buf[EHEM_BIP39_MNEMONIC_CAP];
+    char *copy;
+    ehem_rc rc;
+
+    if (words_out == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    *words_out = NULL;
+    if (ctx != NULL) {
+        ehem_ctx_clear_error(ctx);
+    }
+    /* The DRBG needs wolfCrypt's process-global init (idempotent). */
+    rc = ehem_global_init();
+    if (rc == EHEM_OK) {
+        rc = ehem_bip39_generate(buf, sizeof buf);
+    }
+    if (rc != EHEM_OK) {
+        ehem_zeroize(buf, sizeof buf);
+        return ctx != NULL
+            ? ehem_ctx_fail(ctx, rc, 0, NULL, "mnemonic: entropy source failed")
+            : rc;
+    }
+    copy = auth_strdup(buf);
+    ehem_zeroize(buf, sizeof buf);
+    if (copy == NULL) {
+        return ctx != NULL
+            ? ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory")
+            : EHEM_ERR_NOMEM;
+    }
+    *words_out = copy;
+    return EHEM_OK;
+}
+
+void ehem_mnemonic_free(char *words)
+{
+    if (words != NULL) {
+        ehem_zeroize(words, strlen(words));
+        free(words);
+    }
+}
+
+ehem_rc ehem_master_secret_from_mnemonic(ehem_ctx *ctx, const char *words,
+                                         uint8_t secret[EHEM_MASTER_SECRET_SIZE])
+{
+    char reason[128];
+    ehem_rc rc;
+
+    if (ctx != NULL) {
+        ehem_ctx_clear_error(ctx);
+    }
+    if (words == NULL || secret == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    rc = ehem_bip39_to_master_secret(words, secret, reason, sizeof reason);
+    if (rc != EHEM_OK && ctx != NULL) {
+        return ehem_ctx_fail(ctx, rc, 0, NULL, "mnemonic: %s",
+                             reason[0] != '\0' ? reason : "derivation failed");
+    }
+    return rc;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Device initialisation (REQ-AUTH-011)                                       */
+/* -------------------------------------------------------------------------- */
+
+#define AUTH_INIT_PATH "/api/auth/init"
+
+void ehem_init_params_init(ehem_init_params *params)
+{
+    if (params == NULL) {
+        return;
+    }
+    memset(params, 0, sizeof *params);
+    params->abi_size = sizeof *params;
+}
+
+/*
+ * The init endpoints' precondition codes, explained in the detail. 403 here is
+ * "RTC not set", not a scope failure, so it is reported as EHEM_ERR_DEVICE;
+ * 406/409/400 are already DEVICE and 401 AUTH_FAILED from the shared mapping.
+ */
+static ehem_rc init_explain(ehem_ctx *ctx, ehem_rc rc, const char *leg)
+{
+    long st = ehem_last_error(ctx)->http_status;
+    const char *why;
+
+    switch (st) {
+    case 403: why = "device RTC not set — run a check-in first"; rc = EHEM_ERR_DEVICE; break;
+    case 406: why = "device already initialised — wipe it first"; break;
+    case 409: why = "device self-test state is not 0 (fls_state)"; break;
+    case 400: why = "cfg rejected — a field is missing or failed validation"; break;
+    case 401: why = "init JWT rejected (signature or jti)"; break;
+    default:  return rc;
+    }
+    return ehem_ctx_fail(ctx, rc, st, NULL, AUTH_INIT_PATH " %s: HTTP %ld — %s",
+                         leg, st, why);
+}
+
+/* The cfg block in the Manager's field order (build.js:709-725). All 13
+ * mask fields are always present; gen_csr/ctx are optional to the firmware
+ * but sent for determinism. */
+static bool init_add_cfg(ehem_json *root, const ehem_init_params *p,
+                         const char *master_b64, const char *user_b64)
+{
+    ehem_json *cfg = ehem_json_add_object(root, "cfg");
+    if (cfg == NULL) {
+        return false;
+    }
+    return ehem_json_add_string(cfg, "masterkey", master_b64) &&
+           ehem_json_add_string(cfg, "userkey", user_b64) &&
+           ehem_json_add_string(cfg, "user", p->user) &&
+           ehem_json_add_string(cfg, "email", p->email) &&
+           ehem_json_add_string(cfg, "hostname", p->hostname) &&
+           ehem_json_add_string(cfg, "ip", p->ip) &&
+           ehem_json_add_int64 (cfg, "storage_mode", p->storage_mode) &&
+           ehem_json_add_int64 (cfg, "storage_disk0size", p->storage_disk0size) &&
+           ehem_json_add_bool  (cfg, "dnsd", p->dnsd != 0) &&
+           ehem_json_add_bool  (cfg, "trusted_ts", p->no_trusted_ts == 0) &&
+           ehem_json_add_bool  (cfg, "trusted_backend", p->no_trusted_backend == 0) &&
+           ehem_json_add_bool  (cfg, "allow_keysearch", p->no_allow_keysearch == 0) &&
+           ehem_json_add_string(cfg, "origin", p->origin != NULL ? p->origin : "*") &&
+           ehem_json_add_int64 (cfg, "ctx", p->ctx_id) &&
+           ehem_json_add_bool  (cfg, "gen_csr", p->gen_csr != 0);
+}
+
+static char *build_init_body(const char *jwt)
+{
+    ehem_json *obj = ehem_json_new_object();
+    char *body;
+    if (obj == NULL) {
+        return NULL;
+    }
+    if (!ehem_json_add_string(obj, "init", jwt)) {
+        ehem_json_free(obj);
+        return NULL;
+    }
+    body = ehem_json_print(obj);
+    ehem_json_free(obj);
+    return body;
+}
+
+ehem_rc ehem_device_init(ehem_ctx *ctx, const ehem_init_params *params,
+                         ehem_init_info **out)
+{
+    ehem_init_params p;
+    ehem_json *challenge = NULL;
+    ehem_json *payload = NULL;
+    ehem_json *result = NULL;
+    const char *eid, *spk, *jti, *token, *s;
+    int64_t exp, now;
+    uint8_t peer_pub[EHEM_X25519_KEYSIZE];
+    uint8_t seed[EHEM_X25519_KEYSIZE];
+    uint8_t user_priv[EHEM_X25519_KEYSIZE];
+    uint8_t user_pub[EHEM_X25519_KEYSIZE];
+    uint8_t master_priv[EHEM_X25519_KEYSIZE];
+    uint8_t master_pub[EHEM_X25519_KEYSIZE];
+    uint8_t shared[EHEM_X25519_KEYSIZE];
+    char master_b64[64], user_b64[64];
+    char *payload_json = NULL;
+    char *jwt = NULL;
+    char *body = NULL;
+    ehem_init_info *info;
+    ehem_rc rc;
+
+    if (out != NULL) {
+        *out = NULL;
+    }
+    if (ctx == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    ehem_ctx_clear_error(ctx);
+    if (params == NULL || params->abi_size < sizeof params->abi_size) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL, AUTH_INIT_PATH
+                             ": params must be stamped by ehem_init_params_init()");
+    }
+    /* Read what the caller's ABI covers; fields it predates stay zero. */
+    memset(&p, 0, sizeof p);
+    memcpy(&p, params, params->abi_size < sizeof p ? params->abi_size : sizeof p);
+    if (p.passphrase == NULL || p.master_secret == NULL || p.user == NULL ||
+        p.email == NULL || p.hostname == NULL || p.ip == NULL) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL, AUTH_INIT_PATH
+                             ": passphrase, master_secret, user, email, hostname "
+                             "and ip are required");
+    }
+    if (p.storage_mode <= 0 || p.storage_disk0size <= 0) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_ARG, 0, NULL, AUTH_INIT_PATH
+                             ": storage_mode and storage_disk0size must be positive");
+    }
+    rc = ehem_global_init();
+    if (rc != EHEM_OK) {
+        return ehem_ctx_fail(ctx, rc, 0, NULL,
+                             AUTH_INIT_PATH ": process-global init failed");
+    }
+
+    /* 1. The challenge (unauthenticated). Preconditions surface as 403/406/409
+     *    — explained, never auto-recovered: an init is a deliberate act. */
+    rc = ehem_proto_request_json(ctx, EHEM_HTTP_GET, AUTH_INIT_PATH,
+                                 NULL, NULL, EHEM_TLS_REQ_DEFAULT, &challenge);
+    if (rc != EHEM_OK) {
+        return init_explain(ctx, rc, "challenge");
+    }
+    if (!ehem_json_get_string(challenge, "eid", &eid) ||
+        !ehem_json_get_string(challenge, "spk", &spk) ||
+        !ehem_json_get_string(challenge, "jti", &jti) ||
+        !ehem_json_get_int64(challenge, "exp", &exp)) {
+        ehem_json_free(challenge);
+        return ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 0, NULL, AUTH_INIT_PATH
+                             ": malformed init challenge (need eid, spk, jti, exp)");
+    }
+    if (ehem_b64_std_decode(spk, strlen(spk), peer_pub, sizeof peer_pub)
+            != EHEM_X25519_KEYSIZE) {
+        ehem_json_free(challenge);
+        return ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 0, NULL, AUTH_INIT_PATH
+                             ": challenge spk is not a 32-byte X25519 key");
+    }
+
+    /* 2. The two personas (build.js:676-699) and the master ECDH (:707). */
+    rc = ehem_kdf_pbkdf2_sha256((const uint8_t *)p.passphrase, strlen(p.passphrase),
+                                (const uint8_t *)eid, strlen(eid),
+                                auth_kdf_iters(), seed, sizeof seed);
+    if (rc == EHEM_OK) {
+        rc = ehem_x25519_keypair_from_seed(seed, user_priv, user_pub);
+    }
+    if (rc == EHEM_OK) {
+        rc = ehem_x25519_keypair_from_seed(p.master_secret, master_priv, master_pub);
+    }
+    if (rc == EHEM_OK) {
+        rc = ehem_x25519_shared(master_priv, peer_pub, shared);
+    }
+    if (rc == EHEM_OK &&
+        (ehem_b64_std_encode(master_pub, sizeof master_pub, master_b64, sizeof master_b64) == (size_t)-1 ||
+         ehem_b64_std_encode(user_pub, sizeof user_pub, user_b64, sizeof user_b64) == (size_t)-1)) {
+        rc = EHEM_ERR_PROTOCOL;
+    }
+
+    /* 3. The init JWT: claims in the Manager's order (build.js:731-738), the
+     *    minimal header, HMAC-SHA256 keyed with the master shared secret. */
+    now = auth_now();
+    if (rc == EHEM_OK) {
+        payload = ehem_json_new_object();
+        if (payload == NULL ||
+            !ehem_json_add_string(payload, "jti", jti) ||
+            !ehem_json_add_string(payload, "aud", spk) ||
+            !ehem_json_add_int64 (payload, "exp", exp) ||
+            !ehem_json_add_int64 (payload, "iat", now) ||
+            !ehem_json_add_string(payload, "iss", master_b64) ||
+            !init_add_cfg(payload, &p, master_b64, user_b64) ||
+            (payload_json = ehem_json_print(payload)) == NULL) {
+            rc = EHEM_ERR_NOMEM;
+        }
+        ehem_json_free(payload);
+    }
+    if (rc == EHEM_OK) {
+        rc = ehem_ejwt_sign(EHEM_EJWT_HEADER_MIN, payload_json, shared,
+                            sizeof shared, &jwt);
+    }
+    ehem_zeroize(seed, sizeof seed);
+    ehem_zeroize(user_priv, sizeof user_priv);
+    ehem_zeroize(master_priv, sizeof master_priv);
+    ehem_zeroize(shared, sizeof shared);
+    ehem_json_string_free(payload_json);
+    ehem_json_free(challenge);
+    if (rc != EHEM_OK) {
+        return ehem_ctx_fail(ctx, rc == EHEM_ERR_NOMEM ? rc : EHEM_ERR_PROTOCOL,
+                             0, NULL, AUTH_INIT_PATH ": init credential derivation failed");
+    }
+
+    /* 4. Commit. */
+    body = build_init_body(jwt);
+    ehem_zeroize(jwt, strlen(jwt));
+    ehem_ejwt_free(jwt);
+    if (body == NULL) {
+        return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+    }
+    rc = ehem_proto_request_json(ctx, EHEM_HTTP_POST, AUTH_INIT_PATH,
+                                 body, NULL, EHEM_TLS_REQ_DEFAULT, &result);
+    ehem_json_string_free(body);
+    if (rc != EHEM_OK) {
+        return init_explain(ctx, rc, "commit");
+    }
+    if (!ehem_json_get_string(result, "token", &token) ||
+        !ehem_json_get_string(result, "instanceid", &s)) {
+        ehem_json_free(result);
+        return ehem_ctx_fail(ctx, EHEM_ERR_PROTOCOL, 200, NULL, AUTH_INIT_PATH
+                             ": init reply lacks token/instanceid");
+    }
+
+    /* 5. The device is personalised: this context now holds the user session
+     *    (lazy passphrase login, retention rule applies) with the returned
+     *    system:config bearer already cached. */
+    rc = ehem_login(ctx, p.passphrase);
+    if (rc == EHEM_OK) {
+        rc = ehem_auth_cache_seed(ctx, "system:config", token);
+    }
+    if (rc != EHEM_OK) {
+        ehem_json_free(result);
+        return rc;                  /* NOMEM, recorded */
+    }
+
+    if (out != NULL) {
+        info = calloc(1, sizeof *info);
+        if (info == NULL) {
+            ehem_json_free(result);
+            return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+        }
+        info->instanceid = auth_strdup(s);
+        if (ehem_json_get_string(result, "csr", &s)) {
+            info->csr = auth_strdup(s);
+        }
+        if (ehem_json_get_string(result, "genuine", &s)) {
+            info->genuine = auth_strdup(s);
+        }
+        ehem_json_get_bool(result, "reboot_required", &info->reboot_required);
+        if (info->instanceid == NULL) {
+            ehem_init_info_free(info);
+            ehem_json_free(result);
+            return ehem_ctx_fail(ctx, EHEM_ERR_NOMEM, 0, NULL, "out of memory");
+        }
+        *out = info;
+    }
+    ehem_json_free(result);
+    return EHEM_OK;
+}
+
+void ehem_init_info_free(ehem_init_info *info)
+{
+    if (info == NULL) {
+        return;
+    }
+    free(info->instanceid);
+    free(info->csr);
+    free(info->genuine);
+    free(info);
 }

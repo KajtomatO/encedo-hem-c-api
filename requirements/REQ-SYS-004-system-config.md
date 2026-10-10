@@ -3,7 +3,7 @@ id: REQ-SYS-004
 title: Binding for /api/system/config — read config and install a TLS certificate
 status: verified
 priority: must
-revision: 2
+revision: 4
 source: user decision 2026-07-16 (cert-install tooling); approved 2026-07-16; encedo-hem-api-doc system/config.md; live remediation 2026-07-16 (config tls.crt install verified working on fw v1.2.2); rev 2 = M9 sweep records (2026-08-06)
 depends_on: ["REQ-AUTH-003", "REQ-API-005", "REQ-SYS-003"]
 supersedes: null
@@ -38,7 +38,8 @@ the working remediation (executed live 2026-07-16).
    interim one: general config/administration writes — including the
    documented `wipeout` (factory reset), `userkey*` rotation, and
    `gen_csr` — stay deliberately unbound (no HEM-SDK-1..9 consumer need;
-   M10 candidate if device administration is ever wanted).
+   `userkey*`/`gen_csr` remain `BACKLOG.md` candidates; `wipeout` became
+   M10 scope on 2026-10-07 — its own REQ, drafted at M10 decomposition).
 2. DISCREPANCIES-OFFICIAL-DOCS records that firmware answers an
    UNAUTHENTICATED `GET /api/system/config` with an identifying subset
    (`eid` etc.) for pairing/discovery clients, despite the doc's

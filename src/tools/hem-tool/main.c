@@ -37,13 +37,16 @@
 
 #include "cert_install.h"
 #include "ext_cmd.h"
+#include "init_cmd.h"
 #include "keys.h"
 #include "logs.h"
 #include "random.h"
 #include "recover.h"
+#include "recovery.h"
 #include "registry.h"
 #include "selftest.h"
 #include "sign.h"
+#include "wipe.h"
 #include "tool_auth.h"
 
 #define MAX_LABEL_PREFIXES 32
@@ -91,6 +94,26 @@ typedef struct {
 
     /* reboot behavior (REQ-TOOL-014). */
     int         wait_back;    /* --wait: poll until the device answers again */
+
+    /* init-device inputs (REQ-TOOL-021). */
+    const char *user;         /* --user */
+    const char *email;        /* --email */
+    const char *hostname;     /* --hostname */
+    const char *ip;           /* --ip */
+    const char *origin;       /* --origin */
+    const char *master_words; /* --master-words (else EHEM_MASTER_WORDS) */
+    const char *master_hex;   /* --master-secret-hex */
+    const char *csr_out;      /* --csr-out */
+    int         master_generate;   /* --master-generate */
+    int         storage_mode;      /* --storage-mode */
+    long long   disk0_size;        /* --disk0-size */
+    int         dnsd;              /* --dnsd */
+    int         no_trusted_ts;     /* --no-trusted-ts */
+    int         no_trusted_backend;/* --no-trusted-backend */
+    int         no_allow_keysearch;/* --no-allow-keysearch */
+    int         gen_csr;           /* --gen-csr */
+    int         ctx_id;            /* --ctx */
+    int         reboot_flag;       /* --reboot */
 
     /* auth mode (REQ-TOOL-018). */
     int         mobile;       /* --mobile: push-confirm instead of passphrase */
@@ -147,6 +170,36 @@ static void mobile_push_notice(const char *scope, long timeout_ms, void *arg)
                     "(waiting up to %ld s)\n", scope, timeout_ms / 1000);
 }
 
+/* The CLI connection/auth options as SDK options (shared by make_ctx and the
+ * multi-posture `recovery` command). */
+static void fill_opts(const cli_opts *o, ehem_options *opts)
+{
+    ehem_options_init(opts);
+    if (o->timeout_sec > 0) {
+        /* implements: REQ-TOOL-016 (ext login --timeout → confirm wait) */
+        opts->confirm_timeout_ms = o->timeout_sec * 1000L;
+    }
+    if (o->mobile) {
+        /* ext login keeps its own richer push line (hook set only here). */
+        opts->confirm_notice = mobile_push_notice;
+    }
+    if (o->insecure) {
+        opts->tls_mode = EHEM_TLS_INSECURE;
+    } else if (o->cacert != NULL) {
+        opts->tls_mode = EHEM_TLS_CA_FILE;
+        opts->ca_file  = o->cacert;
+    }
+    /* Test hook: point the check-in relay leg somewhere else than the Encedo
+     * cloud (the release workflow's expired-certificate check runs against a
+     * local fake device and must not post its garbage to api.encedo.com). */
+    {
+        const char *ci = getenv("EHEM_CHECKIN_URL");
+        if (ci != NULL && ci[0] != '\0') {
+            opts->checkin_url = ci;
+        }
+    }
+}
+
 /* Create a context from the CLI connection options. Returns 0 and writes *out
  * on success; nonzero exit code otherwise (message already printed). */
 static int make_ctx(const cli_opts *o, ehem_ctx **out)
@@ -158,22 +211,7 @@ static int make_ctx(const cli_opts *o, ehem_ctx **out)
         fprintf(stderr, "error: no device URL — pass --url or set EHEM_URL\n");
         return 2;
     }
-
-    ehem_options_init(&opts);
-    if (o->timeout_sec > 0) {
-        /* implements: REQ-TOOL-016 (ext login --timeout → confirm wait) */
-        opts.confirm_timeout_ms = o->timeout_sec * 1000L;
-    }
-    if (o->mobile) {
-        /* ext login keeps its own richer push line (hook set only here). */
-        opts.confirm_notice = mobile_push_notice;
-    }
-    if (o->insecure) {
-        opts.tls_mode = EHEM_TLS_INSECURE;
-    } else if (o->cacert != NULL) {
-        opts.tls_mode = EHEM_TLS_CA_FILE;
-        opts.ca_file  = o->cacert;
-    }
+    fill_opts(o, &opts);
 
     rc = ehem_ctx_create(o->url, &opts, out);
     if (rc != EHEM_OK) {
@@ -735,6 +773,138 @@ static int cmd_ext(const cli_opts *o, const char *subcmd)
     return ret;
 }
 
+/* `init-device ...` — REQ-TOOL-021 (attended-only, REQ-TEST-007). */
+static int cmd_init_device(const cli_opts *o)
+{
+    ehem_ctx *ctx = NULL;
+    hem_init_opts io;
+    int ret;
+
+    ret = make_ctx(o, &ctx);
+    if (ret != 0) {
+        return ret;
+    }
+    memset(&io, 0, sizeof io);
+    io.passphrase         = o->passphrase;
+    io.master_words       = o->master_words != NULL ? o->master_words
+                                                    : getenv("EHEM_MASTER_WORDS");
+    io.master_hex         = o->master_hex;
+    io.master_generate    = o->master_generate;
+    io.user               = o->user;
+    io.email              = o->email;
+    io.hostname           = o->hostname;
+    io.ip                 = o->ip;
+    io.storage_mode       = o->storage_mode;
+    io.disk0_size         = o->disk0_size;
+    io.origin             = o->origin;
+    io.dnsd               = o->dnsd;
+    io.no_trusted_ts      = o->no_trusted_ts;
+    io.no_trusted_backend = o->no_trusted_backend;
+    io.no_allow_keysearch = o->no_allow_keysearch;
+    io.gen_csr            = o->gen_csr;
+    io.ctx_id             = o->ctx_id;
+    io.csr_out            = o->csr_out;
+    io.reboot             = o->reboot_flag;
+    io.poll_delay_ms      = HEM_INIT_POLL_DELAY_MS;
+    io.out                = stdout;
+    io.err                = stderr;
+
+    ret = hem_init_device_run(ctx, &io);
+    ehem_ctx_destroy(ctx);
+    return ret;
+}
+
+/* `recovery` — REQ-TOOL-023: three postures on one device. */
+static int cmd_recovery(const cli_opts *o)
+{
+    ehem_options opts;
+    ehem_ctx *https = NULL, *insecure = NULL, *http = NULL;
+    hem_recovery_opts ro;
+    char http_url[512];
+    int ret;
+
+    if (o->url == NULL || o->url[0] == '\0') {
+        fprintf(stderr, "error: no device URL — pass --url or set EHEM_URL\n");
+        return 2;
+    }
+    /* The probe: the configured trust, automatic recovery OFF so the TLS
+     * verdict surfaces (ehem_error.tls_expired) instead of being repaired
+     * behind our back. */
+    fill_opts(o, &opts);
+    opts.no_auto_checkin = 1;
+    if (ehem_ctx_create(o->url, &opts, &https) != EHEM_OK) {
+        fprintf(stderr, "error: invalid URL or options\n");
+        return 1;
+    }
+    /* The expired-certificate install leg. */
+    fill_opts(o, &opts);
+    opts.tls_mode = EHEM_TLS_INSECURE;
+    opts.ca_file  = NULL;
+    if (ehem_ctx_create(o->url, &opts, &insecure) != EHEM_OK) {
+        insecure = NULL;
+    }
+    /* The HTTPS-down leg. */
+    if (hem_wipe_http_url(o->url, http_url, sizeof http_url)) {
+        ehem_options_init(&opts);
+        if (ehem_ctx_create(http_url, &opts, &http) != EHEM_OK) {
+            http = NULL;
+        }
+    }
+
+    memset(&ro, 0, sizeof ro);
+    ro.passphrase    = o->passphrase;
+    ro.mobile        = o->mobile != 0;
+    ro.ctx_https     = https;
+    ro.ctx_insecure  = insecure;
+    ro.ctx_http      = http;
+    ro.poll_delay_ms = HEM_RECOVERY_POLL_DELAY_MS;
+    ro.out           = stdout;
+    ro.err           = stderr;
+
+    ret = hem_recovery_run(&ro);
+    ehem_ctx_destroy(http);
+    ehem_ctx_destroy(insecure);
+    ehem_ctx_destroy(https);
+    return ret;
+}
+
+/* `wipe-device [--wait]` — REQ-TOOL-022 (attended-only, REQ-TEST-007). */
+static int cmd_wipe_device(const cli_opts *o)
+{
+    ehem_ctx *ctx = NULL;
+    ehem_ctx *probe = NULL;
+    hem_wipe_opts wo;
+    char http_url[512];
+    int ret;
+
+    ret = make_ctx(o, &ctx);
+    if (ret != 0) {
+        return ret;
+    }
+    /* The post-wipe poll goes over http:// — the TLS material is gone. */
+    if (o->wait_back && hem_wipe_http_url(o->url, http_url, sizeof http_url)) {
+        ehem_options opts;
+        ehem_options_init(&opts);
+        if (ehem_ctx_create(http_url, &opts, &probe) != EHEM_OK) {
+            probe = NULL;
+        }
+    }
+    memset(&wo, 0, sizeof wo);
+    wo.passphrase    = o->passphrase;
+    wo.mobile        = o->mobile != 0;
+    wo.wait_back     = o->wait_back;
+    wo.poll_delay_ms = HEM_WIPE_POLL_DELAY_MS;
+    wo.probe         = probe;
+    wo.in            = stdin;
+    wo.out           = stdout;
+    wo.err           = stderr;
+
+    ret = hem_wipe_device_run(ctx, &wo);
+    ehem_ctx_destroy(probe);
+    ehem_ctx_destroy(ctx);
+    return ret;
+}
+
 static int cmd_tls_recover(const cli_opts *o)
 {
     ehem_ctx *ctx = NULL;
@@ -888,6 +1058,64 @@ int main(int argc, char **argv)
             o.kid = a + 6;
         } else if (strcmp(a, "--wait") == 0) {
             o.wait_back = 1;
+        } else if (strcmp(a, "--user") == 0 && i + 1 < argc) {
+            o.user = argv[++i];
+        } else if (strncmp(a, "--user=", 7) == 0) {
+            o.user = a + 7;
+        } else if (strcmp(a, "--email") == 0 && i + 1 < argc) {
+            o.email = argv[++i];
+        } else if (strncmp(a, "--email=", 8) == 0) {
+            o.email = a + 8;
+        } else if (strcmp(a, "--hostname") == 0 && i + 1 < argc) {
+            o.hostname = argv[++i];
+        } else if (strncmp(a, "--hostname=", 11) == 0) {
+            o.hostname = a + 11;
+        } else if (strcmp(a, "--ip") == 0 && i + 1 < argc) {
+            o.ip = argv[++i];
+        } else if (strncmp(a, "--ip=", 5) == 0) {
+            o.ip = a + 5;
+        } else if (strcmp(a, "--origin") == 0 && i + 1 < argc) {
+            o.origin = argv[++i];
+        } else if (strncmp(a, "--origin=", 9) == 0) {
+            o.origin = a + 9;
+        } else if (strcmp(a, "--master-words") == 0 && i + 1 < argc) {
+            o.master_words = argv[++i];
+        } else if (strncmp(a, "--master-words=", 15) == 0) {
+            o.master_words = a + 15;
+        } else if (strcmp(a, "--master-secret-hex") == 0 && i + 1 < argc) {
+            o.master_hex = argv[++i];
+        } else if (strncmp(a, "--master-secret-hex=", 20) == 0) {
+            o.master_hex = a + 20;
+        } else if (strcmp(a, "--master-generate") == 0) {
+            o.master_generate = 1;
+        } else if (strcmp(a, "--csr-out") == 0 && i + 1 < argc) {
+            o.csr_out = argv[++i];
+        } else if (strncmp(a, "--csr-out=", 10) == 0) {
+            o.csr_out = a + 10;
+        } else if (strcmp(a, "--storage-mode") == 0 && i + 1 < argc) {
+            o.storage_mode = atoi(argv[++i]);
+        } else if (strncmp(a, "--storage-mode=", 15) == 0) {
+            o.storage_mode = atoi(a + 15);
+        } else if (strcmp(a, "--disk0-size") == 0 && i + 1 < argc) {
+            o.disk0_size = atoll(argv[++i]);
+        } else if (strncmp(a, "--disk0-size=", 13) == 0) {
+            o.disk0_size = atoll(a + 13);
+        } else if (strcmp(a, "--ctx") == 0 && i + 1 < argc) {
+            o.ctx_id = atoi(argv[++i]);
+        } else if (strncmp(a, "--ctx=", 6) == 0) {
+            o.ctx_id = atoi(a + 6);
+        } else if (strcmp(a, "--dnsd") == 0) {
+            o.dnsd = 1;
+        } else if (strcmp(a, "--no-trusted-ts") == 0) {
+            o.no_trusted_ts = 1;
+        } else if (strcmp(a, "--no-trusted-backend") == 0) {
+            o.no_trusted_backend = 1;
+        } else if (strcmp(a, "--no-allow-keysearch") == 0) {
+            o.no_allow_keysearch = 1;
+        } else if (strcmp(a, "--gen-csr") == 0) {
+            o.gen_csr = 1;
+        } else if (strcmp(a, "--reboot") == 0) {
+            o.reboot_flag = 1;
         } else if (strcmp(a, "--insecure") == 0) {
             o.insecure = 1;
         } else if (strcmp(a, "--hex") == 0) {
@@ -963,6 +1191,21 @@ int main(int argc, char **argv)
      * one-line stderr notice when the default is used). */
     o.url = hem_tool_resolve_url(o.url, getenv("EHEM_URL"), stderr);
 
+    /* REQ-TOOL-019 rev 2: the registry's auth class is enforced here, before
+     * any traffic — a PASSPHRASE_ONLY command (ext pair, cert-install,
+     * tls-recover, wipe-device, recovery) refuses --mobile up front. A
+     * top-level command's second word is a positional argument (sign KID),
+     * so try the bare name first. */
+    {
+        const hem_command *rc_cmd = hem_registry_find(cmd, NULL);
+        if (rc_cmd == NULL) {
+            rc_cmd = hem_registry_find(cmd, subcmd);
+        }
+        if (hem_tool_check_auth_class(rc_cmd, o.mobile != 0, stderr) != 0) {
+            return 2;
+        }
+    }
+
     if (strcmp(cmd, "status") == 0) {
         ret = cmd_status(&o);
     } else if (strcmp(cmd, "checkin") == 0) {
@@ -982,6 +1225,30 @@ int main(int argc, char **argv)
             ret = 2;
         } else {
             ret = cmd_reboot(&o, o.wait_back);
+        }
+    } else if (strcmp(cmd, "recovery") == 0) {
+        if (subcmd != NULL) {
+            fprintf(stderr, "error: unexpected argument '%s'\n", subcmd);
+            usage(stderr);
+            ret = 2;
+        } else {
+            ret = cmd_recovery(&o);
+        }
+    } else if (strcmp(cmd, "init-device") == 0) {
+        if (subcmd != NULL) {
+            fprintf(stderr, "error: unexpected argument '%s'\n", subcmd);
+            usage(stderr);
+            ret = 2;
+        } else {
+            ret = cmd_init_device(&o);
+        }
+    } else if (strcmp(cmd, "wipe-device") == 0) {
+        if (subcmd != NULL) {
+            fprintf(stderr, "error: unexpected argument '%s'\n", subcmd);
+            usage(stderr);
+            ret = 2;
+        } else {
+            ret = cmd_wipe_device(&o);
         }
     } else if (strcmp(cmd, "tls-recover") == 0) {
         if (subcmd != NULL) {

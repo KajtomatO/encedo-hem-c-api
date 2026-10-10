@@ -86,7 +86,21 @@ ehem_rc ehem_ejwt_build(const char *jti, const char *spk,
                         int64_t now, int64_t requested_exp,
                         char **out_ejwt);
 
-/* Free a token returned by ehem_ejwt_build. NULL-safe. */
+/* Free a token returned by ehem_ejwt_build / ehem_ejwt_sign. NULL-safe. */
 void ehem_ejwt_free(char *ejwt);
+
+/* The Manager's minimal header — what its init JWT (and login) carries. The
+ * firmware reads only `ecdh`, so this and EJWT's full header both pass. */
+#define EHEM_EJWT_HEADER_MIN "{\"ecdh\":\"x25519\"}"
+
+/*
+ * Sign an arbitrary compact JWT (the init JWT, REQ-AUTH-011): `header_json`
+ * and `payload_json` are emitted verbatim as base64url (no pad) segments and
+ * the tag is HMAC-SHA256 over "<header>.<payload>" keyed with `key`
+ * (`key_len` bytes — the ECDH shared secret). Output rules as ehem_ejwt_build;
+ * free with ehem_ejwt_free().
+ */
+ehem_rc ehem_ejwt_sign(const char *header_json, const char *payload_json,
+                       const uint8_t *key, size_t key_len, char **out_jwt);
 
 #endif /* EHEM_EJWT_H */

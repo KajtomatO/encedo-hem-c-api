@@ -57,8 +57,13 @@ dkms.conf
 # build folders (build/, build-clang/, build-mingw/, ...)
 build*/
 
+# release dependency prefix + its source work dir (scripts/release/build-deps.sh)
+deps/
+deps-src/
+
 # Local secrets (device credentials)
 hem.env
 
 # other
 tmp/
+scripts/release/__pycache__/

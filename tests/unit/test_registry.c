@@ -114,6 +114,56 @@ static void test_auth_classes(void **state)
     free(top);
 }
 
+/* REQ-TOOL-019 rev 2: the trailing "manual recovery" section holds
+ * cert-install and tls-recover — and nothing else — after the three auth
+ * groups; both are passphrase-only (config writes demand sub U/M, fw
+ * api_system.c:1060-1066) while reboot stays mobile-capable (scope-only
+ * check); the section is registry DATA. */
+static void test_manual_recovery_section(void **state)
+{
+    (void)state;
+    const hem_command *ci = hem_registry_find("cert-install", NULL);
+    const hem_command *tr = hem_registry_find("tls-recover", NULL);
+    size_t n = 0, i, in_section = 0;
+    const hem_command *cmds = hem_registry_commands(&n);
+
+    assert_non_null(ci);
+    assert_non_null(tr);
+    assert_int_equal(ci->section, HEM_SECTION_MANUAL_RECOVERY);
+    assert_int_equal(tr->section, HEM_SECTION_MANUAL_RECOVERY);
+    assert_int_equal(ci->auth, HEM_AUTH_PASSPHRASE_ONLY);
+    assert_int_equal(tr->auth, HEM_AUTH_PASSPHRASE_ONLY);
+    assert_int_equal(hem_registry_find("reboot", NULL)->auth, HEM_AUTH_BEARER);
+    assert_int_equal(hem_registry_find("reboot", NULL)->section, HEM_SECTION_MAIN);
+    for (i = 0; i < n; i++) {
+        in_section += (cmds[i].section == HEM_SECTION_MANUAL_RECOVERY);
+    }
+    assert_int_equal(in_section, 2);
+
+    char *top = render_top();
+    const char *g3 = strstr(top, "PASSPHRASE (the device demands sub=\"U\")");
+    const char *g4 = strstr(top, "manual recovery");
+    assert_non_null(g3);
+    assert_non_null(g4);
+    assert_true(g3 < g4);
+    /* Listed in the section only: no occurrence before its header. */
+    const char *first_ci = strstr(top, "cert-install");
+    const char *first_tr = strstr(top, "tls-recover");
+    assert_non_null(first_ci);
+    assert_non_null(first_tr);
+    assert_true(first_ci > g4);
+    assert_true(first_tr > g4);
+    /* The auth groups still carry their members. */
+    assert_true(strstr(top, "reboot") < g4);
+    free(top);
+
+    /* Per-command help names the class and the section's reason. */
+    char *s = render_cmd("cert-install", NULL, 0);
+    assert_non_null(strstr(s, "passphrase only"));
+    assert_non_null(strstr(s, "Passphrase-ONLY"));
+    free(s);
+}
+
 /* REQ-TOOL-020: the top page carries NO command-specific options and
  * stays around one screen. */
 static void test_top_page_shape(void **state)
@@ -208,6 +258,7 @@ int main(void)
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_registry_complete),
         cmocka_unit_test(test_auth_classes),
+        cmocka_unit_test(test_manual_recovery_section),
         cmocka_unit_test(test_top_page_shape),
         cmocka_unit_test(test_per_command_help),
         cmocka_unit_test(test_url_resolution),

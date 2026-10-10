@@ -21,9 +21,10 @@ the encedo-hem-api-doc spec.
   vs. confirm timeout vs. expired credential vs. scope denied vs. network
   failure vs. device unreachable).
 - **Auth / session engine** — implements the eJWT challenge–response:
-  GET challenge → derive user key from passphrase (Argon2, `eid` as salt,
-  parameters as used by Encedo Manager — the authoritative reference for
-  the auth flow) → X25519 ECDH against the device's session public key →
+  GET challenge → derive user key from passphrase (PBKDF2-HMAC-SHA256,
+  `eid` as salt, parameters as used by Encedo Manager — the authoritative
+  reference for the auth flow) → X25519 ECDH against the device's session
+  public key →
   HMAC-SHA256-signed JWT → bearer token; caches tokens per scope with
   expiry, refreshes silently before expiration. Mobile-app confirmation
   flow is a late milestone but the session design reserves room for it
@@ -57,16 +58,17 @@ the encedo-hem-api-doc spec.
   three platforms; wrapped behind the transport vtable so it never leaks
   into the API.
 - **Crypto:** wolfSSL (wolfCrypt) — user decision 2026-07-15; provides
-  X25519, HMAC-SHA256, SHA-256, and RNG for the eJWT flow, and can also
-  serve as libcurl's TLS backend. wolfCrypt has no Argon2 (verified against
-  wolfSSL's kdf.h documentation), so the **Argon2 reference implementation
-  (phc-winner-argon2, CC0/Apache-2.0) is vendored** for the KDF step.
+  X25519, HMAC-SHA256, SHA-256, PBKDF2 and RNG for the eJWT flow, and can
+  also serve as libcurl's TLS backend. No other crypto library is needed.
 - **JSON:** cJSON, vendored (MIT, two files) — no extra system dependency
   for a small, stable need.
 - **Unit tests:** CMocka — pure C, cross-platform, built-in mocking.
 - **CI:** GitHub Actions — build + unit tests on Linux and Windows from
   day one; integration tests run locally against the dev-machine HEM until
-  CI gets device access (user decision 2026-07-15).
+  CI gets device access (user decision 2026-07-15). M10 adds a release
+  workflow: hem-tool binaries for both platforms (static libcurl, dynamic
+  wolfSSL — the shared wolfSSL ships as its own asset) on every push to
+  `main`, GitHub Releases on `v*` tags (user decisions 2026-10-07/09).
 
 **Data flow:** application calls a typed function (e.g. `ehem_key_list`) →
 session engine ensures a valid bearer token for the required scope
@@ -116,19 +118,33 @@ the context.
 - **libcurl for HTTPS** — mature, portable; isolated behind the transport
   vtable so it never appears in public headers.
 - **wolfSSL (wolfCrypt) for crypto primitives** (user decision 2026-07-15)
-  — X25519, HMAC-SHA256, SHA-256, RNG; may also serve as libcurl's TLS
-  backend where we build libcurl ourselves.
-- **Vendored phc-winner-argon2** — wolfCrypt provides no Argon2; the
-  reference implementation (CC0/Apache-2.0, MIT-compatible) fills the gap.
-- **Argon2 as the KDF, per Encedo Manager** (user decision 2026-07-15) —
-  Encedo Manager is the authoritative auth-flow reference; the
-  PBKDF2-SHA256 variant seen in the API test suite is not planned unless
-  the device demands it.
+  — X25519, HMAC-SHA256, SHA-256, PBKDF2, RNG; may also serve as libcurl's
+  TLS backend where we build libcurl ourselves.
+- **wolfSSL is never statically bundled into a published package** (user
+  decision 2026-10-09; licensing — wolfSSL is GPLv2-or-later/commercial):
+  published hem-tool and library packages link wolfSSL dynamically, and the
+  shared wolfSSL ships as a separate asset with its license text, its build
+  configuration and the corresponding source; static packages, when they
+  come, use a different library (M12). libcurl (permissive curl license)
+  may be compiled in.
+- **PBKDF2-HMAC-SHA256 as the login KDF, per Encedo Manager** (user
+  decision 2026-07-15: Encedo Manager is the authoritative auth-flow
+  reference; corrected 2026-10-06) — 600 000 iterations, 32-byte output,
+  salt = the challenge `eid` string. The Manager (`assets/build.js`), the
+  HEM API test suite and the python client all derive this way. **Argon2
+  is not supported** (user decision 2026-10-05). Earlier revisions of this
+  document attributed an Argon2 derivation to the Manager and planned a
+  vendored phc-winner-argon2; that came from legacy Manager files the
+  current Manager does not run, and the library was never vendored.
 - **Vendored cJSON** — small, stable, MIT; avoids a system dependency.
 - **CMocka for unit tests** — pure C, cross-platform, mocking built in.
 - **Windows toolchain: MinGW / MSYS2** (user decision 2026-07-15) — GCC on
   Windows, closest to the Linux build; MSVC support may be added later if
-  a consumer needs MSVC-ABI artifacts.
+  a consumer needs MSVC-ABI artifacts. MSYS2 environment **UCRT64** (user
+  decision 2026-10-10 — MSYS2 and setup-msys2 deprecated MINGW64): the same
+  GCC, linked against the Universal C Runtime instead of msvcrt, so
+  published Windows binaries need Windows 10 / Server 2016 or later (older
+  Windows: update KB2999226).
 - **Integration-test device policy: disposable** (user decision
   2026-07-15) — the dev-machine HEM is a pure test device; tests may
   create and delete anything **except** the device's own TLS material and
@@ -150,8 +166,9 @@ The **Encedo HEM** is a network cryptographic device (hardware encryption
 module) addressed by URL and driven over a REST/HTTPS API of roughly 50
 endpoints in six groups: `auth`, `keymgmt`, `crypto`, `system`, `logger`,
 `storage`. Authentication is a custom **eJWT** challenge–response: the
-client derives an X25519 keypair from the user passphrase (Argon2, device
-`eid` as salt), performs ECDH against the device's per-challenge session
+client derives an X25519 keypair from the user passphrase
+(PBKDF2-HMAC-SHA256, device `eid` as salt), performs ECDH against the
+device's per-challenge session
 key, and submits an HMAC-SHA256-signed JWT; the device returns a scoped
 bearer token with a TTL. Every subsequent call carries the token in the
 `Authorization` header. Some operations require narrower, per-key scopes.
@@ -175,9 +192,10 @@ Constraints that shape the design:
   trips* (token caching, silent refresh), not throughput.
 - **Platforms:** Linux is the MVP target; Windows (MinGW) builds and unit
   tests from day one; macOS later — nothing in the design may preclude it.
-- **License:** the SDK is MIT. wolfSSL is GPLv3/commercial dual-licensed —
-  binaries linking it must comply or use Encedo's commercial license
-  (risk #1 in §12).
+- **License:** the SDK is MIT. wolfSSL is GPLv2-or-later/commercial
+  dual-licensed (per the pinned 5.7.2 tarball's `COPYING`/`LICENSING`;
+  re-check on every bump) — published binaries link it dynamically and
+  never bundle it statically (§1; risk #1 in §12).
 - **The API doc has known gaps** — its `DISCREPANCIES.md` records
   divergences between documentation, Encedo Manager, and the test suite.
   Precedence order for conflicts: real device > Encedo Manager > API doc.
@@ -193,7 +211,7 @@ graph TD
         API --> PROTO["Protocol bindings<br/>auth · keymgmt · crypto · system · logger · storage"]
         SES --> PROTO
         PROTO --> JSON["JSON codec<br/>(vendored cJSON)"]
-        SES --> CRY["Crypto shim<br/>wolfCrypt: X25519, HMAC-SHA256<br/>vendored Argon2"]
+        SES --> CRY["Crypto shim<br/>wolfCrypt: X25519, HMAC-SHA256, PBKDF2"]
         PROTO --> T["Transport vtable"]
         T --> CURL["libcurl HTTPS<br/>(default impl)"]
         T -.-> FAKE["Fake transport<br/>(unit tests)"]
@@ -206,7 +224,7 @@ graph TD
 | Public API | stable C surface, ownership rules, error enum | expose curl/wolfSSL/cJSON types |
 | Session engine | challenge–response, token cache per scope, silent refresh, logout | persist secrets to disk |
 | Protocol bindings | endpoint ↔ struct mapping, device error translation | talk to the network directly |
-| Crypto shim | thin wrapper over wolfCrypt + vendored Argon2 | implement primitives itself |
+| Crypto shim | thin wrapper over wolfCrypt | implement primitives itself |
 | Transport | one function: request in, response out | know about JSON or auth |
 | hem-tool | CLI over the public API only | reach into internals |
 
@@ -255,7 +273,7 @@ sequenceDiagram
     A->>S: ehem_login(ctx, passphrase)
     S->>D: GET /api/auth/token
     D-->>S: challenge {exp, spk, jti, eid, lbl}
-    S->>S: Argon2(passphrase, salt=eid) → X25519 keypair
+    S->>S: PBKDF2(passphrase, salt=eid) → X25519 keypair
     S->>S: ECDH(user_sk, spk) → shared secret
     S->>S: build JWT {jti, aud, exp, iat, iss, scope}, sign HMAC-SHA256
     S->>D: POST /api/auth/token {auth: eJWT}
@@ -265,15 +283,17 @@ sequenceDiagram
     S->>D: GET/POST keymgmt (Authorization: Bearer)
 ```
 
-- **KDF** (amended 2026-07-16, M2 decomposition): PBKDF2-HMAC-SHA256,
-  600 000 iterations, 32-byte output, salt = the challenge `eid` as its
-  raw UTF-8 base64 string — pinned to the python client, which
-  authenticates against the dev device (live-proven 2026-07-16). The
-  Manager instead derives with Argon2 (time=10, mem=8192 KiB, salt =
-  base64-DECODED `eid`); a device only accepts the derivation whose
-  public key registered its UserKey at init, so Argon2 is deferred to an
-  options-selectable KDF if a Manager-inited device must be supported
-  (§12 risk 2, REQ-AUTH-001).
+- **KDF** (amended 2026-07-16, M2 decomposition; corrected 2026-10-06):
+  PBKDF2-HMAC-SHA256, 600 000 iterations, 32-byte output, salt = the
+  challenge `eid` as its raw UTF-8 base64 string (not base64-decoded) —
+  pinned to the python client, which authenticates against the dev device
+  (live-proven 2026-07-16). Encedo Manager (`assets/build.js`,
+  `pbkdf2KeyDerive`) and the HEM API test suite derive identically, so all
+  reference clients produce the same key from the same passphrase —
+  Manager login to the dev device with the same passphrase succeeded
+  (attended check, 2026-10-06). A device accepts only the key registered
+  as its UserKey at init. Argon2 is not supported (§1; §12 risk 2;
+  REQ-AUTH-001).
 - **eJWT:** hand-rolled compact JWT encode (base64url-nopad segments +
   HMAC-SHA256 tag with the ECDH shared secret; hardcoded header
   `{"ecdh":"x25519","alg":"HS256","typ":"JWT"}` per the python client).
@@ -363,6 +383,13 @@ sequenceDiagram
   Its orchestration lives in a small `hem-tool-core` static lib the CLI, the
   unit test, and the disruptive live test all share; its live test is
   `disruptive`-gated.
+- **M10 additions (user decision 2026-10-07):** `init-device` and
+  `wipe-device` over the `auth/init` and `wipeout` bindings (attended-only
+  verification), and `recovery` — the diagnose-then-remediate orchestrator
+  over `checkin`, `cert-install` and `tls-recover` (single check-in
+  attempt, no polling). The top-level help gains a **"manual recovery"**
+  section listing `cert-install` and `tls-recover` below the auth-grouped
+  listing, in which `recovery` itself stays.
 - Connection parameters via flags or env (`EHEM_URL`, `EHEM_PASSPHRASE` —
   the passphrase currently accepted via `--passphrase`/env; a stdin prompt
   fallback so it never need appear on the command line is a later refinement).
@@ -391,8 +418,15 @@ sequenceDiagram
   from the default CTest run and from CI unconditionally; requires both
   the label opt-in and `EHEM_ALLOW_DISRUPTIVE=1`. Never automatic
   (goal.txt).
+- **Attended-only** (user decision 2026-10-07, M10): device
+  initialisation and device wipe — the bindings and the hem-tool
+  commands over them — have **no live CTest at all**, not even under the
+  `disruptive` label. They are verified by attended runs whose outcome
+  is recorded as evidence in the owning REQ and step; their offline
+  fake-transport unit tests still apply.
 - Every protocol binding lands together with at least one unit test and,
-  where the device supports it non-destructively, one integration test.
+  where the device supports it non-destructively, one integration test
+  (attended-only bindings: the unit test only).
 
 ## 10. Directory layout
 
@@ -403,10 +437,9 @@ src/                   library sources
   proto_*.c            protocol bindings per API group
   transport.c          vtable + helpers
   transport_curl.c     libcurl implementation
-  crypto_shim.c        wolfCrypt + Argon2 wrappers
+  crypto_shim.c        wolfCrypt wrappers
   jwt.c                eJWT encode/decode
   vendor/cjson/        vendored cJSON
-  vendor/argon2/       vendored phc-winner-argon2
   tools/hem-tool/      CLI (inside src/ so implements-tags are greppable)
 tests/
   unit/
@@ -577,8 +610,9 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   notices, user request). Version **1.0.0**, ABI frozen (SONAME `.so.1`,
   101-symbol export baseline enforced by the gate). Conformance:
   docs/COVERAGE.md dispositions every documented endpoint — no unbound
-  surface remains except the recorded deliberate exclusions and the M10
-  deferrals. Live gate evidence: fresh `./dev ci` 41/41 + ASan;
+  surface remains except the recorded deliberate exclusions and the
+  deferrals (now M10 `auth/init` and `BACKLOG.md`). Live gate evidence:
+  fresh `./dev ci` 41/41 + ASan;
   attended `--mobile` approve/reject on the real phone (exit 0/14, at
   +4 s drift — the STEP-M9-055 window); full `./dev test it` **23/23
   green (337 s)** after one occurrence of the known sustained-load
@@ -588,36 +622,171 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   delete/reboot on a healthy repo — the July observation was debris
   state; REQ-SYS-008: attended shutdown ran as the gate's last live act,
   device dark until power-cycle). Zero deliberately-open acceptance
-  criteria remain across all 84 REQs.
-- **M10 — 1.0+ (post-release firmware surface)** *(deferred out of the
-  release by user decision 2026-08-06)*: the `system/upgrade` family
-  deferred since M7 (fw upload/check/install triad, ui triad, bootloader
-  upload, usbmode) plus the `hem-tool fw-upgrade` orchestrator (user
-  decision 2026-07-17); `stream/*` (commented out of fw v1.2.2 —
-  re-check against whatever firmware then ships).
+  criteria remain across all 84 REQs. **M9 closed 2026-10-07:** CI on
+  push confirmed green (linux + windows-mingw; run 31128228013 on the
+  `v1.0.0` tag push `046f914`, run 37481604417 on `development`
+  `ef8b552`); `v1.0.0` is tagged on `046f914`.
+- **M10 — device initialisation, wipe and recovery** *(scope reduced
+  2026-10-07 by user decision: the `system/upgrade` family and
+  `hem-tool fw-upgrade`, which M10 carried since the 2026-08-06/07
+  decisions, are parked in [BACKLOG.md](BACKLOG.md); the wipe, tool
+  and recovery items added the same day, user decision 2026-10-07)*:
+  - **`auth/init`** — device personalisation, GET challenge + POST
+    signed init JWT with the 14-field `cfg` block (moved in from
+    deliberately-unbound, user decision 2026-08-07: the SDK should be
+    able to initialise a wiped device); reference: Encedo Manager
+    `assets/build.js` `initFinal`.
+  - **device wipe** — the `wipeout` write of `POST /api/system/config`
+    (factory reset + reboot; deliberately unbound at 1.0, REQ-SYS-004).
+  - **hem-tool `init-device` and `wipe-device`** over the two bindings.
+    The master secret is a Manager-compatible BIP39 24-word mnemonic
+    (user decision 2026-10-07): derivation in the SDK (REQ-AUTH-012,
+    including the Manager's `substr(1, 64)` nibble-shift quirk), raw hex
+    only as a scripted escape hatch — so a device initialised by either
+    client can be administered from the other.
+    Both bindings and both commands are verified **attended only**: no
+    live CTest (not even `disruptive`), attended runs recorded as
+    evidence; offline fake-transport unit tests still apply (§9).
+  - **hem-tool `recovery`** — one command that diagnoses TLS/certificate
+    trouble and runs the matching remediation, built from the recorded
+    incidents: expired certificate (M1 gate 2026-07-16, again
+    2026-10-06 — check-in, then `cert-install` under `--insecure`,
+    verify under system trust; a **single** check-in attempt, no
+    polling — the lazy cloud renewal of 2026-10-07 was a cloud defect
+    Encedo has since fixed), lost TLS material after a wipe
+    (2026-07-22 — `tls-recover` via the provisioning cloud), RTC unset
+    after a cold boot and the ~8 % clock drift (check-in).
+    `cert-install` and `tls-recover` stay as commands and move to a
+    **"manual recovery"** section of the top-level help; `recovery`
+    sits in the normal auth-grouped listing (REQ-TOOL-019 revision at
+    decomposition).
+  - **Release builds of hem-tool** (user decision 2026-10-07,
+    REQ-BUILD-005; link mode changed by user decision 2026-10-09): a
+    separate GitHub Actions workflow builds hem-tool as Release binaries
+    for Linux and Windows — libcurl and wolfSSL from pinned sources,
+    wolfSSL as libcurl's TLS backend (the §1 "where we build libcurl
+    ourselves" case), libcurl compiled in, **wolfSSL linked dynamically**
+    and published as its own release asset (shared library + `COPYING` +
+    build configuration + corresponding source; never inside the hem-tool
+    archive — §1) — on every push to `main` (workflow artifacts) and
+    publishes a GitHub Release with `SHA256SUMS` on `v*` tags. The two
+    consequences once carried as open criteria are settled: the
+    REQ-NET-005 expired-cert classifier was proven under the wolfSSL
+    backend (2026-10-09), and §12 risk 1 (wolfSSL licensing) got its
+    decision the same day — no static wolfSSL in any published package;
+    static packages on another library are M12 scope. The rev-1 static
+    dry run was superseded before any push.
+  - Decomposition chore: re-check MFW's list against the then-current
+    firmware and pull in anything it now routes.
+- **M11 — retired (2026-10-07)**: created 2026-08-07 for
+  `system/config/provisioning` and the `diag/*` family; both are parked
+  in [BACKLOG.md](BACKLOG.md) together with the reserved design
+  constraint (diag support must not enter the production SDK). The
+  number is not reused.
+- **M12 — build variants & multi-package releases** *(early draft, user
+  request 2026-10-09; NOT decomposed — its open questions are deferred by
+  the user; placeholder STEP-M12-000)*. Today both SDK variants are always
+  built, hem-tool always links the static SDK, and third-party
+  dependencies link however pkg-config / FindCURL resolve them — there is
+  no switch:
+  - **Link-mode switches** — CMake options choosing which SDK variant(s)
+    to build, whether hem-tool links the SDK statically or dynamically,
+    and whether third-party dependencies (libcurl, the crypto/TLS
+    library) are linked statically or dynamically; candidate names
+    `EHEM_BUILD_SHARED` / `EHEM_BUILD_STATIC`, `EHEM_TOOL_LINK`,
+    `EHEM_DEPS_LINK`, settled at decomposition.
+  - **Crypto/TLS backend switch** — `EHEM_CRYPTO_BACKEND=wolfssl|<tbd>`;
+    wolfSSL stays the default; the alternative library is a pending user
+    decision; static package variants use it, never wolfSSL (§1).
+    Touchpoints: `src/crypto_shim.c` (the only wolfCrypt includer),
+    `ehem_global_init` (`wolfCrypt_Init`), the `transport_curl.c`
+    expired-cert texts, the libcurl TLS backend in
+    `scripts/release/build-deps.sh`, the `public_headers_dep_free` gate.
+  - **Static-wolfSSL warning** — configuring a build whose wolfSSL
+    resolves to a static archive emits a CMake `WARNING` naming the
+    licensing consequence (§12 risk 1); the release scripts refuse to
+    package such a binary (the M10 link-mode assertion stays).
+  - **Multi-variant GitHub release** — {SDK library package, hem-tool} ×
+    {dynamic, static} × {linux-x86_64, windows-x86_64, …}: library
+    packages = headers + `libencedo-hem.{so,a}` / `.dll` + import lib +
+    the CMake package config (fix `cmake/encedo-hem-config.cmake.in`,
+    which lacks the wolfSSL `find_dependency` the static target's link
+    interface needs; decide the pkg-config `.pc` file promised in §1 but
+    declared not shipped in REQ-API-008) + notices; dynamic variants reuse
+    the M10 wolfSSL companion asset; static variants ship only once the
+    alternative backend exists; plus a **full-dynamic hem-tool** variant —
+    libcurl dynamic as well (user note 2026-10-09; the M10 release keeps
+    libcurl static).
+  - *Open questions (deferred):* the alternative library; whether any
+    static variant ships before that backend lands; the `.pc` file; macOS
+    and MSVC; the asset naming scheme; whether `ci.yml` or `release.yml`
+    carries the variant matrix. **Gate (draft):** every variant built in
+    CI with its link mode asserted and the unit suite green; attended
+    `hem-tool status` per variant.
+- **MFW — firmware-pending** *(created by user decision 2026-08-07: one
+  generic future milestone for every feature that is documented — or
+  shipped dormant — but MISSING from the running firmware; nothing here
+  can be built or verified until upstream routes it; re-swept on every
+  firmware upgrade, items promote to a numbered milestone when they go
+  live)*:
+  - `DELETE /api/logger/{id}` — documented, handler exists, dispatch
+    commented out (`/* not available in CC mode */`), every request
+    404s (REQ-SYS-009 hook);
+  - `POST /api/keymgmt/list` "extended version" — in Encedo Manager's
+    endpoint registry; firmware implements GET only (REQ-KEY-001 hook);
+  - `system/health` GET+POST — handler prototypes declared in `api.h`,
+    never routed, no doc page;
+  - `stream/*` (4 routes) and `x509/*` (7 routes — an undocumented
+    device-side CA: ca/init, ca/cert, ca/sign, cert/<sn>, tls/init) —
+    commented out of the v1.2.2 route table with handler code shipped
+    (`api_crypto.c` stream blocks, `api_x509.c`);
+  - `misc/rnd` — fully commented out (the reason `ehem_random`
+    emulates via IV harvest); if a real RNG endpoint ever ships, swap
+    the emulation for it.
+
+Unscheduled items — the `system/upgrade` family, `hem-tool fw-upgrade`,
+`system/config/provisioning`, `diag/*` — live in [BACKLOG.md](BACKLOG.md),
+not in a milestone (user decision 2026-10-07).
 
 ## 12. Risks & open questions
 
-1. **wolfSSL licensing (GPLv3/commercial)** — binaries linking wolfSSL
-   must comply with GPLv3 or use a commercial license; affects how
-   encedo-pkcs11 (MIT) ships. *Resolved by:* Encedo confirming its
-   licensing model before the first binary release.
-2. **Login-KDF discrepancy between official clients** (superseded the
-   original "Argon2 parameters not pinned", 2026-07-16): the Manager
-   derives with Argon2 (time=10, mem=8192 KiB, salt = base64-decoded
-   `eid`); the python client uses PBKDF2-HMAC-SHA256 (600 000 iterations,
-   salt = `eid` string) and the latter authenticates against the dev
-   device (live-proven 2026-07-16). The KDF is fixed per device at init
-   time by whichever client registered the UserKey. M2 ships PBKDF2 only;
-   Argon2 becomes an options-selectable KDF when a Manager-inited device
-   must be supported. **RESOLVED (M2 gate, STEP-M2-070, 2026-07-16):** the
-   dev device (my.ence.do) accepts the **PBKDF2-HMAC-SHA256 600k** derivation
-   and issues bearers with **`sub` = `U`** (UserKey identity, not Manager/
-   Argon2 `M`), TTL ~3600 s, requested scope echoed — verified live end to
-   end (`test_auth_live`, `test_config_live` green). The device is
-   UserKey/PBKDF2-initialised; Argon2 support stays deferred until a
-   Manager-initialised device is actually needed. Working parameters recorded
-   in REQ-AUTH-001.
+1. **wolfSSL licensing (GPLv2-or-later/commercial) — decision recorded
+   2026-10-09.** Binaries linking wolfSSL must comply with its GPL or use
+   a commercial license; affects how encedo-pkcs11 (MIT) ships. The pinned
+   5.7.2 tarball's `COPYING` is GPLv2 and its `LICENSING` says "GPLv2 (or
+   at your option any later version) or a standard commercial license"
+   (earlier revisions of this document said GPLv3 — re-check on every pin
+   bump). **Decision (user, 2026-10-09, §1):** no published package
+   bundles wolfSSL statically; hem-tool (REQ-BUILD-005 rev 2) links it
+   dynamically and the shared wolfSSL is published as a separate asset
+   with its `COPYING`, its exact build configuration and the corresponding
+   source tarball; the hem-tool archive carries only MIT/permissive
+   notices. Static packages, when wanted, use a different library (M12).
+   *Still open:* encedo-pkcs11's own shipping shape inherits the same
+   dynamic-link position; the alternative static-build library is an M12
+   decision. REQ-BUILD-005 rev 2 was re-approved on 2026-10-09.
+2. **Login KDF — CLOSED (2026-10-06).** Was "Login-KDF discrepancy between
+   official clients" (2026-07-16, itself superseding "Argon2 parameters
+   not pinned"). There is no discrepancy: the current Encedo Manager
+   (`assets/build.js` v0.68, `pbkdf2KeyDerive`; encedo-manager `b33c236`)
+   derives with PBKDF2-HMAC-SHA256, 600 000 iterations, salt = the `eid`
+   string — the same as the python client, the HEM API test suite and
+   this SDK. The earlier text described Argon2 code in the Manager's
+   legacy files (`assets/encedo.js` v0.67, `assets/core2.js`), which the
+   current Manager does not run. Live: the dev device (my.ence.do) accepts
+   the PBKDF2 login and issues bearers with `sub` = `U`, TTL ~3600 s,
+   requested scope echoed (M2 gate, STEP-M2-070, 2026-07-16;
+   `test_auth_live` again 2026-10-06), and Manager login to the same
+   device with the same passphrase succeeded (attended check,
+   2026-10-06) — the two derivations match. `sub` reports which stored key
+   matched the token's `iss` — `U` UserKey, `M` MasterKey (firmware
+   `api_auth.c:262-265`) — and says nothing about the KDF or the client
+   that initialised the device. **Argon2 is not supported** (user decision
+   2026-10-05). *Not known:* an older Manager release most likely did
+   derive with Argon2; a device initialised by one would reject this
+   SDK's login, and whether any is still in use cannot be told from the
+   repositories. Supporting one would be a new decision through
+   REQUIREMENTS-MANAGEMENT.md §6.2. Parameters: REQ-AUTH-001.
 3. **Per-KID scope-token encoding unknown** — HEM-SDK-3 expects per-KID
    scopes; the auth doc shows only a free-form `scope` claim. *Resolved
    by:* reading the crypto/keymgmt doc pages and device experiments

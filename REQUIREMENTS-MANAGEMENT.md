@@ -292,7 +292,7 @@ Claude SHOULD propose capturing it as a REQ on the spot.
   | Source | Authoritative for |
   |---|---|
   | the real HEM device (dev machine, later CI) | final arbiter for all device behavior; wins over every document |
-  | Encedo Manager (implementation) | the auth flow: KDF choice and exact Argon2 parameters (user decision 2026-07-15) |
+  | Encedo Manager (implementation) | the auth flow: KDF choice and exact KDF parameters (user decision 2026-07-15). "Implementation" means what the Manager's pages load — `assets/build.js` via `index.html`/`index.htm`; the legacy `assets/encedo.js` and `assets/core2.js` still in its repository are not run by the login/init pages and are not a source |
   | https://github.com/KajtomatO/encedo-hem-api-doc | HEM REST API endpoints, request/response payloads, error codes; its `DISCREPANCIES.md` records known doc/implementation divergences |
   | https://github.com/KajtomatO/encedo-hem-python-api | working client reference: auth/token caching behavior, TLS handling, `wipe_keys.py` protected-key policy |
   | `requirements/start_point/encedo-pkcs11/` (`hem.h`, `REQUIREMENTS-hem.md`) | the consumer contract: what encedo-pkcs11 needs from this SDK (HEM-SDK-1…9, error-condition set) |

@@ -100,7 +100,11 @@ distinguish every condition a PKCS#11 backend must map: `EHEM_ERR_NETWORK`,
 `ehem_rc_str()` names any value. Detail for the LAST call —
 HTTP status, the device's error payload, a human-readable message — is
 retrievable from the context via `ehem_last_error()`; the returned struct
-is context-owned and valid until the next call on that context.
+is context-owned and valid until the next call on that context. Its
+`tls_expired` field (added in 1.1, append-only) is 1 when the call failed
+TLS verification because the device certificate has expired — the one
+failure a check-in can cure — so a caller can pick the remediation
+without parsing the message.
 
 HTTP mapping (shared by all bindings): 401 → `EHEM_ERR_AUTH_FAILED`
 (after one silent re-acquisition retry on scoped requests), 403 →
@@ -217,6 +221,8 @@ rate-sensitive devices).
 |---|---|
 | `ehem_login`, `ehem_logout` | lazy passphrase session; logout scrubs credentials + cache |
 | `ehem_login_mobile` | lazy mobile (push-confirm) session mode |
+| `ehem_device_init`, `ehem_init_params`, `ehem_init_params_init`, `ehem_init_info`, `ehem_init_info_free` | personalise a wiped device (`/api/auth/init`: init JWT signed by the master key; the returned `system:config` bearer is cached) — attended-only verification |
+| `ehem_mnemonic_generate`, `ehem_mnemonic_free`, `ehem_master_secret_from_mnemonic`, `EHEM_MASTER_SECRET_SIZE` | Manager-compatible BIP39 master secret: 24 English words → 32 bytes, including the Manager's nibble-shift quirk |
 | `ehem_ext_init`, `ehem_ext_init_info`, `ehem_ext_init_free` | begin pairing: device emits the request JWT |
 | `ehem_ext_validate`, `ehem_ext_validate_info`, `ehem_ext_validate_free` | finalise pairing (imports the authenticator key) |
 | `ehem_ext_mac`, `ehem_ext_mac_info`, `ehem_ext_mac_free` | stateless device liveness/identity proof |
@@ -281,6 +287,7 @@ rate-sensitive devices).
 | `ehem_system_config_install_cert`, `ehem_cert_install_info`, `ehem_cert_install_free` | install a TLS certificate (reboot required to load it) |
 | `ehem_tls_recover`, `EHEM_DEFAULT_REGISTER_URL` | full TLS restoration via the provisioning cloud (post-wipe) |
 | `ehem_system_reboot` | reboot (drops the token cache) |
+| `ehem_system_wipeout` | factory reset — IRREVERSIBLE: erases config, keys, logs and TLS material; drops the session (attended-only verification) |
 | `ehem_system_selftest`, `ehem_selftest_info`, `ehem_selftest_free` | self-test battery + key-repo statistics |
 | `ehem_system_attestation`, `ehem_attestation_info`, `ehem_attestation_free` | ATECC attestation material (PPA builds) |
 | `ehem_system_shutdown` | stop network/USB — recovery is a PHYSICAL power-cycle |

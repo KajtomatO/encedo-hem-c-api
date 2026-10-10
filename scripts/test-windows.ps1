@@ -4,9 +4,10 @@
     MinGW-w64 toolchain, from an ordinary PowerShell prompt.
 
 .DESCRIPTION
-    Companion to scripts\build-windows.ps1. It runs ctest *inside* the MinGW64
-    environment (where the built DLLs and their curl/wolfSSL runtime deps are
-    on PATH), so tests find their dependencies exactly as they were built.
+    Companion to scripts\build-windows.ps1. It runs ctest *inside* the MSYS2
+    MinGW environment (UCRT64 by default; where the built DLLs and their
+    curl/wolfSSL runtime deps are on PATH), so tests find their dependencies
+    exactly as they were built.
 
     Tests are partitioned into CTest labels (ARCHITECTURE.md Sec.9):
       unit         offline CMocka tests + the symbol-export gate; the default.
@@ -30,7 +31,8 @@
     MSYS2 install root. Default: C:\msys64.
 
 .PARAMETER Env
-    MinGW environment: mingw64 (default) or ucrt64. Match the build.
+    MinGW environment: ucrt64 (default; what CI uses) or mingw64 (deprecated
+    by MSYS2). Match the build.
 
 .PARAMETER CTestArgs
     Any remaining arguments are passed through to ctest, e.g. -R <regex> or
@@ -51,8 +53,8 @@ param(
     [string]$Label = 'unit',
     [string]$BuildDir = 'build',
     [string]$MsysRoot = 'C:\msys64',
-    [ValidateSet('mingw64', 'ucrt64')]
-    [string]$Env = 'mingw64',
+    [ValidateSet('ucrt64', 'mingw64')]
+    [string]$Env = 'ucrt64',
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$CTestArgs = @()
 )
