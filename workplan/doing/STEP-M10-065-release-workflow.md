@@ -37,7 +37,8 @@ evidence:
     2026-10-09 (rev 2, dynamic wolfSSL — user decision the same day: no
     published package may bundle wolfSSL statically; the shared wolfSSL is
     published as a SEPARATE release asset; libcurl stays pinned static;
-    REQ-BUILD-005 rev 2 → draft, re-approval pending). Reworked:
+    REQ-BUILD-005 rev 2 → draft; re-approved by the user the same day).
+    Reworked:
     build-deps-static.sh → build-deps.sh (wolfSSL -DBUILD_SHARED_LIBS=ON with
     the same feature flags so the installed options.h matches the shipped
     library; tarballs pinned by sha256 and verified on every run; stale
@@ -65,15 +66,29 @@ evidence:
     version" per LICENSING) — every "GPLv3" in the docs corrected. NOT DONE
     (needs a push / attended): the workflow run itself on GitHub (Linux +
     Windows jobs, artifacts), the Windows leg, the tag path, the attended
-    system-trust run with the dynamic binary, REQ-BUILD-005 rev 2
-    re-approval before any v* tag.
+    Windows system-trust run with the dynamic binary.
+
+    2026-10-10 (user decision, after the first CI run on 3cab73b warned
+    "MINGW64 is deprecated. Migrate to UCRT64 or CLANG64"): MSYS2 environment
+    MINGW64 → UCRT64 in release.yml AND ci.yml (ci.yml's job name kept
+    "Windows (MinGW)" so the check name is stable), packages via
+    setup-msys2 `pacboy` (`:p` = the environment's prefix; every package
+    verified present in the UCRT64 repo — wolfssl 5.9.4, curl, cmocka,
+    cmake, ninja, pkgconf, gcc); the Windows deps cache key gains `-ucrt64-`
+    (a libcurl.a built against msvcrt must never be restored under UCRT);
+    both Windows READMEs note the Universal CRT (Windows 10 / Server 2016+,
+    older needs KB2999226). Dev side: install-deps/build/test-windows.ps1
+    default to ucrt64 (mingw64 still selectable), `./dev
+    install-dependencies` takes the prefix from MINGW_PACKAGE_PREFIX and now
+    also installs wolfssl (it was missing), README + toolchain comment.
+    ARCHITECTURE §1 records the environment. Proven only by the next push.
 reopened: []
 cancelled: null
 ---
 
 **Goal:** `.github/workflows/release.yml` (REQ-BUILD-005 rev 2): two jobs —
 `linux` (oldest available Ubuntu LTS runner) and `windows` (MSYS2
-MINGW64) — each building **pinned** wolfSSL as a **shared** library and
+UCRT64) — each building **pinned** wolfSSL as a **shared** library and
 **pinned** libcurl as a static one (wolfSSL TLS backend, HTTP/HTTPS only)
 from sha256-verified sources, then the project with
 `-DCMAKE_BUILD_TYPE=Release` against that prefix, running `ctest -L unit`,
@@ -139,7 +154,7 @@ archives + `SHA256SUMS` (tag == project version enforced).
 - [ ] Tag path exercised at least by a dry run (`workflow_dispatch` on a
       throwaway pre-release tag or a `-rc` tag, deleted afterwards if
       wanted) — Release created with all archives + SHA256SUMS; version/tag
-      mismatch fails. Only after REQ-BUILD-005 rev 2 is re-approved.
+      mismatch fails. (REQ-BUILD-005 rev 2 re-approved 2026-10-09.)
 - [ ] README Download section (archive + companion asset); `./dev ci` still
       green; `implements: REQ-BUILD-005` tag in the workflow header and in
       all three scripts.

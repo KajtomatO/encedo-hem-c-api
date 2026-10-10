@@ -71,7 +71,7 @@ jobs:
           if-no-files-found: error
 
   windows:
-    name: Windows x86_64 (dynamic wolfSSL, MinGW)
+    name: Windows x86_64 (dynamic wolfSSL, MinGW UCRT64)
     runs-on: windows-latest
     defaults:
       run:
@@ -79,25 +79,31 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Set up MSYS2 / MinGW-w64
+      # UCRT64 (user decision 2026-10-10; MINGW64 is deprecated): the binaries
+      # use the Universal C Runtime, a Windows component from Windows 10 /
+      # Server 2016 on. No MSYS2 wolfssl/curl — both come pinned from source.
+      - name: Set up MSYS2 / MinGW-w64 (UCRT64)
         uses: msys2/setup-msys2@v2
         with:
-          msystem: MINGW64
+          msystem: UCRT64
           update: true
           install: >-
-            mingw-w64-x86_64-toolchain
-            mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-ninja
-            mingw-w64-x86_64-pkgconf
-            mingw-w64-x86_64-cmocka
             zip unzip git
+          pacboy: >-
+            toolchain:p
+            cmake:p
+            ninja:p
+            pkgconf:p
+            cmocka:p
 
+      # The C runtime is part of the key: a prefix built against another CRT
+      # must never be restored into this one.
       - name: Cache deps (pinned shared wolfSSL + static libcurl)
         id: deps
         uses: actions/cache@v4
         with:
           path: deps
-          key: deps-${{ runner.os }}-${{ hashFiles('scripts/release/build-deps.sh') }}
+          key: deps-${{ runner.os }}-ucrt64-${{ hashFiles('scripts/release/build-deps.sh') }}
 
       - name: Build shared wolfSSL + static libcurl
         run: scripts/release/build-deps.sh deps

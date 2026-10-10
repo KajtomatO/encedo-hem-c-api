@@ -1,10 +1,10 @@
 ---
 id: REQ-BUILD-005
 title: Release builds of hem-tool — dynamic-wolfSSL binaries from CI, artifacts on main, GitHub Releases on tags
-status: draft
+status: approved
 priority: should
 revision: 2
-source: user decision 2026-10-07 ("github ci actions to build and release the cli tool"; answers the same day: build on every push to main, publish a Release on tags; Release-type build + SHA256SUMS); approved 2026-10-08 (user "ok") as rev 1 (fully static binaries); rev 2 — user decision 2026-10-09 (no statically bundled wolfSSL in any published package, for licensing reasons — wolfSSL is linked dynamically and published as a separate release asset; libcurl stays pinned static; a full-dynamic variant and static packages on another library go to M12) — re-approval pending; ARCHITECTURE.md §1 (wolfSSL "may also serve as libcurl's TLS backend where we build libcurl ourselves"; "wolfSSL is never statically bundled into a published package"), §11 (M10), §12 risk 1 (wolfSSL licensing); REQ-BUILD-002 (the existing CI stays as is)
+source: user decision 2026-10-07 ("github ci actions to build and release the cli tool"; answers the same day: build on every push to main, publish a Release on tags; Release-type build + SHA256SUMS); approved 2026-10-08 (user "ok") as rev 1 (fully static binaries); rev 2 — user decision 2026-10-09 (no statically bundled wolfSSL in any published package, for licensing reasons — wolfSSL is linked dynamically and published as a separate release asset; libcurl stays pinned static; a full-dynamic variant and static packages on another library go to M12) — rev 2 approved 2026-10-09 (user "I accept new req"); ARCHITECTURE.md §1 (wolfSSL "may also serve as libcurl's TLS backend where we build libcurl ourselves"; "wolfSSL is never statically bundled into a published package"), §11 (M10), §12 risk 1 (wolfSSL licensing); REQ-BUILD-002 (the existing CI stays as is)
 depends_on: ["REQ-BUILD-001", "REQ-BUILD-002", "REQ-NET-003", "REQ-NET-005"]
 supersedes: null
 superseded_by: null
@@ -89,6 +89,10 @@ workflow is additional.
       `v*` → a GitHub Release with the hem-tool archives, the wolfSSL
       companion assets, the source tarball and `SHA256SUMS`;
       `workflow_dispatch` builds a chosen ref. `ci.yml` unchanged.
+      *(Read as "unchanged by the release work": ci.yml's MSYS2
+      environment moved MINGW64 → UCRT64 on 2026-10-10 by a separate user
+      decision — ARCHITECTURE §1 — that applies to both workflows; the
+      release workflow still neither calls nor alters ci.yml.)*
 - [ ] Link mode proven in the job: Linux `readelf` RUNPATH == `$ORIGIN`,
       `ldd` shows `libwolfssl.so.<N>` resolved from the binary's own
       directory and no libcurl/libssl/libcrypto; Windows import table lists

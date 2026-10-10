@@ -68,6 +68,13 @@ build script scripts/release/build-deps.sh of
 https://github.com/KajtomatO/encedo-hem-c-api (same release tag) and
 BUILD-CONFIG.txt above.
 EOF
+if [ "$OS" = "windows" ]; then
+  cat >> "$STAGE/README.txt" <<'EOF'
+
+Windows: built in MSYS2 UCRT64 — the DLL uses the Universal C Runtime, part of
+Windows 10 / Server 2016 and later; older Windows needs update KB2999226.
+EOF
+fi
 
 mkdir -p "$DIST"
 ( cd "$DIST" && rm -f "$NAME.tar.gz" "$NAME.zip" )

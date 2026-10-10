@@ -17,7 +17,7 @@
 # backend (ARCHITECTURE.md §1: "wolfSSL may also serve as libcurl's TLS backend
 # where we build libcurl ourselves") and HTTP/HTTPS only — every other protocol
 # and optional dependency is off — and linked statically. Both builds use CMake
-# (no autotools), so the same script runs on Linux, in the MSYS2 MINGW64 shell,
+# (no autotools), so the same script runs on Linux, in the MSYS2 UCRT64 shell,
 # and on a developer machine.
 #
 # Pinned by version AND sha256: both CI jobs build the same bytes, so the hash

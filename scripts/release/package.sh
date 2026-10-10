@@ -143,6 +143,14 @@ corresponding source (wolfssl-${WOLFSSL_VERSION}-stable-src.tar.gz) are
 published with that asset. Source: https://github.com/KajtomatO/encedo-hem-c-api
 (tag v${VERSION}).
 EOF
+if [ "$OS" = "windows" ]; then
+  cat >> "$STAGE/README.txt" <<'EOF'
+
+Windows: hem-tool.exe and libwolfssl.dll use the Universal C Runtime (built in
+MSYS2 UCRT64) — part of Windows 10 / Server 2016 and later; older Windows
+needs update KB2999226.
+EOF
+fi
 
 mkdir -p "$DIST"
 ( cd "$DIST" && rm -f "$NAME.tar.gz" "$NAME.zip" )

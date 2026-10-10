@@ -140,7 +140,11 @@ the context.
 - **CMocka for unit tests** — pure C, cross-platform, mocking built in.
 - **Windows toolchain: MinGW / MSYS2** (user decision 2026-07-15) — GCC on
   Windows, closest to the Linux build; MSVC support may be added later if
-  a consumer needs MSVC-ABI artifacts.
+  a consumer needs MSVC-ABI artifacts. MSYS2 environment **UCRT64** (user
+  decision 2026-10-10 — MSYS2 and setup-msys2 deprecated MINGW64): the same
+  GCC, linked against the Universal C Runtime instead of msvcrt, so
+  published Windows binaries need Windows 10 / Server 2016 or later (older
+  Windows: update KB2999226).
 - **Integration-test device policy: disposable** (user decision
   2026-07-15) — the dev-machine HEM is a pure test device; tests may
   create and delete anything **except** the device's own TLS material and
@@ -760,8 +764,7 @@ not in a milestone (user decision 2026-10-07).
    notices. Static packages, when wanted, use a different library (M12).
    *Still open:* encedo-pkcs11's own shipping shape inherits the same
    dynamic-link position; the alternative static-build library is an M12
-   decision. The first `v*` Release waits for REQ-BUILD-005 rev 2
-   re-approval.
+   decision. REQ-BUILD-005 rev 2 was re-approved on 2026-10-09.
 2. **Login KDF — CLOSED (2026-10-06).** Was "Login-KDF discrepancy between
    official clients" (2026-07-16, itself superseding "Argon2 parameters
    not pinned"). There is no discrepancy: the current Encedo Manager

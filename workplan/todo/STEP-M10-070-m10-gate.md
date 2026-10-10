@@ -54,6 +54,5 @@ surfaced. Commits/tags are the user's.
       unpacked side by side — and smoke-run (`hem-tool status`, system
       trust) on Linux and Windows — attended. The licensing decision is
       recorded (REQ-BUILD-005 rev 2, user decision 2026-10-09: wolfSSL
-      dynamic, never bundled statically); no `v*` tag before that revision
-      is re-approved.
+      dynamic, never bundled statically; rev 2 re-approved the same day).
 - [ ] TRACE.md regenerated (§4.3); ARCHITECTURE §11 M10 gate-passed.

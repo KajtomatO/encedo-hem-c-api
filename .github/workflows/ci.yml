@@ -47,6 +47,10 @@ jobs:
   # (required on Windows for wolfSSL's global RNG mutex, which the default-on
   # curve25519 blinding locks on every call) — not a broken package. Post-mortem
   # in KNOWN-ISSUES.md.
+  # MSYS2 environment UCRT64 since 2026-10-10 (user decision; MSYS2 and
+  # setup-msys2 deprecated MINGW64): the same MinGW-w64 GCC, linked against the
+  # Universal C Runtime instead of msvcrt. The job name stays "Windows (MinGW)"
+  # so the check name is stable.
   windows-mingw:
     name: Windows (MinGW)
     runs-on: windows-latest
@@ -56,21 +60,23 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Set up MSYS2 / MinGW-w64
+      - name: Set up MSYS2 / MinGW-w64 (UCRT64)
         uses: msys2/setup-msys2@v2
         with:
-          msystem: MINGW64
+          msystem: UCRT64
           update: true
           # Explicit package list (pinning the toolset we build against —
-          # §12 risk 5). The PowerShell installer covers the same set locally.
-          install: >-
-            mingw-w64-x86_64-toolchain
-            mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-ninja
-            mingw-w64-x86_64-pkgconf
-            mingw-w64-x86_64-curl
-            mingw-w64-x86_64-cmocka
-            mingw-w64-x86_64-wolfssl
+          # §12 risk 5); `:p` adds the environment's package prefix
+          # (mingw-w64-ucrt-x86_64-*). scripts/install-deps-windows.ps1 and
+          # `./dev install-dependencies` cover the same set locally.
+          pacboy: >-
+            toolchain:p
+            cmake:p
+            ninja:p
+            pkgconf:p
+            curl:p
+            cmocka:p
+            wolfssl:p
 
       - name: Configure
         run: cmake -B build -G Ninja

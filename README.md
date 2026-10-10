@@ -84,16 +84,17 @@ Useful configure options:
 
 ### Windows (MSYS2 / MinGW-w64)
 
-Open the **“MSYS2 MINGW64”** shell (after running the install script) and build
-exactly as above:
+Open the **“MSYS2 UCRT64”** shell (after running the install script) and build
+exactly as above — UCRT64 is the environment CI uses; MSYS2 deprecated
+MINGW64:
 
 ```bash
 cmake -B build -G Ninja && cmake --build build
 ```
 
 Or, to build **from an ordinary PowerShell prompt** (no MSYS2 shell needed),
-use the helper scripts — they run cmake/ctest inside the MinGW64 environment
-for you, so libcurl/wolfSSL are found:
+use the helper scripts — they run cmake/ctest inside the MSYS2 UCRT64
+environment for you, so libcurl/wolfSSL are found:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\build-windows.ps1   # configure + build
@@ -104,7 +105,8 @@ A plain `cmake -B build` from PowerShell often picks up an unrelated
 cmake/gcc on `PATH` (e.g. Strawberry Perl's), which has no libcurl and fails
 with `Could NOT find CURL`. `build-windows.ps1` avoids that, and wipes a build
 directory that was accidentally configured with the wrong compiler. Both take
-`-BuildDir`, `-MsysRoot`, and `-Env` (mingw64|ucrt64); `test-windows.ps1` takes
+`-BuildDir`, `-MsysRoot`, and `-Env` (ucrt64, the default, or the deprecated
+mingw64 for an existing setup); `test-windows.ps1` takes
 `-Label unit|integration|disruptive`. Pass `-?` for full help.
 
 ### Cross-compiling for Windows from Linux

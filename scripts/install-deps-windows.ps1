@@ -6,7 +6,8 @@
 .DESCRIPTION
     Windows toolchain per ARCHITECTURE.md Sec.1 (fixed decision, 2026-07-15):
     MinGW-w64 via MSYS2 - the GCC build closest to the Linux one. This is
-    also what the CI Windows job uses (msys2/setup-msys2).
+    also what the CI Windows job uses (msys2/setup-msys2), in the UCRT64
+    environment since 2026-10-10 (MSYS2 deprecated MINGW64).
 
     The script:
       1. Ensures MSYS2 is installed (installs it with winget if missing).
@@ -26,7 +27,8 @@
     MSYS2 install root. Default: C:\msys64.
 
 .PARAMETER Env
-    MinGW environment / package prefix: mingw64 (x86_64, default) or ucrt64.
+    MinGW environment / package prefix: ucrt64 (default; what CI uses) or
+    mingw64 (deprecated by MSYS2; kept for existing setups).
 
 .PARAMETER NoCrypto
     Skip wolfSSL (install only the M1 build/test dependencies).
@@ -35,7 +37,8 @@
     powershell -ExecutionPolicy Bypass -File scripts\install-deps-windows.ps1
 
 .NOTES
-    After it finishes, open the "MSYS2 MINGW64" shell and build:
+    After it finishes, open the "MSYS2 UCRT64" shell (or the one matching
+    -Env) and build:
         cmake -B build -G Ninja
         cmake --build build
         ctest --test-dir build -L unit
@@ -43,8 +46,8 @@
 [CmdletBinding()]
 param(
     [string]$MsysRoot = 'C:\msys64',
-    [ValidateSet('mingw64', 'ucrt64')]
-    [string]$Env = 'mingw64',
+    [ValidateSet('ucrt64', 'mingw64')]
+    [string]$Env = 'ucrt64',
     [switch]$NoCrypto
 )
 
@@ -139,7 +142,7 @@ pkg-config --exists libcurl && echo "  ok   libcurl    (pkg-config)" || { echo "
 Invoke-Msys ("export MSYSTEM=" + $Env.ToUpper() + "; source /etc/profile; " + $verify)
 
 Write-Host ''
-Write-Step 'All dependencies satisfied. Open the "MSYS2 MINGW64" shell and build:'
+Write-Step ('All dependencies satisfied. Open the "MSYS2 ' + $Env.ToUpper() + '" shell and build:')
 Write-Host '    cmake -B build -G Ninja'
 Write-Host '    cmake --build build'
 Write-Host '    ctest --test-dir build -L unit'
