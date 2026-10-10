@@ -5,7 +5,7 @@ milestone: M10
 implements: []
 traces:
   architecture: ["ARCHITECTURE.md#11-milestones", "ARCHITECTURE.md#9-testing-policy"]
-depends_on: ["STEP-M10-030", "STEP-M10-040", "STEP-M10-060", "STEP-M10-065"]
+depends_on: ["STEP-M10-030", "STEP-M10-040", "STEP-M10-060", "STEP-M10-065", "STEP-M10-068"]
 evidence:
   commits: []
   tests: []

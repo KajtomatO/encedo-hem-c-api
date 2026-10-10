@@ -134,6 +134,23 @@ evidence:
     green (46/46, hem-tool-1.1.0-rc1-* archives, `hem-tool 1.1.0`);
     release-notes.sh: lightweight v1.0.0 refused, wolfSSL's annotated
     v5.7.2-stable rendered; ./dev ci 46/46 gcc+clang, ./dev check green.
+
+    2026-10-10, FIRST TAG RUN (38048420078, annotated v1.1.0-rc1 on 79e0b07,
+    development): Linux and Windows jobs GREEN; the publishing job passed
+    download-artifact v7, asset assembly, the duplicate-name check and
+    `sha256sum -c`, then failed at the notes step — release-notes.sh was not
+    part of commit 79e0b07 (a new file, uncommitted at the time) while the
+    committed release.yml already called it. No release was created. The file
+    is in 925e831 (mode 100755). Same day, from the user's first Windows test
+    of the artifacts (REQ-BUILD-005 side; the code side is STEP-M10-068):
+    BUILD-CONFIG.txt now records MSYSTEM and the compiler path (uname says
+    MINGW64_NT in UCRT64 too); build-deps.sh and package.sh ASSERT that
+    libwolfssl.dll and hem-tool.exe import the Universal CRT
+    (api-ms-win-crt-* / ucrtbase.dll) and not msvcrt.dll (unproven until the
+    next Windows run); the Windows README.txt explains the silent missing-DLL
+    exit (-1073741515, 0xC0000135; a friendly message → BACKLOG item 5); the
+    README.txt texts are ASCII (REQ-API-009). Tag path still pending:
+    v1.1.0-rc2 on 925e831.
 reopened: []
 cancelled: null
 ---

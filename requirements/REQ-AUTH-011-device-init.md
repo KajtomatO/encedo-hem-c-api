@@ -1,10 +1,10 @@
 ---
 id: REQ-AUTH-011
 title: Device initialisation binding — /api/auth/init challenge and signed cfg commit
-status: implemented
+status: needs-reverify
 priority: should
-revision: 2
-source: user decision 2026-08-07 (auth/init moved into M10: "the SDK should be able to initialise a wiped device"); user decision 2026-10-07 (M10 scope, attended-only); ARCHITECTURE.md §11 (M10); Encedo Manager assets/build.js initFinal (build.js:655-770 at b33c236 — the authoritative client flow); encedo-hem-api-doc auth/init.md; encedo_firmware api_auth.c:330-368 (GET) and :369-830 (POST; completeness mask 0x3FFF at :705); approved 2026-10-07 (M10 decomposition, user go-ahead)
+revision: 3
+source: user decision 2026-08-07 (auth/init moved into M10: "the SDK should be able to initialise a wiped device"); user decision 2026-10-07 (M10 scope, attended-only); ARCHITECTURE.md §11 (M10); Encedo Manager assets/build.js initFinal (build.js:655-770 at b33c236 — the authoritative client flow); encedo-hem-api-doc auth/init.md; encedo_firmware api_auth.c:330-368 (GET) and :369-830 (POST; completeness mask 0x3FFF at :705); approved 2026-10-07 (M10 decomposition, user go-ahead); rev 3 — header corrected after the first live init failed with 401 (2026-10-10; §6.2 report in chat, approved 2026-10-10, user "I approve steps"; STEP-M10-068): the Manager's jwt_generate_hs256 (build.js:1981-1987) adds alg/typ, and the firmware requires `alg` (libjwt jwt.c:512, api_auth.c:424-430)
 depends_on: ["REQ-AUTH-001", "REQ-AUTH-002", "REQ-API-005", "REQ-SYS-003", "REQ-TEST-007"]
 supersedes: null
 superseded_by: null
@@ -27,8 +27,13 @@ uninitialised device exactly as the Manager's `initFinal` does it:
 3. **master persona:** the caller's 32-byte master secret → X25519
    keypair → `cfg.masterkey`;
 4. ECDH(master private key, `spk`) → shared secret; eJWT header
-   `{"ecdh":"x25519"}` (the Manager's minimal header — the firmware reads
-   only `ecdh`, REQ-AUTH-001), claims `{jti, aud: spk, exp: the
+   `{"ecdh":"x25519","alg":"HS256","typ":"JWT"}` — byte-exact what the
+   Manager sends (its callers pass `{"ecdh":"x25519"}`, its
+   `jwt_generate_hs256` adds `alg`/`typ`, build.js:1981-1987) and the
+   login header of REQ-AUTH-001; the firmware refuses a header without
+   `alg` with 401 before checking the signature (libjwt `jwt.c:512`,
+   `api_auth.c:424-430`) and keys the HMAC with ECDH only when
+   `"ecdh":"x25519"` is present (`jwt-wolfssl.c:144-166`); claims `{jti, aud: spk, exp: the
    challenge's exp, iat, iss: master public key (standard base64), cfg}`,
    HMAC-SHA256 tag keyed with the raw shared secret. **The init JWT is
    signed by the master key** (`iss` = masterkey, `build.js:705-717`),
@@ -94,10 +99,20 @@ need); moved into M10 on 2026-08-07.
       master-secret side IS pinned to the Manager's own JavaScript
       (REQ-AUTH-012 vectors), and the login-side eJWT builder the init
       JWT reuses stays byte-pinned to the python fixture (test_ejwt).
+      *(Rev 3 lesson: self-consistency cannot catch a wire-format error —
+      the rev-2 test pinned the wrong header and passed.)*
+- [x] Rev 3: the posted init JWT's header is byte-exact
+      `{"ecdh":"x25519","alg":"HS256","typ":"JWT"}` (`EHEM_EJWT_HEADER`,
+      shared with login); test_init asserts the bytes and the presence of
+      `alg` and `ecdh`. *(STEP-M10-068, 2026-10-10, commit 925e831; unit
+      47/47 gcc+clang.)*
 - [ ] **Attended-only** (REQ-TEST-007): no live CTest. Evidence to
       record here: date, device, the init result (`instanceid`,
       `reboot_required`), then a passphrase login (`sub="U"`) and
-      `hem-tool status` succeeding on the initialised device.
+      `hem-tool status` succeeding on the initialised device. *(First
+      attempt 2026-10-10, Windows release binary, wiped dev device: HTTP
+      401 "init JWT rejected" — the rev-2 header; the device stayed
+      uninitialised. Retry pending with the rev-3 build.)*
 - [x] The public header documents the preconditions (run check-in
       first), the `http://` usage, that `masterkey` cannot be rotated
       later (wipe + re-init only), and that `ehem_tls_recover`

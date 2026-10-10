@@ -1,10 +1,10 @@
 ---
 id: REQ-API-009
 title: The SDK's and hem-tool's own text is 7-bit ASCII
-status: draft
+status: approved
 priority: should
 revision: 1
-source: user report 2026-10-10 (first Windows test of the release binary — "Printed info have strange characters": a UTF-8 em dash shown as "ÔÇö" in the console); ARCHITECTURE.md §4 (error detail), §8 (hem-tool)
+source: user report 2026-10-10 (first Windows test of the release binary — "Printed info have strange characters": a UTF-8 em dash shown as "ÔÇö" in the console); ARCHITECTURE.md §4 (error detail), §8 (hem-tool); approved 2026-10-10 (user "I approve steps")
 depends_on: ["REQ-API-004"]
 supersedes: null
 superseded_by: null

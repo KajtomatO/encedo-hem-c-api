@@ -678,6 +678,11 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
     dry run was superseded before any push.
   - Decomposition chore: re-check MFW's list against the then-current
     firmware and pull in anything it now routes.
+- **NOTE — the next milestone (after M10) will be an "initialisation
+  creator"** (user decision 2026-10-10): hand-hold the user through the
+  device initialisation process. A note only — not created or designed
+  yet: no number, scope, requirements or steps until the user starts it.
+  It comes before the M12 draft below.
 - **M11 — retired (2026-10-07)**: created 2026-08-07 for
   `system/config/provisioning` and the `diag/*` family; both are parked
   in [BACKLOG.md](BACKLOG.md) together with the reserved design

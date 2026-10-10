@@ -47,6 +47,18 @@ directly, no library surface), or (b) a separate diagnostic SDK/library
 beside the production one. The production `libencedo-hem` stays diag-free
 either way.
 
+### 5. Friendly message when `libwolfssl.dll` is missing (Windows)
+
+Added by user decision 2026-10-10, from the first Windows test of the
+release binary. hem-tool links wolfSSL dynamically (REQ-BUILD-005), and
+today Windows refuses to start `hem-tool.exe` without `libwolfssl.dll`
+before any of its code runs — depending on the console a system dialog or
+no message at all, exit code -1073741515 (`0xC0000135`,
+STATUS_DLL_NOT_FOUND); the release README.txt documents it. A friendly
+message would need the DLL to be loaded on demand instead of at startup
+(e.g. a delay-load import), so hem-tool itself could report what is
+missing and where to put it.
+
 ## Candidates (no decision taken)
 
 - General config/administration writes other than `wipeout` — `userkey*`
