@@ -8,7 +8,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(encedo-hem
-  VERSION 1.0.0
+  VERSION 1.1.0
   DESCRIPTION "Encedo HEM C SDK"
   LANGUAGES C)
 
@@ -86,10 +86,23 @@ set(EHEM_SOURCES
   src/proto_storage.c
   src/keytype.c
   src/crypto_shim.c
-  src/ejwt.c)
+  src/ejwt.c
+  src/bip39.c
+  src/vendor/bip39/wordlist_english.c)
 
 add_library(encedo-hem        SHARED ${EHEM_SOURCES} $<TARGET_OBJECTS:ehem-cjson>)
 add_library(encedo-hem-static STATIC ${EHEM_SOURCES} $<TARGET_OBJECTS:ehem-cjson>)
+
+# REQ-API-006 when the dependencies are STATIC archives (the release build,
+# REQ-BUILD-005): without this, every libcurl/wolfSSL symbol linked into the
+# shared library would be exported from it. --exclude-libs,ALL keeps archive
+# symbols internal; a no-op when the deps are shared. GNU ld / lld / MinGW ld
+# understand it; other linkers (ld64) simply don't get the flag.
+include(CheckLinkerFlag)
+check_linker_flag(C "-Wl,--exclude-libs,ALL" EHEM_HAVE_EXCLUDE_LIBS)
+if(EHEM_HAVE_EXCLUDE_LIBS)
+  target_link_options(encedo-hem PRIVATE "-Wl,--exclude-libs,ALL")
+endif()
 add_library(encedo-hem::encedo-hem        ALIAS encedo-hem)
 add_library(encedo-hem::encedo-hem-static ALIAS encedo-hem-static)
 
@@ -158,9 +171,11 @@ install(FILES
 
 # --- hem-tool CLI ---------------------------------------------------------
 # Thin consumer of the PUBLIC API only (REQ-TOOL-001); links the static lib so
-# the tool is self-contained (no runtime .so lookup), with curl coming through
-# the static lib's interface link. Building it can be turned off for a
-# library-only consumer.
+# the tool carries the SDK itself (no libencedo-hem.so lookup at run time);
+# the SDK's own dependencies, curl and wolfSSL, come through the static lib's
+# interface link and are dynamic or not per the build — the release build
+# links wolfSSL dynamically (REQ-BUILD-005). Building it can be turned off for
+# a library-only consumer.
 option(EHEM_BUILD_TOOL "Build the hem-tool CLI" ON)
 if(EHEM_BUILD_TOOL)
   # The cert-install orchestration (REQ-TOOL-003) lives in a small static lib so
@@ -169,14 +184,17 @@ if(EHEM_BUILD_TOOL)
   add_library(hem-tool-core STATIC
     src/tools/hem-tool/cert_install.c
     src/tools/hem-tool/ext_cmd.c
+    src/tools/hem-tool/init_cmd.c
     src/tools/hem-tool/keys.c
     src/tools/hem-tool/logs.c
     src/tools/hem-tool/random.c
     src/tools/hem-tool/recover.c
+    src/tools/hem-tool/recovery.c
     src/tools/hem-tool/registry.c
     src/tools/hem-tool/selftest.c
     src/tools/hem-tool/sign.c
     src/tools/hem-tool/tool_auth.c
+    src/tools/hem-tool/wipe.c
     # Vendored qrcodegen (REQ-TOOL-016): TOOL-ONLY — never part of the SDK
     # library; the export/header gates prove the containment.
     src/tools/hem-tool/vendor/qrcodegen/qrcodegen.c)

@@ -82,7 +82,7 @@ int hem_cert_install_run(ehem_ctx *ctx, const hem_cert_install_opts *o)
          * the broker's own skip-if-current signal: the device is up to date. */
         if (ci->current_serial != NULL) {
             fprintf(out, "already current: the cloud reports no certificate "
-                         "update; the device serves serial=%s — nothing to do.\n",
+                         "update; the device serves serial=%s - nothing to do.\n",
                     ci->current_serial);
             if (o->force) {
                 fprintf(out, "  (--force cannot reinstall without a "
@@ -91,7 +91,7 @@ int hem_cert_install_run(ehem_ctx *ctx, const hem_cert_install_opts *o)
             ret = HEM_CERT_OK;
         } else {
             fprintf(err, "error: the cloud delivered no certificate and the "
-                         "device reports none loaded — nothing to install\n"
+                         "device reports none loaded - nothing to install\n"
                          "  (this device's hostname may be outside the managed "
                          "domain)\n");
             ret = HEM_CERT_NO_CHAIN;
@@ -114,7 +114,7 @@ int hem_cert_install_run(ehem_ctx *ctx, const hem_cert_install_opts *o)
         fprintf(out, "device currently serves serial=%s\n", ci->current_serial);
         if (strcmp(ci->current_serial, leaf->serial) == 0 && !o->force) {
             fprintf(out, "already current: the device already serves this "
-                         "certificate — nothing to do.\n"
+                         "certificate - nothing to do.\n"
                          "  (pass --force to reinstall it anyway)\n");
             ret = HEM_CERT_OK;
             goto cleanup;
@@ -125,7 +125,7 @@ int hem_cert_install_run(ehem_ctx *ctx, const hem_cert_install_opts *o)
      * credential check stays HERE, after skip-if-current, so a
      * credential-less run can still exit 0 "already current". */
     if (!o->mobile && (o->passphrase == NULL || o->passphrase[0] == '\0')) {
-        fprintf(err, "error: installing needs authentication — "
+        fprintf(err, "error: installing needs authentication - "
                      "set EHEM_PASSPHRASE / pass --passphrase, or use "
                      "--mobile\n");
         ret = HEM_CERT_NO_PASSPHRASE;
@@ -200,10 +200,10 @@ int hem_cert_install_run(ehem_ctx *ctx, const hem_cert_install_opts *o)
     }
     fprintf(out, "  validity: %s .. %s\n", leaf->not_before, leaf->not_after);
     if (o->insecure) {
-        fprintf(out, "  verify:   SKIPPED (insecure TLS mode) — reconnect with "
+        fprintf(out, "  verify:   SKIPPED (insecure TLS mode) - reconnect with "
                      "system trust to confirm\n");
     } else {
-        fprintf(out, "  verify:   OK — the device now serves a trusted certificate\n");
+        fprintf(out, "  verify:   OK - the device now serves a trusted certificate\n");
     }
     ret = HEM_CERT_OK;
 

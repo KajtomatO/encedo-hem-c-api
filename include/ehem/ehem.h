@@ -262,6 +262,16 @@ typedef struct ehem_error {
     long        http_status;     /* HTTP status of the last call, or 0 if none */
     const char *device_payload;  /* device error body (NUL-terminated), or NULL */
     const char *message;         /* human-readable message; never NULL */
+    /*
+     * 1 when the last call failed TLS verification because the DEVICE
+     * CERTIFICATE HAS EXPIRED — the one classifiable, check-in-recoverable
+     * failure (REQ-NET-005); 0 for every other outcome. Set whether or not
+     * the automatic recovery ran (it stays 1 when the recovery itself failed
+     * or the device kept serving the old certificate). Lets a caller pick the
+     * right remediation (hem-tool `recovery`). Appended in 1.1 — the struct
+     * is context-owned, so the addition is ABI-safe (REQ-API-008).
+     */
+    int         tls_expired;
 } ehem_error;
 
 /*

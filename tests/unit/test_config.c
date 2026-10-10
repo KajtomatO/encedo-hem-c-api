@@ -7,6 +7,9 @@
  *           updated/reboot_required, 400/409 mapping, _free NULL-safe),
  *           REQ-SYS-005 (reboot: authenticated GET, accepts the empty 200 the
  *           device sends, drops the token cache on success),
+ *           REQ-SYS-014 (wipeout: POST {"wipeout":true} to config, the
+ *           empty 200 the device sends before it wipes drops the WHOLE
+ *           session — token cache and credential; 406/403 keep it),
  *           REQ-SYS-007 (selftest: full/minimal shapes, kat_busy/se_state/
  *           repo_stats defaults, missing fls_state → PROTOCOL),
  *           REQ-SYS-011 (attestation: crt vs csr+key shapes, missing genuine
@@ -379,6 +382,95 @@ static void test_reboot_403(void **state)
 }
 
 /* -------------------------------------------------------------------------- */
+/* wipeout (REQ-SYS-014)                                                      */
+/* -------------------------------------------------------------------------- */
+
+/* The device answers an empty 200 BEFORE it wipes → OK; the whole session is
+ * dropped: the next authenticated call fails AUTH_EXPIRED with zero network
+ * traffic (REQ-AUTH-002 logout semantics — the stored user key is gone). */
+static void test_wipeout_200_drops_session(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "wp1");                                    /* req 0,1 */
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 200, NULL), 0);  /* req 2 */
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    assert_int_equal(ehem_system_wipeout(ctx), EHEM_OK);
+    assert_int_equal((int)fake_transport_request_count(fake), 3);
+
+    /* Exactly {"wipeout":true}, POSTed to config with a bearer. */
+    const fake_captured_request *post = fake_transport_request(fake, 2);
+    assert_int_equal(post->method, EHEM_HTTP_POST);
+    assert_string_equal(post->path, "/api/system/config");
+    assert_non_null(post->body);
+    assert_string_equal((const char *)post->body, "{\"wipeout\":true}");
+    assert_non_null(fake_transport_request_header(fake, 2, "Authorization"));
+
+    /* Session gone: no cached token AND no credential to re-login with. */
+    const char *tok = NULL;
+    assert_int_equal(ehem_auth_ensure_token(ctx, "system:config", &tok),
+                     EHEM_ERR_AUTH_EXPIRED);
+    assert_int_equal((int)fake_transport_request_count(fake), 3);  /* no traffic */
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* 406 is the firmware's refusal (its `wipeout:false` sentinel code) → DEVICE
+ * with the status recorded; the session stays usable (token reused). */
+static void test_wipeout_406_session_intact(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "wp406");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 406,
+        "{\"error\":\"not acceptable\"}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    assert_int_equal(ehem_system_wipeout(ctx), EHEM_ERR_DEVICE);
+    assert_int_equal(ehem_last_error(ctx)->http_status, 406);
+
+    const char *tok = NULL;
+    assert_int_equal(ehem_auth_ensure_token(ctx, "system:config", &tok), EHEM_OK);
+    assert_int_equal((int)fake_transport_request_count(fake), 3);  /* no re-login */
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* 403: scope/role refused (the firmware also rejects a mobile bearer here —
+ * sub must be "U" or "M") → SCOPE_DENIED, session intact. */
+static void test_wipeout_403(void **state)
+{
+    (void)state;
+    set_now(EJWT_FX_NOW);
+
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    push_login(fake, "wp403");
+    assert_int_equal(fake_transport_push_response(fake, EHEM_OK, 403,
+        "{\"error\":\"forbidden\"}"), 0);
+
+    ehem_ctx *ctx = logged_in_ctx(fake);
+    assert_int_equal(ehem_system_wipeout(ctx), EHEM_ERR_SCOPE_DENIED);
+    assert_int_equal(ehem_last_error(ctx)->http_status, 403);
+
+    const char *tok = NULL;
+    assert_int_equal(ehem_auth_ensure_token(ctx, "system:config", &tok), EHEM_OK);
+    assert_int_equal((int)fake_transport_request_count(fake), 3);
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
+/* -------------------------------------------------------------------------- */
 /* selftest (REQ-SYS-007)                                                     */
 /* -------------------------------------------------------------------------- */
 
@@ -714,6 +806,9 @@ int main(void)
         cmocka_unit_test(test_install_cert_409_in_progress),
         cmocka_unit_test(test_reboot_empty_200_drops_cache),
         cmocka_unit_test(test_reboot_403),
+        cmocka_unit_test(test_wipeout_200_drops_session),
+        cmocka_unit_test(test_wipeout_406_session_intact),
+        cmocka_unit_test(test_wipeout_403),
         /* REQ-SYS-007: selftest. */
         cmocka_unit_test(test_selftest_full_shape),
         cmocka_unit_test(test_selftest_minimal_and_missing),

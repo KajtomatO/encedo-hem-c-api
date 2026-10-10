@@ -3,7 +3,7 @@ id: REQ-SYS-009
 title: Bindings for /api/logger — audit-log signing key, file list, file download
 status: verified
 priority: must
-revision: 1
+revision: 2
 source: ARCHITECTURE.md §11 (M7: logger group); encedo-hem-api-doc logger/key.md, logger/list.md, logger/get.md, logger/delete.md (DELETE not dispatched), discrepancies/DISCREPANCIES-HEM-TEST.md §"log chain verification"; encedo_firmware api_logger.c (fw v1.2.2 — api_get_logger_key outside the USB_MSC_AVAILABLE guard, list/get inside it); approved 2026-07-17
 depends_on: ["REQ-AUTH-002", "REQ-AUTH-003"]
 supersedes: null
@@ -37,8 +37,8 @@ over `GET /api/logger/list[/{offset}]`, and `ehem_logger_get(ctx, id,
   maps to `EHEM_ERR_PROTOCOL`.
 - Scope `logger:get` (prefix) for all three; `logger:del` /
   `DELETE /api/logger/{id}` is NOT bound — the dispatch is commented out
-  in fw v1.2.2 (doc: every request 404s); recorded here, swept at M9 if
-  firmware re-enables it.
+  in fw v1.2.2 (doc: every request 404s); recorded here; parked in
+  milestone MFW (firmware-pending) — re-swept on firmware upgrades.
 - On an EPA device list/get are unrouted (404): the binding maps it as
   NOT_FOUND and the integration tests skip with a note.
 

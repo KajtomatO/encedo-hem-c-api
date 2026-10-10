@@ -4,7 +4,7 @@
 #   cmake -B build-win -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-mingw-w64.cmake
 #
 # NOTE: a *native* MSYS2/MinGW build does NOT need this file — just configure
-# normally inside the "MSYS2 MINGW64" shell (see scripts/install-deps-windows.ps1).
+# normally inside the "MSYS2 UCRT64" shell (see scripts/install-deps-windows.ps1).
 # This file is for cross-building from a Linux host (e.g. package mingw-w64).
 
 set(CMAKE_SYSTEM_NAME Windows)

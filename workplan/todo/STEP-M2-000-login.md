@@ -24,5 +24,11 @@ Encedo Manager (closes §12 risk 2).
 by detailed steps when M2 is decomposed; its REQs (AUTH area) are drafted
 then. `implements` is empty by design.
 
+*Correction (2026-10-06):* the Goal above shows the plan as first written.
+The login KDF is PBKDF2-HMAC-SHA256, which is also what the current Encedo
+Manager uses (`assets/build.js`; encedo-manager `b33c236`); no Argon2 was
+vendored and Argon2 is not supported (user decision 2026-10-05). See
+ARCHITECTURE §12 risk 2.
+
 **Definition of done**
 - [ ] Never completed as-is — cancelled at M2 decomposition and replaced by detailed STEP-M2-0NN files

@@ -74,6 +74,18 @@ if(TARGET hem-tool-core)
   ehem_add_unit_test(test_recover SOURCES test_recover.c)
   target_link_libraries(test_recover PRIVATE hem-tool-core)
 
+  # REQ-TOOL-022: `wipe-device` — typed-hostname confirmation, --wait (M10).
+  ehem_add_unit_test(test_wipe SOURCES test_wipe.c)
+  target_link_libraries(test_wipe PRIVATE hem-tool-core)
+
+  # REQ-TOOL-021: `init-device` — master-secret sources, cfg defaults, exits (M10).
+  ehem_add_unit_test(test_init_tool SOURCES test_init_tool.c)
+  target_link_libraries(test_init_tool PRIVATE hem-tool-core)
+
+  # REQ-TOOL-023: `recovery` — the five diagnoses and their remediations (M10).
+  ehem_add_unit_test(test_recovery SOURCES test_recovery.c)
+  target_link_libraries(test_recovery PRIVATE hem-tool-core)
+
   # REQ-TOOL-016: `ext` pair/list/login + terminal QR (M8).
   ehem_add_unit_test(test_ext_tool SOURCES test_ext_tool.c)
   target_link_libraries(test_ext_tool PRIVATE hem-tool-core)
@@ -126,6 +138,13 @@ ehem_add_unit_test(test_ejwt SOURCES test_ejwt.c)
 # REQ-AUTH-001, REQ-AUTH-002: login sequence + scope-keyed token cache.
 ehem_add_unit_test(test_auth SOURCES test_auth.c)
 
+# REQ-AUTH-012: BIP39 mnemonic → the Manager's master secret (fixtures produced
+# by the Manager's own JavaScript).
+ehem_add_unit_test(test_bip39 SOURCES test_bip39.c)
+
+# REQ-AUTH-011: device initialisation binding via the fake transport (M10).
+ehem_add_unit_test(test_init SOURCES test_init.c)
+
 # REQ-NET-002 + REQ-AUTH-001: public headers must not reference libcurl/wolfSSL.
 add_test(NAME public_headers_dep_free
   COMMAND ${CMAKE_COMMAND}
@@ -150,4 +169,16 @@ add_test(NAME docs_coverage
     -DEHEM_DOCS_FILE=${PROJECT_SOURCE_DIR}/docs/API-GUIDE.md
     -P ${CMAKE_CURRENT_SOURCE_DIR}/check_docs_coverage.cmake)
 set_tests_properties(docs_coverage PROPERTIES LABELS unit)
+
+# REQ-API-009: every string/character literal in the SDK and hem-tool sources
+# is ASCII (a small lexer — comments keep their typography; vendored code is
+# third-party and excluded).
+file(GLOB_RECURSE EHEM_ASCII_SOURCES CONFIGURE_DEPENDS
+  ${PROJECT_SOURCE_DIR}/src/*.c ${PROJECT_SOURCE_DIR}/src/*.h
+  ${PROJECT_SOURCE_DIR}/include/*.h)
+list(FILTER EHEM_ASCII_SOURCES EXCLUDE REGEX "/vendor/")
+add_executable(check_ascii_strings check_ascii_strings.c)
+target_compile_options(check_ascii_strings PRIVATE ${EHEM_WARNING_FLAGS})
+add_test(NAME ascii_strings COMMAND check_ascii_strings ${EHEM_ASCII_SOURCES})
+set_tests_properties(ascii_strings PROPERTIES LABELS unit)
 ehem_add_unit_test(test_logger_storage SOURCES test_logger_storage.c)

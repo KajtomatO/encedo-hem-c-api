@@ -34,12 +34,29 @@ ehem_rc hem_tool_login(ehem_ctx *ctx, const char *passphrase, bool mobile,
     return rc;
 }
 
+int hem_tool_check_auth_class(const hem_command *cmd, bool mobile, FILE *err)
+{
+    if (cmd == NULL || !mobile || cmd->auth != HEM_AUTH_PASSPHRASE_ONLY) {
+        return 0;
+    }
+    fprintf(or_stderr(err),
+            "error: %s%s%s cannot use --mobile - the device accepts it only "
+            "from a passphrase session (token sub=\"U\"%s); a mobile bearer "
+            "carries sub=<authenticator kid>. Pass --passphrase / set "
+            "EHEM_PASSPHRASE\n",
+            cmd->family != NULL ? cmd->family : "",
+            cmd->family != NULL ? " " : "",
+            cmd->name,
+            cmd->section == HEM_SECTION_MANUAL_RECOVERY ? " or \"M\"" : "");
+    return 2;
+}
+
 int hem_tool_auth_exit(ehem_rc rc, FILE *err_in, int fallback)
 {
     FILE *err = or_stderr(err_in);
 
     if (rc == EHEM_ERR_CONFIRM_TIMEOUT) {
-        fprintf(err, "no answer on the phone in time — is an authenticator "
+        fprintf(err, "no answer on the phone in time - is an authenticator "
                      "paired? (hem-tool ext list)\n");
         return HEM_TOOL_EXIT_CONFIRM_TIMEOUT;
     }

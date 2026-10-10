@@ -69,11 +69,8 @@ size_t ehem_b64url_decode(const char *in, size_t in_len,
  * ~60 s tokens and re-login per request (STEP-M2-045). The caller passes
  * `now + lifetime`, which keeps the eJWT itself un-expired at the device.
  *
- * The header is the fixed byte string {"ecdh":"x25519","alg":"HS256","typ":"JWT"}
- * (base64url, no pad). The device validates ONLY the `ecdh` field — `alg` and
- * `typ` are not validation gates (fw reads just `ecdh`; Manager sends a
- * minimal {"ecdh":"x25519"} and both forms pass — DISCREPANCIES-HEM-TEST,
- * recorded at the M9 sweep). Claims are emitted compactly in order
+ * The header is EHEM_EJWT_HEADER (below, base64url, no pad) — both its
+ * `alg` and its `ecdh` field are required by the firmware. Claims are emitted compactly in order
  * jti/aud/exp/iat/iss/scope; the signature is HMAC-SHA256 over
  * "<header>.<payload>". On success *out_ejwt is a freshly allocated,
  * NUL-terminated token — free it with ehem_ejwt_free(). Returns EHEM_ERR_ARG on
@@ -86,7 +83,33 @@ ehem_rc ehem_ejwt_build(const char *jti, const char *spk,
                         int64_t now, int64_t requested_exp,
                         char **out_ejwt);
 
-/* Free a token returned by ehem_ejwt_build. NULL-safe. */
+/* Free a token returned by ehem_ejwt_build / ehem_ejwt_sign. NULL-safe. */
 void ehem_ejwt_free(char *ejwt);
+
+/*
+ * The eJWT header, byte-exact — what login AND init send, and what Encedo
+ * Manager sends: its callers pass {"ecdh":"x25519"}, but jwt_generate_hs256
+ * adds alg and typ before encoding (build.js:1981-1987). The firmware needs
+ * both fields: jwt_decode → jwt_verify_head reads `alg` (libjwt jwt.c:512),
+ * and a header without it is JWT_ALG_INVAL → the request is refused with 401
+ * before any signature check (api_auth.c:424-430 for init); jwt_validate
+ * then demands HS256 (jwt.c:1399). `"ecdh":"x25519"` makes the device key
+ * the HMAC with ECDH(session key, iss) (jwt-wolfssl.c:144-166) — without it
+ * the key is its raw session private key, which no client can know.
+ * (The M10 init binding first shipped the bare {"ecdh":"x25519"} — read off
+ * the Manager's call site, not its function — and every init got 401;
+ * found on the first live init, 2026-10-10.)
+ */
+#define EHEM_EJWT_HEADER "{\"ecdh\":\"x25519\",\"alg\":\"HS256\",\"typ\":\"JWT\"}"
+
+/*
+ * Sign an arbitrary compact JWT (the init JWT, REQ-AUTH-011): `header_json`
+ * and `payload_json` are emitted verbatim as base64url (no pad) segments and
+ * the tag is HMAC-SHA256 over "<header>.<payload>" keyed with `key`
+ * (`key_len` bytes — the ECDH shared secret). Output rules as ehem_ejwt_build;
+ * free with ehem_ejwt_free().
+ */
+ehem_rc ehem_ejwt_sign(const char *header_json, const char *payload_json,
+                       const uint8_t *key, size_t key_len, char **out_jwt);
 
 #endif /* EHEM_EJWT_H */

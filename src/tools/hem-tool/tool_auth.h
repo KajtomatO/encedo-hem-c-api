@@ -28,6 +28,7 @@
 
 #include "ehem/ehem.h"
 #include "ehem/auth.h"
+#include "registry.h"
 
 /* Tool-wide exit codes for the mobile confirmation outcomes. Deliberately
  * ABOVE every per-command exit vocabulary (commands use 0..9). */
@@ -52,5 +53,15 @@ ehem_rc hem_tool_login(ehem_ctx *ctx, const char *passphrase, bool mobile,
  * (the caller has already printed its own diagnostic).
  */
 int hem_tool_auth_exit(ehem_rc rc, FILE *err, int fallback);
+
+/*
+ * The registry's auth class, enforced before any traffic (REQ-TOOL-019 rev 2):
+ * a PASSPHRASE_ONLY command invoked with --mobile is a usage error — the
+ * device accepts those operations only from a passphrase session (token sub
+ * "U", or "M" for config writes; a mobile bearer carries sub=base64(kid)).
+ * Prints the reason to `err` (NULL → stderr) and returns 2; otherwise 0.
+ * `cmd` may be NULL (unknown command → nothing to check, 0).
+ */
+int hem_tool_check_auth_class(const hem_command *cmd, bool mobile, FILE *err);
 
 #endif /* HEM_TOOL_AUTH_H */

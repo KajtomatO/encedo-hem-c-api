@@ -6,6 +6,7 @@ checkout, fw v1.2.2 era) against the SDK surface, field by field.
 
 **Dispositions:** `BOUND` (SDK binding exists), `UNBOUND-DELIBERATE`
 (never planned, with reason), `DEFERRED-M10` (post-1.0 milestone),
+`DEFERRED-BACKLOG` (parked in `BACKLOG.md`, no milestone — 2026-10-07),
 `ABSENT-IN-FW` (documented but not present in firmware v1.2.2).
 Precedence for conflicts is the standing rule (REQUIREMENTS-MANAGEMENT
 §8): real device > Encedo Manager > API doc; live-proven divergences are
@@ -123,7 +124,7 @@ Additional notes (recorded SDK-side; doc gaps, not SDK gaps):
 | Page | Endpoint | Disposition | SDK symbol(s) |
 |---|---|---|---|
 | token.md | `GET/POST /api/auth/token` | BOUND | `ehem_login`/`ehem_logout`/`ehem_login_mobile` (lazy; internal `ehem_auth_ensure_token`) |
-| init.md | `GET/POST /api/auth/init` | UNBOUND-DELIBERATE | — one-shot device personalisation (factory/provisioning act, like `config/provisioning`; re-init requires a wipeout first) |
+| init.md | `GET/POST /api/auth/init` | DEFERRED-M10 | — one-shot device personalisation (re-init requires a wipeout first). Re-dispositioned from UNBOUND-DELIBERATE 2026-08-07 (user decision: the SDK should be able to initialise a wiped device) |
 | ext-init.md | `POST /api/auth/ext/init` | BOUND | `ehem_ext_init` |
 | ext-validate.md | `POST /api/auth/ext/validate` | BOUND | `ehem_ext_validate` |
 | ext-mac.md | `POST /api/auth/ext/mac` | BOUND | `ehem_ext_mac` |
@@ -167,7 +168,7 @@ Field-level notes:
   invalid `cfg` object" as a 400 cause on `POST /api/auth/token` —
   `cfg` is an `/api/auth/init` concept; apparent copy-paste error.
 
-## system/ — 14 pages: 8 bound, 2 deliberately unbound, 4 deferred to M10
+## system/ — 14 pages: 8 bound, 6 parked in BACKLOG.md (2026-10-07)
 
 | Page | Endpoint(s) | Disposition | SDK symbol(s) |
 |---|---|---|---|
@@ -180,12 +181,12 @@ Field-level notes:
 | reboot.md | `GET /api/system/reboot` | BOUND | `ehem_system_reboot` |
 | selftest.md | `GET /api/system/selftest` | BOUND | `ehem_system_selftest` |
 | shutdown.md | `GET /api/system/shutdown` | BOUND | `ehem_system_shutdown` |
-| config-provisioning.md | `POST /api/system/config/provisioning` | UNBOUND-DELIBERATE | — factory-only ATECC cert write (REQ-SYS-011 decision) |
-| diag.md | `GET /api/diag/*` (9 endpoints) | UNBOUND-DELIBERATE | — DIAG-build-only, unauthenticated, destructive (wipe/corrupt/memdump); production builds 404; the SDK must never bind these |
-| upgrade-firmware.md | `POST upload_fw`, `GET check_fw`, `GET install_fw` | DEFERRED-M10 | — |
-| upgrade-ui.md | `POST upload_ui`, `GET check_ui`, `GET install_ui` | DEFERRED-M10 | — |
-| upgrade-bootloader.md | `POST upload_bootldr`, `GET install_bl` (DIAG-only builds) | DEFERRED-M10 | — |
-| upgrade-usbmode.md | `GET /api/system/upgrade/usbmode` | DEFERRED-M10 | — |
+| config-provisioning.md | `POST /api/system/config/provisioning` | DEFERRED-BACKLOG | — factory ATECC cert write. Re-dispositioned from UNBOUND-DELIBERATE 2026-08-07 (user decision: every unimplemented fw feature gets a milestone) |
+| diag.md | `GET /api/diag/*` (9 endpoints) | DEFERRED-BACKLOG | — DIAG-build-only, unauthenticated, destructive (wipe/corrupt/memdump); production builds 404. Re-dispositioned 2026-08-07 (user decision) with a reserved design constraint: NOT in the production SDK — hem-tool-only OR a separate diagnostic SDK (decided at M11 decomposition) |
+| upgrade-firmware.md | `POST upload_fw`, `GET check_fw`, `GET install_fw` | DEFERRED-BACKLOG | — was DEFERRED-M10; parked 2026-10-07 |
+| upgrade-ui.md | `POST upload_ui`, `GET check_ui`, `GET install_ui` | DEFERRED-BACKLOG | — was DEFERRED-M10; parked 2026-10-07 |
+| upgrade-bootloader.md | `POST upload_bootldr`, `GET install_bl` (DIAG-only builds) | DEFERRED-BACKLOG | — was DEFERRED-M10; parked 2026-10-07 |
+| upgrade-usbmode.md | `GET /api/system/upgrade/usbmode` | DEFERRED-BACKLOG | — was DEFERRED-M10; parked 2026-10-07 |
 
 Field-level notes:
 
@@ -196,9 +197,10 @@ Field-level notes:
   UNBOUND-DELIBERATE — no consumer requirement (HEM-SDK-1..9) needs
   device administration; the TLS path exists only because fw v1.2.2
   cannot apply check-in certs itself (REQ-SYS-003/004/013). Recorded at
-  this sweep; a general config/administration binding is an M10
-  candidate if ever needed. POST-response `csr`/`genuine` unparsed
-  (tolerant policy).
+  this sweep. **Update 2026-10-07 (user decision):** the `wipeout` write
+  is M10 scope — DEFERRED-M10, its own REQ drafted at M10 decomposition;
+  the remaining writes (`userkey*`, `gen_csr`, …) are BACKLOG.md
+  candidates. POST-response `csr`/`genuine` unparsed (tolerant policy).
 - **status `tts` — doc type is wrong, SDK right (fw-source-verified at
   this sweep):** firmware emits `tts` as a JSON boolean
   (`cJSON_AddBoolToObject`, api_system.c:92); the doc types it Number.
@@ -240,7 +242,7 @@ Field-level notes:
 | logger/key.md | `GET /api/logger/key` | BOUND | `ehem_logger_key` |
 | logger/list.md | `GET /api/logger/list[/{offset}]` | BOUND | `ehem_logger_list` |
 | logger/get.md | `GET /api/logger/{id}` | BOUND | `ehem_logger_get` |
-| logger/delete.md | `DELETE /api/logger/{id}` | ABSENT-IN-FW | — handler exists but its dispatch is commented out (`/* not available in CC mode */`); every request 404s. Recorded in REQ-SYS-009 + ARCHITECTURE §11; source comment added at this sweep |
+| logger/delete.md | `DELETE /api/logger/{id}` | DEFERRED-MFW | — handler exists but its dispatch is commented out (`/* not available in CC mode */`); every request 404s. Parked in milestone MFW (firmware-pending, user decision 2026-08-07); REQ-SYS-009 hook |
 | storage/unlock.md | `GET /api/storage/unlock` | BOUND | `ehem_storage_unlock` |
 | storage/lock.md | `GET /api/storage/lock` | BOUND | `ehem_storage_lock` |
 
@@ -294,8 +296,10 @@ mapped to where this project records the divergence:
   reconstructed from the tester (REQ-OPS-006/009), empty-success bodies
   (REQ-KEY-004/007, REQ-SYS-004/010), logger-DELETE dead dispatch
   (REQ-SYS-009), exact `keymgmt:use:<kid>` scope truth (REQ-KEY-003 +
-  the OPS REQs), KDF split PBKDF2-vs-Argon2 (REQ-AUTH-001,
-  ARCHITECTURE §12 risk 2), type-string vocabulary (REQ-KEY-005),
+  the OPS REQs), the registries' KDF entry "Argon2 in Manager, PBKDF2 in
+  test suite" (no such split exists — the current Manager derives with
+  PBKDF2 too; corrected 2026-10-06, REQ-AUTH-001, ARCHITECTURE §12
+  risk 2), type-string vocabulary (REQ-KEY-005),
   log-chain verification material (REQ-SYS-009). Not applicable:
   Manager-internal registry noise (scope-string drift, duplicate JS
   keys, missing UI for PQC/ecdh/shutdown/upload_bootldr — the SDK *is*
@@ -313,10 +317,15 @@ mapped to where this project records the divergence:
 
 - **No must-bind gaps for 1.0.** Every documented endpoint is either
   bound with full field coverage, deliberately unbound with a recorded
-  reason (auth/init, config-provisioning, diag/*, general config
-  writes incl. wipeout, logger DELETE, storage /ro//rw variants,
-  search's unauthenticated bypass), or deferred to M10 (the upgrade
-  family). `stream/*` does not exist anywhere in the doc repo.
+  reason (general config writes incl. wipeout, logger DELETE, storage
+  /ro//rw variants, search's unauthenticated bypass), or deferred to a
+  milestone — M10: auth/init (the upgrade family, config-provisioning
+  and diag/* are parked in BACKLOG.md since 2026-10-07; M11 retired);
+  MFW (firmware-pending, one generic
+  bucket, user decision 2026-08-07): everything documented or shipped
+  dormant but missing from the running firmware — logger DELETE,
+  Manager's POST keymgmt/list, system/health, stream/*, x509/*,
+  misc/rnd — re-swept on every firmware upgrade.
 - **Two SDK defects found and fixed** (STEP-M9-015, user decision
   2026-08-06): the version parser hard-required the
   firmware-conditional `blv`; the status parser carried a dead,

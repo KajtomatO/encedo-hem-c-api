@@ -12,9 +12,10 @@
 
         Could NOT find CURL (missing: CURL_LIBRARY CURL_INCLUDE_DIR)
 
-    This helper sidesteps that by running cmake *inside* the MinGW64
-    environment (the "MSYS2 MINGW64" shell), where libcurl/wolfSSL and their
-    pkg-config/CMake package files live. It configures and builds in one step.
+    This helper sidesteps that by running cmake *inside* the MSYS2 MinGW
+    environment (the "MSYS2 UCRT64" shell by default), where libcurl/wolfSSL
+    and their pkg-config/CMake package files live. It configures and builds in
+    one step.
 
     CMake bakes the C compiler into CMakeCache.txt and refuses an in-place
     compiler swap. So if the build directory was previously configured with a
@@ -32,8 +33,10 @@
     MSYS2 install root. Default: C:\msys64.
 
 .PARAMETER Env
-    MinGW environment: mingw64 (x86_64, default) or ucrt64. Must match what
-    install-deps-windows.ps1 populated.
+    MinGW environment: ucrt64 (default; what CI uses) or mingw64 (deprecated
+    by MSYS2). Must match what install-deps-windows.ps1 populated. A build
+    directory configured for the other environment is wiped and reconfigured
+    (its compiler lives under a different root).
 
 .PARAMETER Clean
     Remove the build directory before configuring (force a fresh cache).
@@ -59,8 +62,8 @@ param(
     [ValidateSet('Debug', 'Release', 'RelWithDebInfo', 'MinSizeRel')]
     [string]$BuildType = 'Debug',
     [string]$MsysRoot = 'C:\msys64',
-    [ValidateSet('mingw64', 'ucrt64')]
-    [string]$Env = 'mingw64',
+    [ValidateSet('ucrt64', 'mingw64')]
+    [string]$Env = 'ucrt64',
     [switch]$Clean,
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$CMakeArgs = @()
@@ -115,7 +118,7 @@ if ($Clean -and (Test-Path $buildAbs)) {
     Write-Step "Clean: removing $buildAbs"
     Remove-Item -Recurse -Force $buildAbs
 } elseif (Test-Path $cache) {
-    # e.g. CMAKE_C_COMPILER:FILEPATH=C:/msys64/mingw64/bin/gcc.exe
+    # e.g. CMAKE_C_COMPILER:FILEPATH=C:/msys64/ucrt64/bin/gcc.exe
     $line = Select-String -Path $cache -Pattern '^CMAKE_C_COMPILER:' -SimpleMatch:$false |
             Select-Object -First 1
     if ($line) {

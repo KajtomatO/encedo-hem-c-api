@@ -21,6 +21,7 @@
 
 #define EHEM_X25519_KEYSIZE 32   /* X25519 scalar / point size */
 #define EHEM_SHA256_SIZE    32   /* SHA-256 / HMAC-SHA256 output size */
+#define EHEM_SHA512_SIZE    64   /* SHA-512 / PBKDF2-HMAC-SHA512 (BIP39 seed) */
 
 /*
  * PBKDF2-HMAC-SHA256. Derives `out_len` bytes into `out` from the passphrase
@@ -75,6 +76,32 @@ ehem_rc ehem_x25519_shared(const uint8_t priv[EHEM_X25519_KEYSIZE],
  * NULL). Not a constant-time compare — purely a scrub.
  */
 void ehem_zeroize(void *p, size_t n);
+
+/*
+ * PBKDF2-HMAC-SHA512 — the BIP39 seed step (REQ-AUTH-012: 2048 rounds, salt
+ * "mnemonic", 64-byte output). Parameters are the caller's so the primitive
+ * stays vector-testable. Returns EHEM_ERR_ARG on a NULL buffer, zero length,
+ * or zero iterations.
+ */
+ehem_rc ehem_kdf_pbkdf2_sha512(const uint8_t *passwd, size_t passwd_len,
+                               const uint8_t *salt, size_t salt_len,
+                               uint32_t iterations,
+                               uint8_t *out, size_t out_len);
+
+/*
+ * SHA-256 digest of `in` (the BIP39 checksum, REQ-AUTH-012). `in` may be NULL
+ * only when in_len is 0. Returns EHEM_ERR_ARG on a NULL out.
+ */
+ehem_rc ehem_sha256(const uint8_t *in, size_t in_len,
+                    uint8_t out[EHEM_SHA256_SIZE]);
+
+/*
+ * `n` cryptographically strong random bytes from the backend DRBG (wolfCrypt
+ * RNG, OS-seeded). Callers run ehem_global_init() first — the RNG mutex needs
+ * wolfCrypt_Init on Windows; idempotent. Returns EHEM_ERR_ARG on NULL / 0,
+ * EHEM_ERR_PROTOCOL if the DRBG cannot be seeded.
+ */
+ehem_rc ehem_random_bytes(uint8_t *out, size_t n);
 
 /* --------------------------------------------------------------------------
  * X.509 leaf inspection — REQ-SYS-006 harvest / REQ-TOOL-003 skip-if-current.

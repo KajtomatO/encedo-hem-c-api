@@ -1,0 +1,162 @@
+# Release — hem-tool binaries for Linux and Windows that link libcurl STATICALLY
+# and wolfSSL DYNAMICALLY, plus the shared wolfSSL as its own asset
+# (REQ-BUILD-005). implements: REQ-BUILD-005
+#
+# Every push to `main` (and a manual run on any ref) builds the archives and
+# uploads them as workflow artifacts; a version tag `v*` additionally publishes
+# a GitHub Release with the archives and SHA256SUMS. The tag must be
+# v<project version> (a release) or v<project version>-rc<N> (a pre-release) —
+# scripts/release/package.sh refuses anything else — and annotated: its
+# message becomes the release text (scripts/release/release-notes.sh).
+#
+# No published package bundles wolfSSL statically (ARCHITECTURE.md §1, user
+# decision 2026-10-09): scripts/release/build-deps.sh builds the pinned wolfSSL
+# as a SHARED library and the pinned libcurl (wolfSSL TLS backend, HTTP/HTTPS
+# only) as a static one — cached on the script's own hash, so any recipe change
+# rebuilds; the project is built Release against them, the unit suite runs on
+# that build, the link mode is asserted (wolfSSL dynamic, nothing else),
+# scripts/release/package-wolfssl.sh packages the library with its
+# GPLv2-or-later COPYING, build configuration and corresponding source, and the
+# two archives are smoke-tested side by side. The Linux job also proves the
+# REQ-NET-005 expired-certificate classifier under the wolfSSL backend against a
+# local expired-cert endpoint (scripts/release/check-expired-classifier.sh).
+# ci.yml (REQ-BUILD-002) is untouched by this workflow.
+
+name: Release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write     # the Release + its assets on tags
+
+jobs:
+  linux:
+    name: Linux x86_64 (dynamic wolfSSL)
+    runs-on: ubuntu-22.04      # the oldest LTS runner — glibc reach for the binary
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build tools
+        run: |
+          sudo apt-get update
+          # python3-cryptography (3.4.8 here) for scripts/release/make-expired-cert.py
+          sudo apt-get install -y --no-install-recommends build-essential cmake ninja-build pkg-config libcmocka-dev python3-cryptography zip
+
+      - name: Cache deps (pinned shared wolfSSL + static libcurl)
+        id: deps
+        uses: actions/cache@v5
+        with:
+          path: deps
+          key: deps-${{ runner.os }}-${{ hashFiles('scripts/release/build-deps.sh') }}
+
+      - name: Build shared wolfSSL + static libcurl
+        run: scripts/release/build-deps.sh deps
+
+      - name: Build, test, package (hem-tool + wolfSSL asset), smoke-test
+        env:
+          RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+        run: scripts/release/package.sh deps linux dist
+
+      - name: Prove the expired-certificate classifier (wolfSSL backend)
+        run: scripts/release/check-expired-classifier.sh build-release/hem-tool 8443
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: release-linux-x86_64
+          path: |
+            dist/*.tar.gz
+            dist/SHA256SUMS
+          if-no-files-found: error
+
+  windows:
+    name: Windows x86_64 (dynamic wolfSSL, MinGW UCRT64)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v5
+
+      # UCRT64 (user decision 2026-10-10; MINGW64 is deprecated): the binaries
+      # use the Universal C Runtime, a Windows component from Windows 10 /
+      # Server 2016 on. No MSYS2 wolfssl/curl — both come pinned from source.
+      - name: Set up MSYS2 / MinGW-w64 (UCRT64)
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            zip unzip git
+          pacboy: >-
+            toolchain:p
+            cmake:p
+            ninja:p
+            pkgconf:p
+            cmocka:p
+
+      # The C runtime is part of the key: a prefix built against another CRT
+      # must never be restored into this one.
+      - name: Cache deps (pinned shared wolfSSL + static libcurl)
+        id: deps
+        uses: actions/cache@v5
+        with:
+          path: deps
+          key: deps-${{ runner.os }}-ucrt64-${{ hashFiles('scripts/release/build-deps.sh') }}
+
+      - name: Build shared wolfSSL + static libcurl
+        run: scripts/release/build-deps.sh deps
+
+      - name: Build, test, package (hem-tool + wolfSSL asset), smoke-test
+        env:
+          RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+        run: scripts/release/package.sh deps windows dist
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: release-windows-x86_64
+          path: |
+            dist/*.zip
+            dist/SHA256SUMS
+          if-no-files-found: error
+
+  release:
+    name: GitHub Release (tags)
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5      # for scripts/release/release-notes.sh
+
+      - uses: actions/download-artifact@v7
+        with:
+          path: artifacts
+
+      - name: Assemble assets + one SHA256SUMS
+        run: |
+          mkdir -p release
+          cp artifacts/release-linux-x86_64/*.tar.gz artifacts/release-windows-x86_64/*.zip release/
+          cat artifacts/release-linux-x86_64/SHA256SUMS artifacts/release-windows-x86_64/SHA256SUMS > release/SHA256SUMS
+          test -z "$(awk '{print $2}' release/SHA256SUMS | sort | uniq -d)"   # no asset name twice
+          ( cd release && sha256sum -c SHA256SUMS )
+          ls -l release
+
+      # The annotated tag's message + the checksums; a lightweight tag fails
+      # here, before anything is published.
+      - name: Release notes (tag annotation + SHA256SUMS)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/release/release-notes.sh "${{ github.repository }}" "${{ github.ref_name }}" release/SHA256SUMS > release-notes.md
+
+      # v<version>-rc<N> → a GitHub PRE-release (package.sh accepted only that
+      # suffix), proving the tag path before the real v<version>.
+      - name: Publish
+        uses: softprops/action-gh-release@v3
+        with:
+          files: release/*
+          prerelease: ${{ contains(github.ref_name, '-rc') }}
+          generate_release_notes: false
+          body_path: ${{ github.workspace }}/release-notes.md

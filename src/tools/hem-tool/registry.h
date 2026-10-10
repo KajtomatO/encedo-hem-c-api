@@ -28,6 +28,15 @@ typedef enum {
     HEM_AUTH_PASSPHRASE_ONLY
 } hem_auth_class;
 
+/* Where a command is listed in the top-level help (REQ-TOOL-019 rev 2):
+ * MAIN = under its auth group; MANUAL_RECOVERY = in the trailing "manual
+ * recovery" section (the building blocks `recovery` drives: cert-install,
+ * tls-recover). Per-command help still shows the auth class. */
+typedef enum {
+    HEM_SECTION_MAIN = 0,
+    HEM_SECTION_MANUAL_RECOVERY
+} hem_cmd_section;
+
 typedef struct {
     const char *flag;   /* spelled with its argument, e.g. "--label LABEL" */
     const char *help;   /* one line */
@@ -42,6 +51,7 @@ typedef struct {
     hem_auth_class auth;
     const hem_cmd_option *options;   /* this command's own options */
     size_t option_count;
+    hem_cmd_section section;         /* listing section; zero = MAIN */
 } hem_command;
 
 /* The full command table (REQ-TOOL-019/020 completeness walks). */

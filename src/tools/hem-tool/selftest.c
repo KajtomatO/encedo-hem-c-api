@@ -59,7 +59,7 @@ int hem_selftest_run(ehem_ctx *ctx, const hem_selftest_opts *o)
     }
 
     fprintf(err, "note: selftest re-runs the device's test battery on every "
-                 "call — avoid tight polling\n");
+                 "call - avoid tight polling\n");
     rc = ehem_system_selftest(ctx, &info);
     if (rc != EHEM_OK) {
         sreport(err, ctx, rc, "selftest");

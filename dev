@@ -291,12 +291,16 @@ cmd_install_dependencies() {
     esac
   done
 
-  # MSYS2 / MinGW (pacman): install the mingw-w64 toolset CI pins.
+  # MSYS2 / MinGW (pacman): install the mingw-w64 toolset CI pins. The package
+  # prefix follows the shell's environment (MINGW_PACKAGE_PREFIX, e.g.
+  # mingw-w64-ucrt-x86_64 in UCRT64 — the environment CI uses since 2026-10-10).
   if [[ -n "${MSYSTEM:-}" ]] || [[ "$(uname -s 2>/dev/null || true)" == MINGW* || "$(uname -s 2>/dev/null || true)" == MSYS* ]]; then
     command -v pacman >/dev/null 2>&1 || die "MSYS2 detected but pacman not found"
+    local p="${MINGW_PACKAGE_PREFIX:-}"
+    [[ -n "$p" ]] || die "MINGW_PACKAGE_PREFIX is unset — run this from the \"MSYS2 UCRT64\" shell, not the plain MSYS one"
     local pkgs=(
-      mingw-w64-x86_64-toolchain mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja
-      mingw-w64-x86_64-pkgconf mingw-w64-x86_64-curl mingw-w64-x86_64-cmocka
+      "$p-toolchain" "$p-cmake" "$p-ninja"
+      "$p-pkgconf" "$p-curl" "$p-cmocka" "$p-wolfssl"
     )
     log "MSYS2/pacman packages: ${pkgs[*]}"
     if [[ $yes -eq 1 ]]; then
