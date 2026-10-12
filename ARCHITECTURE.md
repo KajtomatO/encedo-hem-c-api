@@ -124,9 +124,11 @@ the context.
   decision 2026-10-09; licensing — wolfSSL is GPLv2-or-later/commercial):
   published hem-tool and library packages link wolfSSL dynamically, and the
   shared wolfSSL ships as a separate asset with its license text, its build
-  configuration and the corresponding source; static packages, when they
-  come, use a different library (M12). libcurl (permissive curl license)
-  may be compiled in.
+  configuration and the corresponding source; static packages use a
+  different library — **OpenSSL 3.x** (user decision 2026-10-12, M12;
+  Apache-2.0), selected by a build-time crypto backend switch with
+  wolfSSL the default. libcurl (permissive curl license) may be compiled
+  in.
 - **PBKDF2-HMAC-SHA256 as the login KDF, per Encedo Manager** (user
   decision 2026-07-15: Encedo Manager is the authoritative auth-flow
   reference; corrected 2026-10-06) — 600 000 iterations, 32-byte output,
@@ -707,69 +709,150 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   in [BACKLOG.md](BACKLOG.md) together with the reserved design
   constraint (diag support must not enter the production SDK). The
   number is not reused.
-- **M12 — build variants & multi-package releases** *(early draft, user
-  request 2026-10-09; NOT decomposed — its open questions are deferred by
-  the user; placeholder STEP-M12-000)*. Today both SDK variants are always
-  built, hem-tool always links the static SDK, and third-party
-  dependencies link however pkg-config / FindCURL resolve them — there is
-  no switch:
-  - **Link-mode switches** — CMake options choosing which SDK variant(s)
-    to build, whether hem-tool links the SDK statically or dynamically,
-    and whether third-party dependencies (libcurl, the crypto/TLS
-    library) are linked statically or dynamically; candidate names
-    `EHEM_BUILD_SHARED` / `EHEM_BUILD_STATIC`, `EHEM_TOOL_LINK`,
-    `EHEM_DEPS_LINK`, settled at decomposition.
-  - **Crypto/TLS backend switch** — `EHEM_CRYPTO_BACKEND=wolfssl|<tbd>`;
-    wolfSSL stays the default; the alternative library is a pending user
-    decision; static package variants use it, never wolfSSL (§1).
-    Touchpoints: `src/crypto_shim.c` (the only wolfCrypt includer),
-    `ehem_global_init` (`wolfCrypt_Init`), the `transport_curl.c`
-    expired-cert texts, the libcurl TLS backend in
-    `scripts/release/build-deps.sh`, the `public_headers_dep_free` gate.
-  - **Static-wolfSSL warning** — configuring a build whose wolfSSL
-    resolves to a static archive emits a CMake `WARNING` naming the
-    licensing consequence (§12 risk 1); the release scripts refuse to
-    package such a binary (the M10 link-mode assertion stays).
-  - **Multi-variant GitHub release** — {SDK library package, hem-tool} ×
-    {dynamic, static} × {linux-x86_64, windows-x86_64, …}: library
-    packages = headers + `libencedo-hem.{so,a}` / `.dll` + import lib +
-    the CMake package config (fix `cmake/encedo-hem-config.cmake.in`,
-    which lacks the wolfSSL `find_dependency` the static target's link
-    interface needs; decide the pkg-config `.pc` file promised in §1 but
-    declared not shipped in REQ-API-008) + notices; dynamic variants reuse
-    the M10 wolfSSL companion asset; static variants ship only once the
-    alternative backend exists; plus a **full-dynamic hem-tool** variant —
-    libcurl dynamic as well (user note 2026-10-09; the M10 release keeps
-    libcurl static).
-  - **wolfSSL library check + self-test** *(user decision 2026-10-10:
-    M12, not M10)* — at `ehem_global_init` the SDK refuses a wolfSSL
-    other than the one it was built against: a version check (runtime
-    vs compile-time) plus a known-answer self-test of the wolfCrypt
-    structs the SDK allocates itself (run inside guard-banded buffers),
-    which also catches a same-version library built with other options.
-    Found 2026-10-10: the rc4 Linux hem-tool, run without the companion
-    `libwolfssl.so.42` beside it, loaded the host's Ubuntu wolfSSL 5.6.6
-    (same soname) and aborted with "stack smashing detected" (Hmac 784
-    bytes in the 5.7.2 release build vs 896 in 5.6.6; DecodedCert 1528
-    vs 2576). Until then only the companion library — or one with the
-    same soname AND build configuration, as the archive README says — is
-    supported.
-  - **Key types in hem-tool** *(user request 2026-10-10)* —
-    `hem-tool keys gen -h` lists every key type the tool supports (today
-    it shows three examples and says "the device validates the type"),
-    and a separate command lists the types and explains each one: what
-    it can be used for (signing, ECDH, encryption, ...) and its defaults
-    such as the NIST-P/K `--mode`.
-  - **NOTE — "initialisation creator"** *(user decision 2026-10-10,
-    moved into M12 the same day)*: hand-hold the user through the device
-    initialisation process. A note only — not designed yet: no scope,
-    requirements or steps until the user starts it.
-  - *Open questions (deferred):* the alternative library; whether any
-    static variant ships before that backend lands; the `.pc` file; macOS
-    and MSVC; the asset naming scheme; whether `ci.yml` or `release.yml`
-    carries the variant matrix. **Gate (draft):** every variant built in
-    CI with its link mode asserted and the unit suite green; attended
-    `hem-tool status` per variant.
+- **M12 — build variants, multi-package releases & hem-tool UX**
+  *(early draft 2026-10-09; **planned 2026-10-12** — the user settled the
+  scope and the questions deferred in the draft at M12 planning; NOT yet
+  decomposed: no requirements, no steps; placeholder STEP-M12-000)*. One
+  milestone, one release — **1.2.0** (additive: a new error code, CMake
+  options, hem-tool commands; the public ABI otherwise unchanged). Today
+  both SDK variants are always built, hem-tool always links the static
+  SDK, and third-party dependencies link however pkg-config / FindCURL
+  resolve them — there is no switch; and the 1.1.0 release hem-tool
+  crashes on a foreign `libwolfssl` (KNOWN-ISSUES.md).
+  - **A. Foreign-library crash & diagnostics**
+    - **wolfSSL library check + self-test** *(user decision 2026-10-10:
+      M12, not M10)* — at `ehem_global_init` the SDK refuses a wolfSSL
+      other than the one it was built against: an exact version check
+      (runtime `wolfSSL_lib_version_hex()` vs compile-time
+      `LIBWOLFSSL_VERSION_HEX`) plus a known-answer self-test of every
+      wolfCrypt struct the SDK allocates itself — `Hmac`, `WC_RNG`,
+      `DecodedCert` (whose fields it also reads), `Aes`, `ed25519_key`,
+      `ed448_key` — run inside guard-banded buffers, which also catches
+      a same-version library built with other options. The refusal is a
+      distinct error (recommended: a new append-only `ehem_rc` value).
+      Found 2026-10-10: the rc4 Linux hem-tool, run without the
+      companion `libwolfssl.so.42` beside it, loaded the host's Ubuntu
+      wolfSSL 5.6.6 (same soname) and aborted with "stack smashing
+      detected" (Hmac 784 bytes in the 5.7.2 release build vs 896 in
+      5.6.6; DecodedCert 1528 vs 2576). Until then only the companion
+      library — or one with the same soname AND build configuration, as
+      the archive README says — is supported.
+    - **No masked init failure** — today a failed implicit global init
+      inside the default transport factory reaches the caller as
+      `EHEM_ERR_NOMEM` from `ehem_ctx_create`; the real cause is
+      reported instead.
+    - **hem-tool refuses up front** — hem-tool calls `ehem_global_init`
+      explicitly at startup (today it calls only the cleanup) and exits
+      with a clear message and an exit code of its own.
+    - **`hem-tool --version`** *(user decision 2026-10-12)* — the SDK
+      version, the wolfSSL version compiled against and the one loaded,
+      and the libcurl version (today `--version` is an unknown option).
+    - **Friendly missing-DLL message on Windows** *(BACKLOG item 5,
+      moved in by user decision 2026-10-12)* — `libwolfssl.dll` is loaded
+      on demand (a delay-load import; the MinGW mechanism is proven at
+      decomposition), so hem-tool says what is missing and where to put
+      it instead of Windows failing with 0xC0000135 before any of its
+      code runs.
+    - **Expired-cert classifier fix** *(user decision 2026-10-12)* — the
+      REQ-NET-005 classifier (`src/transport_curl.c`) also accepts
+      wolfSSL `-150`, which is `ASN_BEFORE_DATE_E` (certificate not yet
+      valid) in 5.6.6 and 5.7.2; "expired" is `-151`
+      (`ASN_AFTER_DATE_E`). `-150` is dropped, with a test.
+  - **B. Build system**
+    - **Link-mode switches** — CMake options choosing which SDK
+      variant(s) to build, whether hem-tool links the SDK statically or
+      dynamically, and whether third-party dependencies (libcurl, the
+      crypto/TLS library) are linked statically or dynamically;
+      candidate names `EHEM_BUILD_SHARED` / `EHEM_BUILD_STATIC`,
+      `EHEM_TOOL_LINK`, `EHEM_DEPS_LINK`, settled at decomposition.
+    - **Static-wolfSSL warning** — configuring a build whose wolfSSL
+      resolves to a static archive emits a CMake `WARNING` naming the
+      licensing consequence (§12 risk 1); the release scripts refuse to
+      package such a binary (the M10 link-mode assertion stays).
+    - **CMake package config fix** — `cmake/encedo-hem-config.cmake.in`
+      declares only `find_dependency(CURL)`, so the exported static
+      target's crypto link interface cannot resolve in a consumer; the
+      config follows the selected backend.
+    - **Windows static consumers** — `include/ehem/ehem.h` declares the
+      API `dllimport` on Windows unless the shared library is being
+      built (MinGW tolerates it); the static target carries a define
+      (e.g. `EHEM_STATIC`) as a usage requirement so static consumers
+      get plain declarations.
+    - **pkg-config file** *(user decision 2026-10-12)* —
+      `encedo-hem.pc` is generated and installed (`Requires.private`:
+      libcurl and the selected crypto library), honouring the §1 name;
+      this reverses REQ-API-008's "no `.pc` file is shipped" (§6.2 at
+      decomposition).
+  - **C. Library packages & the release matrix** — on top of M10's
+    REQ-BUILD-005 release:
+    - **SDK library packages** for linux-x86_64 and windows-x86_64:
+      headers, `libencedo-hem` shared and static (+ the import library),
+      the CMake package config, the `.pc` file and the notices; the
+      wolfSSL flavour reuses the M10 wolfSSL companion asset.
+    - **Static hem-tool** — one file with no companion library, built
+      on the OpenSSL backend (D), for Linux and Windows. On Linux
+      "static" is expected to mean every third-party library static and
+      glibc dynamic (a static glibc breaks `getaddrinfo` / NSS) —
+      settled at decomposition.
+    - **Static SDK library package** — the library package flavour
+      built on the OpenSSL backend.
+    - Asset names: today's `hem-tool-<label>-<os>-x86_64` stays; new
+      variants get a suffix (scheme fixed at decomposition). `ci.yml`
+      gains legs that exercise the switches and both backends (unit
+      suite on every push); `release.yml` builds the published variants.
+    - *Dropped (user decision 2026-10-12):* the full-dynamic hem-tool
+      (libcurl dynamic as well — user note 2026-10-09).
+  - **D. OpenSSL backend** *(user decision 2026-10-12: OpenSSL 3.x is
+    the alternative library — Apache-2.0, so it may be linked
+    statically; every primitive the SDK needs, Ed25519/Ed448 included;
+    libcurl's main TLS backend; opaque heap objects, so the struct-size
+    hazard of A cannot occur)* — `EHEM_CRYPTO_BACKEND=wolfssl|openssl`,
+    wolfSSL the default; static packages use OpenSSL, never wolfSSL
+    (§1). `src/crypto_shim.c` is split per backend behind the unchanged
+    `src/crypto_shim.h`. The production SDK computes only
+    PBKDF2-HMAC-SHA256/-SHA512, HMAC-SHA256, SHA-256, X25519, the X.509
+    leaf parse and random bytes locally; the ECDSA / Ed25519 / Ed448
+    verify and AES-CBC shim functions serve the tests and the simulated
+    authenticator only — OpenSSL covers all of them, so the unit suite
+    runs unchanged on both backends. libcurl uses OpenSSL as its TLS
+    backend in the static builds (pinned source in
+    `scripts/release/build-deps.sh`), and the REQ-NET-005 classifier is
+    proven under it too. Other touchpoints: `ehem_global_init`
+    (`wolfCrypt_Init`), the `public_headers_dep_free` gate (extended to
+    OpenSSL identifiers).
+  - **E. hem-tool UX**
+    - **Key types** *(user request 2026-10-10)* — `hem-tool keys gen -h`
+      lists every key type the device creates (the 23 of REQ-TEST-004;
+      today it shows three examples and says "the device validates the
+      type"), and a separate command (`keys types`, name settled at
+      decomposition) explains each one: what it can be used for
+      (signing, ECDH, encryption and wrapping, HMAC, ML-KEM, ML-DSA) and
+      its defaults such as the NIST-P/K `--mode`. One table in
+      hem-tool-core feeds both, checked against `ehem_key_type_parse`
+      by a unit test.
+    - **Initialisation wizard** *(note 2026-10-10; shape decided by the
+      user 2026-10-12)* — a separate command (name settled at
+      decomposition, e.g. `init-wizard`); `init-device` stays purely
+      scripted. It explains and prompts for every field with its
+      default, takes the passphrase hidden and twice, generates the 24
+      words and confirms the backup by having a few of them re-typed,
+      shows a summary behind a typed confirmation, then runs the
+      existing init flow including the reboot. Needs a shared no-echo
+      prompt helper (termios / `SetConsoleMode`), new to hem-tool. The
+      top-level help page is capped at 45 lines (43 used).
+  - *Out of scope (user decision 2026-10-12):* macOS and MSVC builds —
+    BACKLOG.md candidates.
+  - **Gate (draft):** every variant built in CI with its link mode
+    asserted and the unit suite green on both backends; attended
+    `hem-tool status` per published variant; the foreign-library refusal
+    demonstrated (the release hem-tool against the host's wolfSSL 5.6.6
+    refuses instead of crashing); an attended wizard run; the docs
+    checklist (REQUIREMENTS-MANAGEMENT.md §5.3).
+  - *For the decomposition:* suggested order A and E first (independent),
+    then B, then D (needs B), then C (needs A, B, D), then the gate.
+    Expected §6.2 runs: REQ-API-008 (`.pc`), REQ-API-003 (new error
+    code), REQ-NET-005 (`-150`), REQ-BUILD-005 (variants, asset names),
+    REQ-TOOL-009 (`keys gen` help).
 - **MFW — firmware-pending** *(created by user decision 2026-08-07: one
   generic future milestone for every feature that is documented — or
   shipped dormant — but MISSING from the running firmware; nothing here
@@ -809,10 +892,11 @@ not in a milestone (user decision 2026-10-07).
    dynamically and the shared wolfSSL is published as a separate asset
    with its `COPYING`, its exact build configuration and the corresponding
    source tarball; the hem-tool archive carries only MIT/permissive
-   notices. Static packages, when wanted, use a different library (M12).
+   notices. Static packages use a different library: **OpenSSL 3.x**
+   (Apache-2.0; user decision 2026-10-12 at M12 planning, §11).
    *Still open:* encedo-pkcs11's own shipping shape inherits the same
-   dynamic-link position; the alternative static-build library is an M12
-   decision. REQ-BUILD-005 rev 2 was re-approved on 2026-10-09.
+   dynamic-link position. REQ-BUILD-005 rev 2 was re-approved on
+   2026-10-09.
 2. **Login KDF — CLOSED (2026-10-06).** Was "Login-KDF discrepancy between
    official clients" (2026-07-16, itself superseding "Argon2 parameters
    not pinned"). There is no discrepancy: the current Encedo Manager

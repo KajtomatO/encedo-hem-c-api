@@ -49,6 +49,9 @@ either way.
 
 ### 5. Friendly message when `libwolfssl.dll` is missing (Windows)
 
+**Moved to M12** (user decision 2026-10-12, ARCHITECTURE.md §11 M12
+part A); kept here, with its number, for provenance.
+
 Added by user decision 2026-10-10, from the first Windows test of the
 release binary. hem-tool links wolfSSL dynamically (REQ-BUILD-005), and
 today Windows refuses to start `hem-tool.exe` without `libwolfssl.dll`
@@ -66,6 +69,11 @@ missing and where to put it.
   `docs/COVERAGE.md`): no HEM-SDK-1..9 consumer needs them. Listed here
   only so the "candidate if ever wanted" notes have a target. (`wipeout`
   itself became M10 scope by user decision 2026-10-07.)
+- macOS builds (arm64 / x86_64) — kept out of M12 (user decision
+  2026-10-12): no consumer needs them yet.
+- An MSVC-ABI Windows library package — kept out of M12 (user decision
+  2026-10-12); ARCHITECTURE.md §1 adds MSVC when a consumer needs
+  MSVC-ABI artifacts.
 
 ## Provenance
 

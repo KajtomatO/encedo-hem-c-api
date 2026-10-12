@@ -359,9 +359,14 @@ only with the same soname AND build configuration (`BUILD-CONFIG.txt`).
 
 ### Plan
 
-M12 (ARCHITECTURE §11): `ehem_global_init` refuses a wolfSSL other than
-the one the SDK was built against — a version check plus a known-answer
-self-test of the SDK's own wolfCrypt structs.
+M12 (ARCHITECTURE §11, planned 2026-10-12): `ehem_global_init` refuses a
+wolfSSL other than the one the SDK was built against — a version check
+plus a known-answer self-test of the SDK's own wolfCrypt structs.
+hem-tool runs that check at startup and exits with a clear message
+instead of crashing, `hem-tool --version` shows the wolfSSL version it
+was built against and the one it loaded, and on Windows a missing
+`libwolfssl.dll` gets a message of its own. The static hem-tool (M12,
+OpenSSL backend) has no companion library at all.
 
 ## OPEN — A wipe does not always remove the TLS material (fw v1.2.2)
 
