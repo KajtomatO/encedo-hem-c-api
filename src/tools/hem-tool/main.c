@@ -58,6 +58,13 @@
 
 #define MAX_LABEL_PREFIXES 32
 
+#ifdef HEM_TOOL_DELAYLOAD
+/* Windows release build (delayload_win.c, REQ-TOOL-026): while set, a missing
+ * libwolfssl.dll reads "not found" in the --version report instead of ending
+ * the run. */
+void hem_tool_delayload_tolerate(int on);
+#endif
+
 typedef struct {
     const char *url;
     const char *cacert;
@@ -1220,6 +1227,9 @@ int main(int argc, char **argv)
             usage(stderr);
             return 2;
         }
+#ifdef HEM_TOOL_DELAYLOAD
+        hem_tool_delayload_tolerate(1);
+#endif
         hem_tool_print_version(stdout);
         return 0;
     }

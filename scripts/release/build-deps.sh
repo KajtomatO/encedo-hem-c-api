@@ -2,9 +2,11 @@
 #
 # build-deps.sh — build PINNED wolfSSL as a SHARED library and PINNED libcurl as
 # a STATIC library into a prefix, for the hem-tool release binaries
-# (REQ-BUILD-005).
+# (REQ-BUILD-005). On Windows it also makes the delay-load import library of
+# libwolfssl.dll (lib/libwolfssl.delay.a) that the release hem-tool links, so a
+# missing DLL is reported by hem-tool itself (REQ-TOOL-026).
 #
-# implements: REQ-BUILD-005
+# implements: REQ-BUILD-005, REQ-TOOL-026 (the delay-load import library)
 #
 #   scripts/release/build-deps.sh <prefix>
 #
@@ -35,7 +37,9 @@ WOLFSSL_SHA256="${WOLFSSL_SHA256:-0f2ed82e345b833242705bbc4b08a2a2037a33f7bf9c61
 CURL_VERSION="${CURL_VERSION:-8.10.1}"          # pinned — bump deliberately, WITH its sha256
 CURL_SHA256="${CURL_SHA256:-d15ebab765d793e2e96db090f0e172d127859d78ca6f6391d7eafecfd894bbc0}"
 WORK="${WORK:-$PREFIX-src}"
-STAMP="wolfssl-${WOLFSSL_VERSION}-shared+curl-${CURL_VERSION}-static"
+# The recipe number changes whenever a cached prefix must not survive a recipe
+# change (r2: the Windows delay-load import library, REQ-TOOL-026).
+STAMP="wolfssl-${WOLFSSL_VERSION}-shared+curl-${CURL_VERSION}-static+r2"
 
 mkdir -p "$PREFIX" "$WORK"
 PREFIX="$(cd "$PREFIX" && pwd)"
@@ -90,8 +94,9 @@ case "$(uname -s)" in
   *)
     # MinGW: wolfSSL links Threads::Threads (= libwinpthread) and gcc's runtime;
     # fold both INTO the DLL so the published asset depends on Windows system
-    # DLLs only (both runtimes are permissively licensed).
-    WOLFSSL_LDFLAGS=(-DCMAKE_SHARED_LINKER_FLAGS=-static)
+    # DLLs only (both runtimes are permissively licensed). --output-def writes
+    # the DLL's export list, the input of the delay-load import library below.
+    WOLFSSL_LDFLAGS=("-DCMAKE_SHARED_LINKER_FLAGS=-static -Wl,--output-def,$WORK/libwolfssl.def")
     ;;
 esac
 WOLFSSL_ARGS=(-DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PREFIX"
@@ -115,6 +120,23 @@ cmake -S "wolfssl-${WOLFSSL_VERSION}-stable" -B wolfssl-build "${GEN[@]}" "${WOL
 cmake --build wolfssl-build > make-wolfssl.log 2>&1 || { tail -40 make-wolfssl.log; exit 1; }
 cmake --install wolfssl-build > /dev/null
 cp "wolfssl-${WOLFSSL_VERSION}-stable/COPYING" "$PREFIX/COPYING.wolfssl"
+case "$(uname -s)" in
+  Linux*) ;;
+  *)
+    # REQ-TOOL-026: the delay-load import library — hem-tool links it instead of
+    # libwolfssl.dll.a (CMake EHEM_WOLFSSL_DELAYLOAD_LIB), so the DLL is loaded
+    # at the first wolfSSL call and a missing one reaches hem-tool's own
+    # failure hook. The .def comes from the link above; gendef (mingw-w64
+    # tools) recovers it from the DLL if a linker ever stops writing it.
+    if [ ! -s "$WORK/libwolfssl.def" ]; then
+      command -v gendef > /dev/null 2>&1 \
+        || { echo "no libwolfssl.def from the link and no gendef to recover it"; exit 1; }
+      ( cd "$WORK" && gendef - "$PREFIX/bin/libwolfssl.dll" > libwolfssl.def )
+    fi
+    dlltool --input-def "$WORK/libwolfssl.def" --dllname libwolfssl.dll \
+            --output-delaylib "$PREFIX/lib/libwolfssl.delay.a"
+    ;;
+esac
 
 # --- libcurl (STATIC, wolfSSL backend) ---------------------------------------
 cd "$WORK"
@@ -163,7 +185,8 @@ case "$(uname -s)" in
     readelf -d "$PREFIX/lib/libwolfssl.so" | grep -E 'SONAME|NEEDED'
     ;;
   *)
-    ls -l "$PREFIX/bin/libwolfssl.dll" "$PREFIX/lib/libwolfssl.dll.a" "$PREFIX/lib/libcurl.a"
+    ls -l "$PREFIX/bin/libwolfssl.dll" "$PREFIX/lib/libwolfssl.dll.a" \
+          "$PREFIX/lib/libwolfssl.delay.a" "$PREFIX/lib/libcurl.a"
     DLLS="$(objdump -p "$PREFIX/bin/libwolfssl.dll" | awk '/DLL Name:/ {print tolower($3)}' | sort -u)"
     echo "libwolfssl.dll imports:"
     # shellcheck disable=SC2001  # indenting a multi-line value

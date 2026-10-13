@@ -17,9 +17,12 @@
 # that build, the link mode is asserted (wolfSSL dynamic, nothing else),
 # scripts/release/package-wolfssl.sh packages the library with its
 # GPLv2-or-later COPYING, build configuration and corresponding source, and the
-# two archives are smoke-tested side by side. The Linux job also proves the
-# REQ-NET-005 expired-certificate classifier under the wolfSSL backend against a
-# local expired-cert endpoint (scripts/release/check-expired-classifier.sh).
+# two archives are smoke-tested side by side. On Windows hem-tool delay-loads
+# libwolfssl.dll (REQ-TOOL-026): package.sh asserts the delay import and runs
+# hem-tool WITHOUT the DLL first — it must report the DLL itself and exit 12.
+# The Linux job also proves the REQ-NET-005 expired-certificate classifier under
+# the wolfSSL backend against local expired and not-yet-valid endpoints
+# (scripts/release/check-expired-classifier.sh).
 # ci.yml (REQ-BUILD-002) is untouched by this workflow.
 
 name: Release

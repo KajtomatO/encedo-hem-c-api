@@ -258,6 +258,58 @@ if(EHEM_CRYPTO_LINK STREQUAL "static")
     "§12 risk 1). No published package of this project links wolfSSL statically, "
     "and the release scripts refuse to package such a build (REQ-BUILD-005).")
 endif()
+# --- Windows release: hem-tool delay-loads libwolfssl.dll (REQ-TOOL-026) ---
+# implements: REQ-TOOL-026 — the delay-load import library of libwolfssl.dll
+# (scripts/release/build-deps.sh makes it). When set, hem-tool — and only
+# hem-tool — links it plus mingw-w64's delay-load helper instead of the
+# ordinary import library and carries the failure hook
+# (src/tools/hem-tool/delayload_win.c): a missing DLL becomes hem-tool's own
+# message and exit 12 instead of 0xC0000135 before main(). Every other target
+# (the SDK DLL, the tests) keeps the ordinary import.
+set(EHEM_WOLFSSL_DELAYLOAD_LIB "" CACHE FILEPATH
+  "Windows release build: delay-load import library of libwolfssl.dll for hem-tool")
+set(EHEM_WOLFSSL_LINK PkgConfig::WOLFSSL)
+if(EHEM_WOLFSSL_DELAYLOAD_LIB)
+  if(NOT WIN32)
+    message(FATAL_ERROR "EHEM_WOLFSSL_DELAYLOAD_LIB applies to Windows builds only")
+  endif()
+  if(NOT EXISTS "${EHEM_WOLFSSL_DELAYLOAD_LIB}")
+    message(FATAL_ERROR "EHEM_WOLFSSL_DELAYLOAD_LIB: no such file ${EHEM_WOLFSSL_DELAYLOAD_LIB}")
+  endif()
+  if(NOT EHEM_BUILD_TOOL OR NOT EHEM_TOOL_LINK STREQUAL "static" OR
+     EHEM_CRYPTO_LINK STREQUAL "static")
+    message(FATAL_ERROR "EHEM_WOLFSSL_DELAYLOAD_LIB needs hem-tool carrying the "
+                        "SDK (EHEM_TOOL_LINK=static) and a dynamic wolfSSL")
+  endif()
+  # Resolved per consuming target: one with the EHEM_WOLFSSL_DELAYLOAD
+  # property (hem-tool) gets the delay-load library + the helper library,
+  # every other one the ordinary import library.
+  set(_ehem_delay "$<BOOL:$<TARGET_PROPERTY:EHEM_WOLFSSL_DELAYLOAD>>")
+  set(EHEM_WOLFSSL_LINK
+    "$<${_ehem_delay}:${EHEM_WOLFSSL_DELAYLOAD_LIB}>"
+    "$<${_ehem_delay}:delayimp>"
+    "$<$<NOT:${_ehem_delay}>:PkgConfig::WOLFSSL>")
+  # libcurl (static, wolfSSL TLS backend) names the import library in its own
+  # link interface — the package records it by path; the same switch there.
+  get_target_property(_ehem_curl_real CURL::libcurl ALIASED_TARGET)
+  if(NOT _ehem_curl_real)
+    set(_ehem_curl_real CURL::libcurl)
+  endif()
+  get_target_property(_ehem_curl_libs ${_ehem_curl_real} INTERFACE_LINK_LIBRARIES)
+  if(_ehem_curl_libs)
+    set(_ehem_curl_new "")
+    foreach(_l IN LISTS _ehem_curl_libs)
+      if(_l MATCHES "(^|[/\\])libwolfssl(\\.dll)?\\.a$" OR _l MATCHES "^(-l)?wolfssl$")
+        list(APPEND _ehem_curl_new ${EHEM_WOLFSSL_LINK})
+      else()
+        list(APPEND _ehem_curl_new "${_l}")
+      endif()
+    endforeach()
+    set_property(TARGET ${_ehem_curl_real} PROPERTY INTERFACE_LINK_LIBRARIES "${_ehem_curl_new}")
+  endif()
+  message(STATUS "encedo-hem: hem-tool delay-loads libwolfssl.dll (${EHEM_WOLFSSL_DELAYLOAD_LIB})")
+endif()
+
 set(EHEM_LINK_DEFINITIONS "")
 if(EHEM_CRYPTO_LINK STREQUAL "static")
   list(APPEND EHEM_LINK_DEFINITIONS EHEM_CRYPTO_LINK_STATIC)
@@ -354,7 +406,7 @@ if(EHEM_BUILD_SHARED)
     SOVERSION ${PROJECT_VERSION_MAJOR})
   # libcurl and wolfSSL link into the shared lib privately (baked in, not
   # re-exported).
-  target_link_libraries(encedo-hem PRIVATE CURL::libcurl PkgConfig::WOLFSSL)
+  target_link_libraries(encedo-hem PRIVATE CURL::libcurl ${EHEM_WOLFSSL_LINK})
   # Only the shared build gets the export-enabling macro; its consumers get the
   # import side (dllimport on Windows; nothing elsewhere) from the target.
   target_compile_definitions(encedo-hem
@@ -375,7 +427,7 @@ endif()
 if(EHEM_STATIC_TARGET)
   # The dependencies are INTERFACE requirements of the static lib so
   # downstream links propagate.
-  target_link_libraries(${EHEM_STATIC_TARGET} PUBLIC CURL::libcurl PkgConfig::WOLFSSL)
+  target_link_libraries(${EHEM_STATIC_TARGET} PUBLIC CURL::libcurl ${EHEM_WOLFSSL_LINK})
   if(EHEM_BUILD_STATIC)
     add_library(encedo-hem::encedo-hem-static ALIAS encedo-hem-static)
     set_target_properties(encedo-hem-static PROPERTIES OUTPUT_NAME encedo-hem)
@@ -476,6 +528,13 @@ if(EHEM_BUILD_TOOL)
   add_executable(hem-tool src/tools/hem-tool/main.c)
   target_link_libraries(hem-tool PRIVATE ${_ehem_tool_core})
   target_compile_options(hem-tool PRIVATE ${EHEM_WARNING_FLAGS})
+  if(EHEM_WOLFSSL_DELAYLOAD_LIB)
+    # REQ-TOOL-026: the delay-load import + its failure hook, hem-tool only.
+    set_property(TARGET hem-tool PROPERTY EHEM_WOLFSSL_DELAYLOAD ON)
+    target_sources(hem-tool PRIVATE src/tools/hem-tool/delayload_win.c)
+    target_compile_definitions(hem-tool PRIVATE HEM_TOOL_DELAYLOAD
+      EHEM_WOLFSSL_COMPANION_VERSION="${WOLFSSL_VERSION}")
+  endif()
   install(TARGETS hem-tool RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 

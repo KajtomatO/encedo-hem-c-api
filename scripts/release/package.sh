@@ -6,7 +6,8 @@
 # companion asset (package-wolfssl.sh) and smoke-test the two side by side —
 # exactly as a user unpacks them (REQ-BUILD-005).
 #
-# implements: REQ-BUILD-005
+# implements: REQ-BUILD-005, REQ-TOOL-026 (Windows: hem-tool delay-loads
+#             libwolfssl.dll — asserted here and smoke-tested without the DLL)
 #
 #   scripts/release/package.sh <prefix> <linux|windows> [dist-dir]
 #
@@ -57,6 +58,10 @@ if [ "$OS" = "windows" ]; then
   # import library (lib/libwolfssl.dll.a), so the exe still IMPORTS
   # libwolfssl.dll — the one non-system DLL, by design.
   EXTRA+=(-DCMAKE_EXE_LINKER_FLAGS=-static)
+  # REQ-TOOL-026: hem-tool imports libwolfssl.dll through the delay-load import
+  # library build-deps.sh made, so a missing DLL is reported by hem-tool itself
+  # (exit 12) instead of by the Windows loader before main (0xC0000135).
+  EXTRA+=("-DEHEM_WOLFSSL_DELAYLOAD_LIB=$PREFIX/lib/libwolfssl.delay.a")
   WLIB_NAME=libwolfssl.dll; WLIB="$PREFIX/bin/$WLIB_NAME"; EXT=zip
   LOOKUP="the directory of hem-tool.exe is first in the DLL search order"
   SAME="file name"
@@ -101,8 +106,18 @@ if [ "$OS" = "windows" ]; then
   echo "imports:"
   # shellcheck disable=SC2001  # indenting a multi-line value
   echo "$DLLS" | sed 's/^/  /'
-  echo "$DLLS" | grep -q -x "$WLIB_NAME" \
-    || { echo "$WLIB_NAME is NOT imported — wolfSSL got linked statically"; exit 1; }
+  # REQ-TOOL-026: libwolfssl.dll is a DELAY import — absent from the ordinary
+  # import table (the loader must not demand it before main), present as a
+  # delay-load descriptor. GNU ld leaves the PE delay-import directory entry
+  # empty, so the evidence is the descriptor symbol and the DLL name string.
+  if echo "$DLLS" | grep -q -x "$WLIB_NAME"; then
+    echo "$WLIB_NAME is an ordinary import — the delay-load import library was not linked"; exit 1
+  fi
+  nm "$BIN" | grep -q '__DELAY_IMPORT_DESCRIPTOR_.*libwolfssl' \
+    || { echo "no delay-load descriptor for $WLIB_NAME — wolfSSL got linked statically?"; exit 1; }
+  strings -a "$BIN" | grep -q -x "$WLIB_NAME" \
+    || { echo "the delay-load descriptor does not name $WLIB_NAME"; exit 1; }
+  echo "delay imports: $WLIB_NAME"
   if echo "$DLLS" | grep -E -q 'curl|libgcc|winpthread|libssl|libcrypto|zlib'; then
     echo "a non-system DLL other than wolfSSL is imported"; exit 1
   fi
@@ -180,10 +195,11 @@ Windows: hem-tool.exe and libwolfssl.dll use the Universal C Runtime (built in
 MSYS2 UCRT64) - part of Windows 10 / Server 2016 and later; older Windows
 needs update KB2999226.
 
-If libwolfssl.dll is missing, Windows refuses to start hem-tool.exe before
-any of its code runs: depending on the console you get a system error dialog
-or no message at all, and the exit code is -1073741515 (0xC0000135,
-STATUS_DLL_NOT_FOUND; PowerShell: $LASTEXITCODE). Put libwolfssl.dll next to
+hem-tool.exe loads libwolfssl.dll when it first needs it: if the DLL is
+missing, hem-tool says so - naming the DLL and the asset it comes from - and
+exits with code 12 (PowerShell: $LASTEXITCODE). "hem-tool help",
+"hem-tool --version" (the loaded version then reads "not found") and
+"hem-tool keys types" work without it. Put libwolfssl.dll next to
 hem-tool.exe.
 EOF
 fi
@@ -205,11 +221,32 @@ echo "packaged: $DIST/$ARCHIVE"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 if [ "$OS" = "windows" ]; then
   unzip -q "$DIST/$ARCHIVE" -d "$T"; unzip -q "$DIST/$WNAME.zip" -d "$T"
-  cp "$T/$WNAME/$WLIB_NAME" "$T/$NAME/"
-  # $PREFIX/bin is NOT on PATH here; the exe's directory is first in the DLL
-  # search order, so this proves the drop-in layout. (No negative test: a
-  # missing DLL is a loader hard error that may raise a dialog on Windows.)
+  # Negative (REQ-TOOL-026): hem-tool alone — $PREFIX/bin is NOT on PATH — must
+  # report the missing DLL itself with exit 12, not die in the loader with
+  # 0xC0000135; the commands that need no wolfSSL still work.
+  set +e
+  NEG_ERR="$("$T/$NAME/hem-tool.exe" --url http://127.0.0.1:1 status 2>&1 > /dev/null)"
+  NEG_RC=$?
+  set -e
+  echo "without $WLIB_NAME: exit $NEG_RC"
+  # shellcheck disable=SC2001  # indenting a multi-line value
+  echo "$NEG_ERR" | sed 's/^/  /'
+  [ "$NEG_RC" -eq 12 ] || { echo "expected exit 12 without $WLIB_NAME"; exit 1; }
+  echo "$NEG_ERR" | grep -q "$WLIB_NAME was not found" \
+    || { echo "no missing-DLL message naming $WLIB_NAME"; exit 1; }
   "$T/$NAME/hem-tool.exe" help > /dev/null
+  "$T/$NAME/hem-tool.exe" keys types > /dev/null
+  VER="$("$T/$NAME/hem-tool.exe" --version)"
+  # shellcheck disable=SC2001  # indenting a multi-line value
+  echo "$VER" | sed 's/^/  /'
+  echo "$VER" | grep -q "not found (loaded)" \
+    || { echo "--version without $WLIB_NAME should read 'not found (loaded)'"; exit 1; }
+  # Positive: the DLL beside the exe (the exe's directory is first in the DLL
+  # search order), which proves the drop-in layout.
+  cp "$T/$WNAME/$WLIB_NAME" "$T/$NAME/"
+  "$T/$NAME/hem-tool.exe" help > /dev/null
+  "$T/$NAME/hem-tool.exe" --version | grep -q "${WOLFSSL_VERSION} (loaded)" \
+    || { echo "--version with $WLIB_NAME beside it does not report ${WOLFSSL_VERSION} loaded"; exit 1; }
 else
   tar xzf "$DIST/$ARCHIVE" -C "$T"; tar xzf "$DIST/$WNAME.tar.gz" -C "$T"
   # Negative: without the library and with a clean environment the loader must
