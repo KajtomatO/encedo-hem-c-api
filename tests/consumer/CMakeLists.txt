@@ -61,11 +61,13 @@ if(CONSUMER_STATIC)
   endif()
 
   # `pkg-config --static`: system and compiler-runtime libraries link by name
-  # (a CMake-built libcurl.pc lists -lgcc -lgcc_s -lc); every other library of
-  # the closure must have a linkable file (shared or archive) here.
-  set(_system m pthread dl rt c resolv gcc gcc_s gcc_eh ws2_32 crypt32 bcrypt
-      advapi32 secur32 iphlpapi wldap32 normaliz user32 kernel32 gdi32 ole32
-      shell32 rpcrt4 userenv)
+  # (a CMake-built libcurl.pc lists -lgcc -lgcc_s -lc, and on MinGW -lmingw32
+  # -lmoldname -lmingwex); every other library of the closure must have a
+  # linkable file (shared or archive) here.
+  set(_system m pthread dl rt c resolv gcc gcc_s gcc_eh
+      mingw32 moldname mingwex mingwthrd msvcrt ucrt ucrtbase winpthread
+      ws2_32 crypt32 bcrypt advapi32 secur32 iphlpapi wldap32 normaliz user32
+      kernel32 gdi32 ole32 shell32 rpcrt4 userenv)
   set(_closure "")
   set(_missing "")
   foreach(_lib IN LISTS EHEM_PC_STATIC_LIBRARIES)

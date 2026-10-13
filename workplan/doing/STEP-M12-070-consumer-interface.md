@@ -28,7 +28,9 @@ evidence:
     (INSTALL_INTERFACE content alone is unwrapped and still resolved). (2)
     curl 8.10.1's CMake-written libcurl.pc leaks the compiler's implicit
     libraries (-lgcc -lgcc_s -lc) into Libs/Libs.private — linkable by name,
-    so the consumer treats them like system libraries. (3) CMake
+    so the consumer treats them like system libraries; its Windows build (the
+    STEP-M12-100 cross prefix) lists -lmingw32 -lmoldname -lmingwex too, added
+    to the same list before the release job runs the gate. (3) CMake
     function/macro gotchas in the gate script: a macro re-expands ${...}
     inside its arguments (the .pc's literal ${pcfiledir}), and ARGN splits
     any argument containing `;` (a path list) — expect_in() is a function,
