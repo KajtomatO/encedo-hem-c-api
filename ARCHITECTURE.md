@@ -730,6 +730,9 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   and the `keys gen -h` type list from one table. **STEP-M12-050 done
   2026-10-13** — REQ-TOOL-028 verified (attended run at the gate):
   `init-wizard` + the no-echo prompt helper; only `--url` pre-fills it.
+  **STEP-M12-060 and 100 implemented 2026-10-13, in `doing/`** — the build
+  switches and the Windows delay-load are committed; each waits for one CI
+  run (060: the ci.yml switch legs; 100: a release.yml dispatch run).
   Names settled: error code `EHEM_ERR_BACKEND_MISMATCH`; API
   `ehem_build_info_get`; options `EHEM_BUILD_SHARED` / `EHEM_BUILD_STATIC`
   / `EHEM_TOOL_LINK` / `EHEM_DEPS_LINK` / `EHEM_CRYPTO_BACKEND`; asset

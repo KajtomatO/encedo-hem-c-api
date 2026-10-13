@@ -7,9 +7,46 @@ traces:
   architecture: ["ARCHITECTURE.md#8-hem-tool-cli", "ARCHITECTURE.md#11-milestones"]
 depends_on: ["STEP-M12-020"]
 evidence:
-  commits: []
-  tests: []
-  notes: null
+  commits: ["57dce33", "48494dc"]   # start; implementation — the release-job run and the done commit follow
+  tests:
+    - "Local Windows CROSS build (Debian x86_64-w64-mingw32 GCC 13, msvcrt; scratch toolchain = the repo's + the deps prefix as a find root): pinned wolfSSL 5.7.2 DLL with --output-def (2378 exports) → dlltool --output-delaylib libwolfssl.delay.a; pinned libcurl 8.10.1 static (its CMake package records libwolfssl.dll.a by path); the project Release + -static + EHEM_WOLFSSL_DELAYLOAD_LIB, tests off"
+    - "hem-tool.exe: ordinary imports bcrypt, KERNEL32, msvcrt, WS2_32 — NO libwolfssl.dll; __DELAY_IMPORT_DESCRIPTOR_…libwolfssl_delay_a, __delayLoadHelper2 and hem-tool's __pfnDliFailureHook2 (D, not libmingwex's B default) linked; link line = …libcurl.a, libwolfssl.delay.a, -ldelayimp, no libwolfssl.dll.a. libencedo-hem.dll keeps its ORDINARY libwolfssl.dll import (the switch is per consuming target)"
+    - "package.sh's Windows delay-import assertion (objdump DLL Name list + nm descriptor + strings DLL name) run against the cross-built binaries: PASS on hem-tool.exe, FAIL on libencedo-hem.dll (ordinary import) — both directions"
+    - "./dev ci 54/54 gcc + clang (native Linux unaffected); shellcheck build-deps.sh / package.sh clean; MinGW -Wall -Wextra -Werror compile of delayload_win.c and main.c (HEM_TOOL_DELAYLOAD) inside the cross build"
+  notes: |
+    PENDING for done: the Windows release job (workflow_dispatch of
+    release.yml on development — REQ-BUILD-005 allows any ref into
+    artifacts): build-deps with the new recipe (stamp +r2, cache key changes →
+    full deps rebuild), package.sh's delay-import assertion on the UCRT64
+    binary, and the negative smoke — hem-tool.exe WITHOUT the DLL: `status` →
+    "libwolfssl.dll was not found" + exit 12, `help` / `keys types` exit 0,
+    `--version` reads "not found (loaded)"; then the positive smoke with the
+    DLL beside it reports 5.7.2 loaded. Run id → here and REQ-TOOL-026.
+    Design: build-deps.sh (Windows) adds -Wl,--output-def to the wolfSSL DLL
+    link (gendef fallback) and makes $PREFIX/lib/libwolfssl.delay.a with
+    dlltool --output-delaylib. CMake EHEM_WOLFSSL_DELAYLOAD_LIB (WIN32 only,
+    needs EHEM_TOOL_LINK=static and a dynamic wolfSSL): every wolfSSL link
+    item — the SDK targets' and libcurl's own interface entry — becomes a
+    generator expression on the consuming target's EHEM_WOLFSSL_DELAYLOAD
+    property, set only on hem-tool: hem-tool gets the delay library +
+    delayimp, every other target (the SDK DLL, the tests) the ordinary import
+    library. hem-tool also compiles delayload_win.c: the failure hook prints
+    "error: hem-tool cannot start: libwolfssl.dll was not found / remedy: put
+    libwolfssl.dll from the release asset wolfssl-<v>-windows-x86_64.zip next
+    to hem-tool.exe" (dliFailLoadLib) or names the missing function
+    (dliFailGetProc — a different wolfSSL build), exit 12 (HEM_TOOL_EXIT_INIT).
+    Conflict found and settled (REQ-TOOL-026 rev 2): `--version` DOES call
+    wolfSSL (the loaded version, REQ-TOOL-025), so main.c sets the hook
+    tolerant for that report only — wolfSSL_lib_version() then resolves to a
+    stand-in returning "not found" (the hook returns the exe's own module for
+    dliFailLoadLib, GetProcAddress fails, dliFailGetProc returns the
+    stand-in; libcurl's version query shares the same import slot).
+    GNU ld leaves the PE delay-import directory entry EMPTY (objdump shows no
+    delay table even for a correct binary) — the assertion therefore uses the
+    descriptor symbol (release binaries are not stripped) and the DLL-name
+    string, on top of the ordinary import table not naming the DLL.
+    The archive README.txt's 0xC0000135 paragraph is replaced (exit 12, what
+    works without the DLL); release.yml's header describes the new smoke.
 reopened: []
 cancelled: null
 ---
@@ -59,17 +96,17 @@ else record as reasoned). Attended Windows check (published zip, DLL
 removed/restored) is the gate's.
 
 **Definition of done**
-- [ ] `build-deps.sh` emits `libwolfssl.def` + the delay-load import lib
+- [x] `build-deps.sh` emits `libwolfssl.def` + the delay-load import lib
       in the Windows deps prefix; CMake variable wires the delay lib +
       `delayimp` and the hook source into hem-tool only when set.
-- [ ] `delayload_win.c` hook: on `dliFailLoadLib` prints the one-line
+- [x] `delayload_win.c` hook: on `dliFailLoadLib` prints the one-line
       message (DLL name, companion asset, placement) and exits 12.
-- [ ] `package.sh` asserts: `libwolfssl.dll` only as a delay import; the
+- [x] `package.sh` asserts: `libwolfssl.dll` only as a delay import; the
       static import table lists system DLLs only (as REQ-BUILD-005).
 - [ ] Release Windows job (`workflow_dispatch` on the branch, run id
       recorded): negative smoke → message + exit 12; positive smoke
       unchanged; `help`/`--version`/`keys types` run without the DLL.
-- [ ] Archive README.txt updated (0xC0000135 paragraph replaced; exit 12
+- [x] Archive README.txt updated (0xC0000135 paragraph replaced; exit 12
       documented).
 - [ ] REQ-TOOL-026 OPEN criterion (`-static`/UCRT interplay, wrong-version
       DLL on PATH) resolved and recorded (rev bump); the attended criterion
