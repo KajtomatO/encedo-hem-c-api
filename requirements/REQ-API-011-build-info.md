@@ -3,7 +3,7 @@ id: REQ-API-011
 title: Build information API — crypto and transport backend names and versions (compiled against vs loaded)
 status: verified
 priority: should
-revision: 2   # 2026-10-13 (STEP-M12-020): shape settled (link-mode fields + a fixed-size reserved tail for 1.x growth); unit criteria ticked. No meaning change — approved status kept
+revision: 3   # 2026-10-14 (STEP-M12-090 done): the both-backends criterion ticked (CI run 38482938701). No meaning change. Rev 2 = 2026-10-13 (STEP-M12-020): shape settled (link-mode fields + a fixed-size reserved tail for 1.x growth); unit criteria ticked
 source: user decision 2026-10-12 (M12 planning: `hem-tool --version` shows the SDK version, the wolfSSL version compiled against and the one loaded, and the libcurl version); ARCHITECTURE.md §11 M12 part A; §3 (hem-tool uses the public API only — it cannot include wolfSSL or libcurl headers itself); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-API-006", "REQ-API-008"]
 supersedes: null
@@ -91,4 +91,8 @@ diagnostics for its own logs.
       dynamic. Also: loaded == compiled for the crypto library whenever init
       passes, reserved slots NULL, NULL `out` a no-op. `./dev ci` 51/51 gcc
       + clang, ASan 51/51.)*
-- [ ] Both backends (REQ-BUILD-007 CI legs) fill the struct.
+- [x] Both backends (REQ-BUILD-007 CI legs) fill the struct.
+      *(test_build_info checks the struct against CMake's own record of
+      the backend — name, compiled version, link mode: green in the
+      wolfSSL and the OpenSSL legs of CI run 38482938701 (Linux gcc + clang,
+      Windows MinGW), 2026-10-13.)*

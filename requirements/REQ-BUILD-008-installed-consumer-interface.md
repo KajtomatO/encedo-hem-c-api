@@ -3,7 +3,7 @@ id: REQ-BUILD-008
 title: Installed consumer interface — CMake package config and pkg-config file that resolve the selected backend's dependencies
 status: verified
 priority: must
-revision: 3   # 2026-10-14 (STEP-M12-070 done): the wolfSSL CI evidence recorded under criteria 2 and 3; criterion 3 ticked (backend-independent). No meaning change. Rev 2 = 2026-10-13 (STEP-M12-070): wolfSSL-backend evidence recorded under each criterion; the REQ-API-008 / ARCHITECTURE criterion ticked (applied at the decomposition)
+revision: 4   # 2026-10-14 (STEP-M12-090 done): criteria 1 and 2 ticked — the OpenSSL install contents and the OpenSSL CI legs recorded. No meaning change. Rev 3 = 2026-10-14 (STEP-M12-070 done): the wolfSSL CI evidence recorded under criteria 2 and 3; criterion 3 ticked (backend-independent). Rev 2 = 2026-10-13 (STEP-M12-070): wolfSSL-backend evidence recorded under each criterion; the REQ-API-008 / ARCHITECTURE criterion ticked (applied at the decomposition)
 source: user decision 2026-10-12 (M12 planning: ship `encedo-hem.pc`); ARCHITECTURE.md §1 (artifact name — "pkg-config `encedo-hem`"), §11 M12 part B ("CMake package config fix": cmake/encedo-hem-config.cmake.in declares only find_dependency(CURL); the static target's crypto link interface cannot resolve in a consumer); REQ-API-008 criterion record "No separate pkg-config .pc file is shipped" (reversed here, §6.2 at the M12 decomposition); finding at the M12 decomposition 2026-10-12: ehem.h already gives static consumers plain declarations — the real gap is that the shared target does not advertise EHEM_USING_SHARED to its consumers (MinGW auto-import hides it); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-BUILD-001", "REQ-BUILD-006", "REQ-BUILD-007", "REQ-API-006"]
 supersedes: null
@@ -56,7 +56,7 @@ the installed interface a published artefact, and encedo-pkcs11's
 autotools-style builds expect a `.pc`.
 
 **Acceptance criteria:**
-- [ ] A fresh `cmake --install` of the default build contains
+- [x] A fresh `cmake --install` of the default build contains
       `lib/cmake/encedo-hem/encedo-hem-config.cmake` (with the wolfSSL
       dependency lookup) and `lib/pkgconfig/encedo-hem.pc`; an OpenSSL
       build installs the OpenSSL variants of both (file contents
@@ -78,8 +78,13 @@ autotools-style builds expect a `.pc`.
       package config made it an alias (`CURL::libcurl_static` with the
       release prefix — found by the gate), which FindCURL's module mode
       never defines. Shared-only / static-only installs export only their
-      target (asserted). The OpenSSL variants: STEP-M12-090.)*
-- [ ] The consumer gate passes on Linux (gcc, clang) and Windows (MSYS2)
+      target (asserted). The OpenSSL variants (2026-10-14, STEP-M12-090;
+      asserted by the gate on that backend): `encedo-hem-config.cmake`
+      gains `find_dependency(CURL)` and `find_dependency(OpenSSL 3)` (its
+      comment: set `OPENSSL_USE_STATIC_LIBS` first for OpenSSL's static
+      archives); `encedo-hem.pc` says `Requires.private: libcurl
+      libcrypto`, every other line as on wolfSSL.)*
+- [x] The consumer gate passes on Linux (gcc, clang) and Windows (MSYS2)
       for shared and static targets via find_package AND pkg-config, on
       both backends (CI legs).
       *(The gate: `tests/consumer/` + `check_consumer.cmake`, CTest
@@ -96,8 +101,10 @@ autotools-style builds expect a `.pc`.
       Requires.private, and the log says which. CI (wolfSSL), 2026-10-13:
       run 38481008774 — Linux gcc, clang and both switch legs, Windows
       MSYS2 UCRT64 default and both switch legs — and release run
-      38481505956's two jobs against the REQ-BUILD-005 prefix. OpenSSL:
-      STEP-M12-090.)*
+      38481505956's two jobs against the REQ-BUILD-005 prefix. OpenSSL,
+      2026-10-13: CI run 38482938701 — 'Linux (gcc, OpenSSL)', 'Linux (clang,
+      OpenSSL)', 'Windows (MinGW, OpenSSL)'; locally 2026-10-14 gcc, clang
+      and ASan.)*
 - [x] The installed shared target's `INTERFACE_COMPILE_DEFINITIONS`
       carry `EHEM_USING_SHARED`; the Windows consumer built against the
       DLL shows no auto-import linker note (recorded from the CI log).

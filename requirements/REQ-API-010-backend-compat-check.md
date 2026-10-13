@@ -3,7 +3,7 @@ id: REQ-API-010
 title: Crypto-backend compatibility check at ehem_global_init — a foreign library is refused with a distinct error, never masked
 status: verified
 priority: must
-revision: 3   # 2026-10-13: pre-gate preview of the foreign-library refusal recorded (dev Release build, STEP-M12-030). Rev 2 = 2026-10-12 (STEP-M12-010): OPEN criterion resolved (DecodedCert probe parses an embedded 375-byte self-signed EC leaf; WC_RNG probed init + one 16-byte draw + free, canaries only, an init failure is NOMEM-class not a mismatch); unit-proven criteria ticked. No meaning change — approved status kept
+revision: 4   # 2026-10-14 (STEP-M12-090 done): the OpenSSL criterion ticked (CI run 38482938701). No meaning change. Rev 3 = 2026-10-13: pre-gate preview of the foreign-library refusal recorded (dev Release build, STEP-M12-030). Rev 2 = 2026-10-12 (STEP-M12-010): OPEN criterion resolved (DecodedCert probe parses an embedded 375-byte self-signed EC leaf; WC_RNG probed init + one 16-byte draw + free, canaries only, an init failure is NOMEM-class not a mismatch); unit-proven criteria ticked. No meaning change — approved status kept
 source: user decision 2026-10-10 (the v1.1.0-rc4 crash on a foreign libwolfssl is fixed in M12 by an SDK version check + self-test, not in M10); ARCHITECTURE.md §11 M12 part A (planned 2026-10-12), §12 risk 5 (caller-allocated wolfSSL structs are an ABI hazard); KNOWN-ISSUES.md "Release hem-tool with a foreign libwolfssl crashes" (Hmac 784 vs 896 bytes, DecodedCert 1528 vs 2576 — 5.7.2 release build vs Ubuntu 5.6.6, same SONAME); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-API-002", "REQ-API-003", "REQ-AUTH-001"]
 supersedes: null
@@ -99,9 +99,15 @@ installed" from "out of memory" (HEM-SDK-8 distinguishable conditions).
       the REQ-API-002 idempotency criterion extended).
       *(A probe refusal undoes its own `wolfCrypt_Init`; `g_global_ready`
       is never set on a refusal. `test_refusal_leaves_global_state_untouched`.)*
-- [ ] OpenSSL: the same-major rule and the known-answer check are in the
+- [x] OpenSSL: the same-major rule and the known-answer check are in the
       OpenSSL shim; the seam test runs on that backend too (CI leg of
       REQ-BUILD-007).
+      *(The OpenSSL shim (STEP-M12-080): the loaded
+      `OPENSSL_version_major()` must equal `OPENSSL_VERSION_MAJOR`, then
+      HMAC-SHA256 (RFC 4231 #1) and SHA-256("abc") through the shim.
+      test_backend_compat, the seam test, runs in `ctest -L unit` on the
+      OpenSSL legs of CI run 38482938701 — Linux gcc, Linux clang,
+      Windows MinGW — green 2026-10-13.)*
 - [ ] Demonstrated at the M12 gate: the release Linux hem-tool run with
       the host's `libwolfssl.so.42` 5.6.6 and no companion library refuses
       with the REQ-TOOL-024 message and exit code instead of crashing —

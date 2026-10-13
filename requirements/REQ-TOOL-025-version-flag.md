@@ -3,7 +3,7 @@ id: REQ-TOOL-025
 title: hem-tool --version — SDK version, crypto backend compiled-against and loaded versions, libcurl version
 status: verified
 priority: should
-revision: 2   # 2026-10-13 (STEP-M12-020): output text settled (= the proposal); unit criteria recorded. No meaning change — approved status kept
+revision: 3   # 2026-10-14 (STEP-M12-090 done): the both-backends criterion's evidence re-pointed — the OpenSSL CI legs cannot show the --version line; STEP-M12-120's OpenSSL release jobs print it. No meaning change. Rev 2 = 2026-10-13 (STEP-M12-020): output text settled (= the proposal); unit criteria recorded
 source: user decision 2026-10-12 (M12 planning: "`hem-tool --version` — the SDK version, the wolfSSL version compiled against and the one loaded, and the libcurl version (today `--version` is an unknown option)"); ARCHITECTURE.md §11 M12 part A; REQ-API-011 (the facts); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-API-011", "REQ-TOOL-020"]
 supersedes: null
@@ -73,7 +73,13 @@ are handled before the REQ-TOOL-024 init, so they run on any library.
 - [ ] Works under a forced REQ-API-010 mismatch (unit) and on both
       backends — the OpenSSL CI leg shows `OpenSSL 3.x`.
       *(Forced mismatch: done — the report is identical with and without
-      the seam (`tool_startup_cli`). The OpenSSL leg is STEP-M12-080/090's.)*
+      the seam (`tool_startup_cli`). OpenSSL, locally (STEP-M12-080):
+      `crypto: OpenSSL 3.0.13 (compiled) / 3.0.13 (loaded), dynamic`. In
+      CI test_build_info proves the struct this line prints names OpenSSL
+      (run 38482938701), but no CI step prints the line and
+      `tool_startup_cli` does not check the backend name — so the box
+      stays open for STEP-M12-120: its OpenSSL release jobs run
+      `hem-tool --version` in `package.sh` (job log, REQ-BUILD-009).)*
 - [x] Top-level help ≤ 45 lines with the usage line amended
       (test_registry test_top_page_shape stays green).
       *(Usage line 3 now ends `|   hem-tool --version`; the page stays 43

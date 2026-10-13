@@ -750,6 +750,11 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   and the consumer gate (find_package + pkg-config, shared + static) is
   green on every CI leg and in both release jobs (runs 38481008774,
   38481505956); the OpenSSL variants: STEP-M12-090.
+  **STEP-M12-090 done 2026-10-14** — REQ-BUILD-007 complete: the live tests
+  reach device crypto through `tests/support/crypto_ref` (no test includes
+  a crypto library header), the header gate covers OpenSSL, `./dev test it`
+  is 23/23 on OpenSSL, and ci.yml's OpenSSL legs are green on Linux and
+  Windows (run 38482938701), the consumer gate included.
   Names settled: error code `EHEM_ERR_BACKEND_MISMATCH`; API
   `ehem_build_info_get`; options `EHEM_BUILD_SHARED` / `EHEM_BUILD_STATIC`
   / `EHEM_TOOL_LINK` / `EHEM_DEPS_LINK` / `EHEM_CRYPTO_BACKEND`; asset

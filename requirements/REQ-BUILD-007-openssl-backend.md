@@ -1,9 +1,9 @@
 ---
 id: REQ-BUILD-007
 title: OpenSSL 3.x crypto backend behind the unchanged crypto shim — EHEM_CRYPTO_BACKEND=wolfssl|openssl
-status: approved
+status: verified
 priority: must
-revision: 3   # 2026-10-13 (STEP-M12-090): the header-gate criterion ticked, crypto_ref + live-suite evidence recorded; rev 2 (STEP-M12-080): OPEN criterion (compressed-point ECDSA) resolved, four criteria ticked. No meaning change — approved status kept
+revision: 4   # 2026-10-14 (STEP-M12-090 done): the CI-legs criterion ticked (CI run 38482938701) — every criterion checked; the classifier under an OpenSSL libcurl is REQ-BUILD-009's (STEP-M12-120). No meaning change. Rev 3 = 2026-10-13 (STEP-M12-090): the header-gate criterion ticked, crypto_ref + live-suite evidence recorded; rev 2 (STEP-M12-080): OPEN criterion (compressed-point ECDSA) resolved, four criteria ticked
 source: user decision 2026-10-12 (M12 planning: the alternative library is OpenSSL 3.x — Apache-2.0, so it may be linked statically; static packages use OpenSSL, never wolfSSL); ARCHITECTURE.md §1 (crypto backend switch, wolfSSL the default), §11 M12 part D, §12 risk 1; REQ-AUTH-001 (the shim's contract), REQ-AUTH-012 (PBKDF2-SHA512, SHA-256), REQ-SYS-006 (X.509 leaf parse), REQ-OPS-001 (local ECDSA/EdDSA verify), REQ-TEST-006 (AES-128-CBC); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-AUTH-001", "REQ-API-002", "REQ-API-010", "REQ-BUILD-006"]
 supersedes: null
@@ -91,7 +91,7 @@ includer for exactly this reason (ARCHITECTURE §3 containment rule).
       date formatter, the REQ-API-010 test seam); `git diff` of
       `src/crypto_shim.h` across the step: 0 lines. The wolfSSL build after
       the pure split: `./dev ci` 55/55 gcc + clang, ASan 55/55.)*
-- [ ] `./dev ci` (gcc + clang) and `./dev test asan` are green with
+- [x] `./dev ci` (gcc + clang) and `./dev test asan` are green with
       `EHEM_CRYPTO_BACKEND=openssl` on Linux — every fixture-pinned test
       included; the MSYS2 OpenSSL build passes `ctest -L unit` on
       Windows (CI legs on both platforms).
@@ -102,7 +102,13 @@ includer for exactly this reason (ARCHITECTURE §3 containment rule).
       consumer gate on the OpenSSL package config. Also clean: GCC 16.2
       over all 138 OpenSSL compile commands at -O0/-O2/-O3, and a MinGW
       cross build against MSYS2's OpenSSL 3.6.5 (no deprecation warning
-      under -Werror). The CI legs: STEP-M12-090.)*
+      under -Werror). CI, 2026-10-13: run 38482938701 (push 6d643be) —
+      'Linux (gcc, OpenSSL)' and 'Linux (clang, OpenSSL)' against Ubuntu's
+      libssl-dev, 'Windows (MinGW, OpenSSL)' against MSYS2's openssl:
+      `ctest -L unit` (the fixture-pinned tests, the gates, the consumer
+      gate on the OpenSSL package config) and the link assertion (hem-tool
+      links libcrypto, never libwolfssl) green. Again locally 2026-10-14 on
+      the restarted STEP-M12-090 tree: 56/56 gcc + clang, ASan 56/56.)*
 - [x] `public_headers_dep_free` rejects a planted `#include <openssl/evp.h>`
       and a planted `EVP_PKEY *` in a public header (negative test
       recorded), passes the real headers on both backends.
