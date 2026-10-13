@@ -1,7 +1,7 @@
 ---
 id: REQ-TOOL-027
 title: hem-tool key-type documentation — keys gen -h lists every creatable type, keys types explains each, from one table checked against the classifier
-status: approved
+status: verified
 priority: should
 revision: 2   # 2026-10-13 (STEP-M12-040): criteria recorded; output shape settled. No meaning change — approved status kept
 source: user request 2026-10-10 ("key types in hem-tool": keys gen -h lists all types + a separate command explaining them), moved into M12 the same day; ARCHITECTURE.md §11 M12 part E (command name settled at decomposition: `keys types`); REQ-TEST-004 (the 23 fw v1.2.2 create types), REQ-KEY-006 (classifier + size table), REQ-TOOL-009 (keys gen; its NIST default); approved 2026-10-12 (M12 decomposition, user: "approve")

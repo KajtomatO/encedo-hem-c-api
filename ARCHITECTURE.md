@@ -726,6 +726,8 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   initialises first (refusal → one message, exit 12) and has `--version`.
   **STEP-M12-030 done 2026-10-13** — REQ-NET-005 verified again (`-150`
   dropped; the release check also proves not-yet-valid ≠ expired).
+  **STEP-M12-040 done 2026-10-13** — REQ-TOOL-027 verified: `keys types`
+  and the `keys gen -h` type list from one table.
   Names settled: error code `EHEM_ERR_BACKEND_MISMATCH`; API
   `ehem_build_info_get`; options `EHEM_BUILD_SHARED` / `EHEM_BUILD_STATIC`
   / `EHEM_TOOL_LINK` / `EHEM_DEPS_LINK` / `EHEM_CRYPTO_BACKEND`; asset
