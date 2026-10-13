@@ -3,7 +3,7 @@ id: REQ-API-010
 title: Crypto-backend compatibility check at ehem_global_init — a foreign library is refused with a distinct error, never masked
 status: verified
 priority: must
-revision: 2   # 2026-10-12 (STEP-M12-010): OPEN criterion resolved (DecodedCert probe parses an embedded 375-byte self-signed EC leaf; WC_RNG probed init + one 16-byte draw + free, canaries only, an init failure is NOMEM-class not a mismatch); unit-proven criteria ticked. No meaning change — approved status kept
+revision: 3   # 2026-10-13: pre-gate preview of the foreign-library refusal recorded (dev Release build, STEP-M12-030). Rev 2 = 2026-10-12 (STEP-M12-010): OPEN criterion resolved (DecodedCert probe parses an embedded 375-byte self-signed EC leaf; WC_RNG probed init + one 16-byte draw + free, canaries only, an init failure is NOMEM-class not a mismatch); unit-proven criteria ticked. No meaning change — approved status kept
 source: user decision 2026-10-10 (the v1.1.0-rc4 crash on a foreign libwolfssl is fixed in M12 by an SDK version check + self-test, not in M10); ARCHITECTURE.md §11 M12 part A (planned 2026-10-12), §12 risk 5 (caller-allocated wolfSSL structs are an ABI hazard); KNOWN-ISSUES.md "Release hem-tool with a foreign libwolfssl crashes" (Hmac 784 vs 896 bytes, DecodedCert 1528 vs 2576 — 5.7.2 release build vs Ubuntu 5.6.6, same SONAME); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-API-002", "REQ-API-003", "REQ-AUTH-001"]
 supersedes: null
@@ -106,6 +106,16 @@ installed" from "out of memory" (HEM-SDK-8 distinguishable conditions).
       the host's `libwolfssl.so.42` 5.6.6 and no companion library refuses
       with the REQ-TOOL-024 message and exit code instead of crashing —
       recorded here with date, binary and versions.
+      *(Pre-gate preview 2026-10-13 (STEP-M12-030), a dev Release build —
+      not the published binary: hem-tool built against the pinned wolfSSL
+      5.7.2 + libcurl 8.10.1 prefix, copied alone into an empty directory on
+      this host (system `libwolfssl.so.42` = 5.6.6, `ldd` resolves it):
+      `env -i ./hem-tool --url https://my.ence.do status` printed
+      "error: hem-tool cannot use the wolfSSL library it loaded
+      (EHEM_ERR_BACKEND_MISMATCH) / wolfSSL: built against 5.7.2, loaded
+      5.6.6 / remedy: …" and exited 12 — no crash; `--version` showed
+      "wolfSSL 5.7.2 (compiled) / 5.6.6 (loaded), dynamic". The box stays
+      open for the gate's run of the published binary.)*
 - [x] RESOLVED at STEP-M12-010 (2026-10-12): the `DecodedCert` probe parses
       a tiny self-signed EC leaf embedded in the shim (375 bytes DER,
       CN `ehem-probe`, serial `0102030405`, produced with OpenSSL 3.0.13 —

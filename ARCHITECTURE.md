@@ -724,6 +724,8 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   `EHEM_ERR_BACKEND_MISMATCH` exists. **STEP-M12-020 done 2026-10-13** —
   REQ-API-011, REQ-TOOL-024/025 verified: `ehem_build_info_get`, hem-tool
   initialises first (refusal → one message, exit 12) and has `--version`.
+  **STEP-M12-030 done 2026-10-13** — REQ-NET-005 verified again (`-150`
+  dropped; the release check also proves not-yet-valid ≠ expired).
   Names settled: error code `EHEM_ERR_BACKEND_MISMATCH`; API
   `ehem_build_info_get`; options `EHEM_BUILD_SHARED` / `EHEM_BUILD_STATIC`
   / `EHEM_TOOL_LINK` / `EHEM_DEPS_LINK` / `EHEM_CRYPTO_BACKEND`; asset

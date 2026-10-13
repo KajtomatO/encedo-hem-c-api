@@ -3,7 +3,7 @@ id: REQ-TOOL-024
 title: hem-tool initialises the SDK up front and refuses a foreign crypto library with a clear message and its own exit code
 status: verified
 priority: must
-revision: 2   # 2026-10-13 (STEP-M12-020): message text and init placement settled; unit and documentation criteria recorded. No meaning change — approved status kept
+revision: 3   # 2026-10-13: pre-gate preview recorded (STEP-M12-030). Rev 2 = 2026-10-13 (STEP-M12-020): message text and init placement settled; unit and documentation criteria recorded. No meaning change — approved status kept
 source: ARCHITECTURE.md §11 M12 part A ("hem-tool refuses up front — hem-tool calls ehem_global_init explicitly at startup (today it calls only the cleanup) and exits with a clear message and an exit code of its own"; user decision 2026-10-10); KNOWN-ISSUES.md "Release hem-tool with a foreign libwolfssl crashes"; REQ-API-010 (the SDK check), REQ-API-011 (the versions for the message); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-API-010", "REQ-API-011", "REQ-TOOL-001"]
 supersedes: null
@@ -98,6 +98,16 @@ problem either way).
       `libwolfssl.so.42` is 5.6.6 → the message, exit 12, no crash
       (recorded with date and versions; this is REQ-API-010's gate
       criterion seen from the tool).
+      *(Pre-gate preview 2026-10-13 (STEP-M12-030), a dev Release build —
+      not the published binary: hem-tool built against the pinned wolfSSL
+      5.7.2 + libcurl 8.10.1 prefix, copied alone into an empty directory on
+      this host (system `libwolfssl.so.42` = 5.6.6, `ldd` resolves it):
+      `env -i ./hem-tool --url https://my.ence.do status` printed
+      "error: hem-tool cannot use the wolfSSL library it loaded
+      (EHEM_ERR_BACKEND_MISMATCH) / wolfSSL: built against 5.7.2, loaded
+      5.6.6 / remedy: …" and exited 12 — no crash; `--version` showed
+      "wolfSSL 5.7.2 (compiled) / 5.6.6 (loaded), dynamic". The box stays
+      open for the gate's run of the published binary.)*
 - [x] Documentation: the exit code in the help page's exit-code note
       (page still ≤ 45 lines, REQ-TOOL-020) and in the release README.txt.
       *(The top page's closing line now reads ``command options: `hem-tool

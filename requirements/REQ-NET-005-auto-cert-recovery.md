@@ -1,7 +1,7 @@
 ---
 id: REQ-NET-005
 title: Automatic certificate recovery via check-in on expired-cert failure
-status: needs-reverify
+status: verified
 priority: must
 revision: 3   # 2026-10-13 (STEP-M12-030): rework done — the classifier no longer accepts -150; criteria recorded against the tests (no meaning change)
 source: user decision 2026-07-15 ("Lib should run check-in automatically when needed, e.g. when TLS is expired"); M1 gate finding (device cert expired 2026-04-18); rev 2 — M12 decomposition 2026-10-12 (§6.2 report approved in chat): the classifier of STEP-M10-065 also accepts wolfSSL verify result `-150`, which is `ASN_BEFORE_DATE_E` (certificate NOT YET valid) in wolfSSL 5.6.6 and 5.7.2 alike — not an older spelling of "expired" as REQ-BUILD-005's record claimed — so the "only expired" criterion is violated; an explicit not-yet-valid criterion is added, status → needs-reverify, rework = STEP-M12-030 (user decision 2026-10-12, ARCHITECTURE.md §11 M12 part A)
