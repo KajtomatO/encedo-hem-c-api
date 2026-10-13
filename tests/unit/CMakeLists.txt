@@ -113,6 +113,11 @@ if(TARGET hem-tool-core)
   ehem_add_unit_test(test_registry SOURCES test_registry.c)
   target_link_libraries(test_registry PRIVATE hem-tool-core)
 
+  # REQ-TOOL-027: the key-type table behind `keys gen -h` / `keys types`,
+  # checked against the SDK classifier (REQ-KEY-006).
+  ehem_add_unit_test(test_keytypes SOURCES test_keytypes.c)
+  target_link_libraries(test_keytypes PRIVATE hem-tool-core)
+
   # REQ-TOOL-024/025: the start of run — explicit SDK init with its refusal
   # message + exit 12, and the --version report (hem-tool-core).
   ehem_add_unit_test(test_tool_startup SOURCES test_tool_startup.c)

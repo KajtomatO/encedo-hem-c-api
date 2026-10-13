@@ -2,11 +2,15 @@
  * registry.c — the hem-tool command registry + help rendering + URL
  * resolution (see registry.h).
  *
- * implements: REQ-TOOL-017, REQ-TOOL-019, REQ-TOOL-020
+ * implements: REQ-TOOL-017, REQ-TOOL-019, REQ-TOOL-020, REQ-TOOL-027 (the
+ *             keys gen type list and the keys types entry)
  */
 #include "registry.h"
 
 #include <string.h>
+
+#include "keys.h"       /* HEM_KEYS_GEN_NIST_MODE (REQ-TOOL-009) */
+#include "keytypes.h"   /* the keys gen type list (REQ-TOOL-027) */
 
 /* --- per-command option tables -------------------------------------------- */
 
@@ -22,7 +26,7 @@ static const hem_cmd_option OPT_KEYS_GEN[] = {
     { "--label LABEL",    "the key label (required, 1..32 printable ASCII)" },
     { "--descr STR",      "opaque description blob (raw bytes, max 64)" },
     { "--mode MODE",      "NIST-P/K only: ECDH | ExDSA | ECDH,ExDSA "
-                          "(default ECDH,ExDSA so the key can sign)" },
+                          "(default " HEM_KEYS_GEN_NIST_MODE " so the key can sign)" },
 };
 static const hem_cmd_option OPT_KEYS_RM[] = {
     { "--all",            "target every non-protected key" },
@@ -109,14 +113,14 @@ static const hem_command COMMANDS[] = {
       "print device status and version",
       "Prints reachability, uptime, temperature, storage state, and the\n"
       "hardware/firmware/bootloader identity. The connection smoke test.",
-      HEM_AUTH_NONE, NULL, 0, HEM_SECTION_MAIN },
+      HEM_AUTH_NONE, NULL, 0, HEM_SECTION_MAIN, NULL },
 
     { NULL, "checkin", "checkin",
       "check-in handshake (refreshes device TLS cert + clock)",
       "Runs the 3-leg device -> Encedo-cloud -> device check-in relay. As\n"
       "firmware side effects this resynchronizes the device clock (the RTC\n"
       "drifts, see KNOWN-ISSUES) and refreshes an expiring TLS certificate.",
-      HEM_AUTH_NONE, NULL, 0, HEM_SECTION_MAIN },
+      HEM_AUTH_NONE, NULL, 0, HEM_SECTION_MAIN, NULL },
 
     { NULL, "init-device",
       "init-device --user U --email E --hostname H (--master-words W | "
@@ -131,7 +135,7 @@ static const hem_command COMMANDS[] = {
       "(ip 192.168.7.1/24, storage-mode 81, disk0-size 8388608, trust flags\n"
       "on, dnsd off, origin *). Exit 3 = already initialised, 4 = RTC unset,\n"
       "5 = cfg rejected.",
-      HEM_AUTH_NONE, N(OPT_INIT), HEM_SECTION_MAIN },
+      HEM_AUTH_NONE, N(OPT_INIT), HEM_SECTION_MAIN, NULL },
 
     { NULL, "cert-install", "cert-install [--force]",
       "harvest + install the cloud TLS certificate (REBOOTS)",
@@ -142,29 +146,40 @@ static const hem_command COMMANDS[] = {
       "Passphrase-ONLY: the install is a config write, which the firmware\n"
       "allows for sub=\"U\"/\"M\" tokens only - a mobile bearer gets 403.\n"
       "Building block of `recovery`, which picks it when the cert expired.",
-      HEM_AUTH_PASSPHRASE_ONLY, N(OPT_CERT_INSTALL), HEM_SECTION_MANUAL_RECOVERY },
+      HEM_AUTH_PASSPHRASE_ONLY, N(OPT_CERT_INSTALL), HEM_SECTION_MANUAL_RECOVERY, NULL },
 
     { "keys", "list", "keys list",
       "list every key, protected device keys marked [PROTECTED]",
       "Walks the whole key repository (read-only) and prints each key as\n"
       "kid, label, and type flags; device TLS material and paired phones\n"
       "are marked [PROTECTED] (the client-side label policy).",
-      HEM_AUTH_BEARER, NULL, 0, HEM_SECTION_MAIN },
+      HEM_AUTH_BEARER, NULL, 0, HEM_SECTION_MAIN, NULL },
 
     { "keys", "pub", "keys pub KID [--hex | --raw]",
       "print a key's public material and typed metadata",
       "Fetches one key by its 32-hex-char KID (read-only) and prints the\n"
       "public material (base64 by default) plus the classified type\n"
       "metadata. Symmetric keys have no public material (still exit 0).",
-      HEM_AUTH_BEARER, N(OPT_KEYS_PUB), HEM_SECTION_MAIN },
+      HEM_AUTH_BEARER, N(OPT_KEYS_PUB), HEM_SECTION_MAIN, NULL },
 
     { "keys", "gen", "keys gen TYPE --label LABEL [--descr STR] [--mode MODE]",
       "generate a key of TYPE on the device",
-      "Generates a key (e.g. ED25519, SECP256R1, AES256 - the device\n"
-      "validates the type) and prints the new key id. For NIST-P/K curves\n"
-      "the tool defaults --mode to ECDH,ExDSA so the key can sign (the\n"
-      "device's own default is ECDH-only).",
-      HEM_AUTH_BEARER, N(OPT_KEYS_GEN), HEM_SECTION_MAIN },
+      "Generates a key of TYPE (listed below; TYPE goes to the device verbatim\n"
+      "and the device validates it) and prints the new key id. For NIST-P/K\n"
+      "curves the tool defaults --mode to " HEM_KEYS_GEN_NIST_MODE " so the key can\n"
+      "sign (the device's own default is ECDH-only).",
+      HEM_AUTH_BEARER, N(OPT_KEYS_GEN), HEM_SECTION_MAIN,
+      hem_keytypes_print_gen_list },
+
+    { "keys", "types", "keys types [TYPE]",
+      "explain the key types the device creates (local, no device)",
+      "Prints every key type `keys gen` can create - grouped by what the key\n"
+      "is for (sign, key agreement, encrypt / wrap, MAC, post-quantum KEM\n"
+      "and signature) with its public-key and signature sizes, the --mode\n"
+      "default of `keys gen` and the matching commands - or only TYPE's\n"
+      "entry. Local documentation: no device, no credentials, works offline.\n"
+      "Exit 2 = unknown TYPE (the valid names are printed).",
+      HEM_AUTH_NONE, NULL, 0, HEM_SECTION_MAIN, NULL },
 
     { "keys", "rm", "keys rm (--all | --label-prefix P)... [--dry-run] [--yes]",
       "delete keys, protected keys guarded by an exact-label YES ritual",
@@ -172,39 +187,39 @@ static const hem_command COMMANDS[] = {
       "keys (TLS material, paired phones); removing one requires naming its\n"
       "exact label and typing the literal YES at a per-key prompt - --yes\n"
       "is deliberately ignored for them.",
-      HEM_AUTH_BEARER, N(OPT_KEYS_RM), HEM_SECTION_MAIN },
+      HEM_AUTH_BEARER, N(OPT_KEYS_RM), HEM_SECTION_MAIN, NULL },
 
     { "keys", "update", "keys update KID --label LABEL [--descr STR] [--yes]",
       "rewrite a key's label/descr (protected keys guarded)",
       "Rewrites a key's metadata. The device replaces the WHOLE record, so\n"
       "the tool re-sends the stored descr when --descr is omitted (\"\"\n"
       "clears it). Renaming a PROTECTED key needs the per-key YES ritual.",
-      HEM_AUTH_BEARER, N(OPT_KEYS_UPDATE), HEM_SECTION_MAIN },
+      HEM_AUTH_BEARER, N(OPT_KEYS_UPDATE), HEM_SECTION_MAIN, NULL },
 
     { "logs", "list", "logs list",
       "list audit-log file ids (one per line)",
       "Lists the device audit-log files (PPA builds; an EPA device answers\n"
       "404 / not found).",
-      HEM_AUTH_BEARER, NULL, 0, HEM_SECTION_MAIN },
+      HEM_AUTH_BEARER, NULL, 0, HEM_SECTION_MAIN, NULL },
 
     { "logs", "get", "logs get ID [--out FILE]",
       "download one audit-log file",
       "Downloads one audit-log file verbatim (binary-safe with --out; the\n"
       "on-wire format is the firmware's pipe-delimited record lines).",
-      HEM_AUTH_BEARER, N(OPT_LOGS_GET), HEM_SECTION_MAIN },
+      HEM_AUTH_BEARER, N(OPT_LOGS_GET), HEM_SECTION_MAIN, NULL },
 
     { "logs", "key", "logs key",
       "print the Ed25519 log-signing key + signed nonce",
       "Prints the device's log-signing public key together with a freshly\n"
       "signed nonce proving the device holds the private half.",
-      HEM_AUTH_BEARER, NULL, 0, HEM_SECTION_MAIN },
+      HEM_AUTH_BEARER, NULL, 0, HEM_SECTION_MAIN, NULL },
 
     { NULL, "selftest", "selftest",
       "run the device self-test battery",
       "Runs the synchronous self-test battery (~5 s) and prints the result\n"
       "plus key-repository statistics. Exit 0 = healthy, 3 = the device\n"
       "reports a fail state.",
-      HEM_AUTH_BEARER, NULL, 0, HEM_SECTION_MAIN },
+      HEM_AUTH_BEARER, NULL, 0, HEM_SECTION_MAIN, NULL },
 
     { "ext", "pair", "ext pair [--no-qr] [--notify-url URL]",
       "pair the Encedo mobile app (terminal QR)",
@@ -212,13 +227,13 @@ static const hem_command COMMANDS[] = {
       "(--no-qr prints the payload JSON), waits for the scan, and completes\n"
       "the registration. Passphrase-ONLY: the device demands sub=\"U\" for\n"
       "pairing changes, so --mobile is rejected here.",
-      HEM_AUTH_PASSPHRASE_ONLY, N(OPT_EXT_PAIR), HEM_SECTION_MAIN },
+      HEM_AUTH_PASSPHRASE_ONLY, N(OPT_EXT_PAIR), HEM_SECTION_MAIN, NULL },
 
     { "ext", "list", "ext list",
       "list paired authenticators",
       "Lists the paired phone authenticators (EXTAID descriptors) with\n"
       "their pids; real phones' labels land in the protected-key policy.",
-      HEM_AUTH_BEARER, NULL, 0, HEM_SECTION_MAIN },
+      HEM_AUTH_BEARER, NULL, 0, HEM_SECTION_MAIN, NULL },
 
     { "ext", "login", "ext login [--scope S] [--timeout SEC] [--note STR]",
       "demo of the push-confirm login",
@@ -226,14 +241,14 @@ static const hem_command COMMANDS[] = {
       "approved, 3 timeout, 4 rejected, 5 nothing paired (this command's\n"
       "historical codes; every OTHER command under --mobile uses the\n"
       "tool-wide 13 = timeout / 14 = rejected).",
-      HEM_AUTH_BEARER, N(OPT_EXT_LOGIN), HEM_SECTION_MAIN },
+      HEM_AUTH_BEARER, N(OPT_EXT_LOGIN), HEM_SECTION_MAIN, NULL },
 
     { NULL, "reboot", "reboot [--wait]",
       "reboot the device (DISRUPTIVE)",
       "Reboots the device - DISRUPTIVE: interrupts every user of it. With\n"
       "--wait, polls until the device answers again (two-phase: first seen\n"
       "down, then back; ~180 s bound).",
-      HEM_AUTH_BEARER, N(OPT_REBOOT), HEM_SECTION_MAIN },
+      HEM_AUTH_BEARER, N(OPT_REBOOT), HEM_SECTION_MAIN, NULL },
 
     { NULL, "wipe-device", "wipe-device [--wait]",
       "FACTORY-RESET the device (IRREVERSIBLE; typed-hostname confirmation)",
@@ -243,7 +258,7 @@ static const hem_command COMMANDS[] = {
       "device identity and proceeds only when you type its hostname; there\n"
       "is no --yes. Passphrase-ONLY (a config write: sub=\"U\"/\"M\" only).\n"
       "Afterwards: `init-device`. Exit 3 = declined.",
-      HEM_AUTH_PASSPHRASE_ONLY, N(OPT_WIPE), HEM_SECTION_MAIN },
+      HEM_AUTH_PASSPHRASE_ONLY, N(OPT_WIPE), HEM_SECTION_MAIN, NULL },
 
     { NULL, "recovery", "recovery",
       "diagnose TLS/certificate trouble and run the matching fix",
@@ -256,7 +271,7 @@ static const hem_command COMMANDS[] = {
       "answers -> exit 4; another TLS failure (hostname / CA) -> exit 5,\n"
       "nothing changed. Passphrase-ONLY: the install legs are config writes\n"
       "(sub=\"U\"/\"M\"). The building blocks are listed under manual recovery.",
-      HEM_AUTH_PASSPHRASE_ONLY, NULL, 0, HEM_SECTION_MAIN },
+      HEM_AUTH_PASSPHRASE_ONLY, NULL, 0, HEM_SECTION_MAIN, NULL },
 
     { NULL, "tls-recover", "tls-recover [--force]",
       "restore HTTPS after a device wipe (DISRUPTIVE)",
@@ -265,7 +280,7 @@ static const hem_command COMMANDS[] = {
       "and polls until HTTPS is back. Run against the device's http:// URL.\n"
       "Passphrase-ONLY: the bundle install is a config write (sub=\"U\"/\"M\"\n"
       "only). Building block of `recovery`, which picks it when HTTPS is down.",
-      HEM_AUTH_PASSPHRASE_ONLY, N(OPT_TLS_RECOVER), HEM_SECTION_MANUAL_RECOVERY },
+      HEM_AUTH_PASSPHRASE_ONLY, N(OPT_TLS_RECOVER), HEM_SECTION_MANUAL_RECOVERY, NULL },
 
     { NULL, "sign", "sign KID [--alg ALG] [--in FILE] [--sigctx STR] [--hex | --raw]",
       "sign a message with a device key",
@@ -273,14 +288,14 @@ static const hem_command COMMANDS[] = {
       "key KID and prints the signature (base64 by default). The device\n"
       "hashes internally; --alg picks the selector, else the key's type\n"
       "decides.",
-      HEM_AUTH_BEARER, N(OPT_SIGN), HEM_SECTION_MAIN },
+      HEM_AUTH_BEARER, N(OPT_SIGN), HEM_SECTION_MAIN, NULL },
 
     { NULL, "random", "random N [--kid KID] [--raw]",
       "read N bytes (1..4096) of device hardware RNG",
       "Reads device hardware-RNG bytes (harvested from AES-CBC IVs -\n"
       "REQ-OPS-002) as lowercase hex, or raw with --raw. Uses --kid's AES\n"
       "key, else creates and removes a transient EHEMTEST key.",
-      HEM_AUTH_BEARER, N(OPT_RANDOM), HEM_SECTION_MAIN },
+      HEM_AUTH_BEARER, N(OPT_RANDOM), HEM_SECTION_MAIN, NULL },
 };
 
 #define COMMAND_COUNT (sizeof(COMMANDS) / sizeof(COMMANDS[0]))
@@ -425,6 +440,9 @@ static void print_command_help(FILE *f, const hem_command *c)
     fprintf(f, "usage: hem-tool [options] %s\n", c->synopsis);
     fprintf(f, "auth:  %s\n\n", hem_auth_class_str(c->auth));
     fprintf(f, "%s\n", c->details);
+    if (c->more != NULL) {
+        c->more(f);
+    }
     if (c->option_count > 0) {
         fprintf(f, "\noptions:\n");
         print_options(f, c->options, c->option_count);

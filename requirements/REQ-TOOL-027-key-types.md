@@ -3,7 +3,7 @@ id: REQ-TOOL-027
 title: hem-tool key-type documentation — keys gen -h lists every creatable type, keys types explains each, from one table checked against the classifier
 status: approved
 priority: should
-revision: 1
+revision: 2   # 2026-10-13 (STEP-M12-040): criteria recorded; output shape settled. No meaning change — approved status kept
 source: user request 2026-10-10 ("key types in hem-tool": keys gen -h lists all types + a separate command explaining them), moved into M12 the same day; ARCHITECTURE.md §11 M12 part E (command name settled at decomposition: `keys types`); REQ-TEST-004 (the 23 fw v1.2.2 create types), REQ-KEY-006 (classifier + size table), REQ-TOOL-009 (keys gen; its NIST default); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-TOOL-009", "REQ-KEY-006", "REQ-TOOL-020"]
 supersedes: null
@@ -53,15 +53,41 @@ families; the tool makes that knowledge readable, and the unit test
 keeps the prose from drifting from the code.
 
 **Acceptance criteria:**
-- [ ] Unit: the table has exactly 23 rows; each classifies to a distinct
+- [x] Unit: the table has exactly 23 rows; each classifies to a distinct
       family ≠ UNKNOWN; the rendered `keys gen` help contains every row's
       type string; `keys types` output mentions every row; `keys types
       ED25519` prints one entry; `keys types NOPE` exits 2 with zero I/O.
-- [ ] Unit: `keys types` is registered with auth class none and renders
+      *(2026-10-13, STEP-M12-040: `tests/unit/test_keytypes.c` — the table
+      is `src/tools/hem-tool/keytypes.{h,c}` (hem-tool-core): 23 rows of
+      {type string, family, purpose group}; each row's `ehem_key_type_parse`
+      family equals its declared one and `ehem_key_family_str` gives the
+      row's name back; the groups' sign / agree / symmetric facts are
+      checked against the classifier's `sig_max_len` / `pubkey_len`; names
+      are matched as whole tokens in both renderings; NOPE → exit 2, stdout
+      empty, stderr names it and lists all 23.)*
+- [x] Unit: `keys types` is registered with auth class none and renders
       per-command help (test_registry_complete); top-level help ≤ 45
       lines.
-- [ ] The NIST `--mode` default and the ExDSA/ECDH facts in the table
+      *(Registry entry `keys types` (family keys, `HEM_AUTH_NONE`, main
+      section) — listed under "commands needing NO credentials"; the top
+      page is 44 lines. `keys gen -h` renders the type list through a new
+      registry hook (`hem_command.more`, NULL for every other command).)*
+- [x] The NIST `--mode` default and the ExDSA/ECDH facts in the table
       agree with REQ-TOOL-009 / REQ-KEY-006 (the same constants, not
       copies — reviewed at the step).
-- [ ] Offline smoke: `hem-tool keys types` runs without `EHEM_URL`,
+      *(Reviewed 2026-10-13: `keys.h` now defines `HEM_KEYS_GEN_NIST_MODE`
+      and `hem_keys_gen_default_mode(family)` — the function `keys gen`
+      calls (it replaced keys.c's private `family_is_nist_ecc` + literal),
+      the registry's `keys gen` details/option text (string concatenation
+      of the macro) and `keys types` all use it; public-key and signature
+      sizes are read from `ehem_key_type_parse` at render time — keytypes.c
+      holds no size. ECDH capability is not in the SDK classifier, so it is
+      the table's purpose group, cross-checked: every agreeing group has a
+      public half, and signing ⇔ `sig_max_len > 0`.)*
+- [x] Offline smoke: `hem-tool keys types` runs without `EHEM_URL`,
       without a passphrase and under a forced REQ-API-010 mismatch.
+      *(`tool_startup_cli` (check_tool_startup.cmake) on the real `main.c`,
+      environment cleared: `keys types` (version-forced) and `keys types
+      ED25519` (probe-forced) exit 0 with no URL notice; `keys types NOPE`
+      exits 2. main.c dispatches it before `hem_tool_global_init()`, next
+      to help and `--version`.)*

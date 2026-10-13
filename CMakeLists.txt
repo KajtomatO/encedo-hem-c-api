@@ -242,6 +242,7 @@ if(EHEM_BUILD_TOOL)
     src/tools/hem-tool/ext_cmd.c
     src/tools/hem-tool/init_cmd.c
     src/tools/hem-tool/keys.c
+    src/tools/hem-tool/keytypes.c
     src/tools/hem-tool/logs.c
     src/tools/hem-tool/random.c
     src/tools/hem-tool/recover.c

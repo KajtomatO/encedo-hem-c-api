@@ -52,6 +52,9 @@ typedef struct {
     const hem_cmd_option *options;   /* this command's own options */
     size_t option_count;
     hem_cmd_section section;         /* listing section; zero = MAIN */
+    void (*more)(FILE *f);           /* renders extra per-command help after
+                                      * the details (keys gen: the type list,
+                                      * REQ-TOOL-027); NULL = none */
 } hem_command;
 
 /* The full command table (REQ-TOOL-019/020 completeness walks). */

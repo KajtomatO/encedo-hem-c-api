@@ -15,7 +15,8 @@
  *             REQ-TOOL-014 (the `reboot` subcommand),
  *             REQ-TOOL-015 (the `tls-recover` subcommand),
  *             REQ-TOOL-024 (ehem_global_init up front, exit 12 on refusal),
- *             REQ-TOOL-025 (`--version` / `version`)
+ *             REQ-TOOL-025 (`--version` / `version`),
+ *             REQ-TOOL-027 (`keys types`, dispatched before the SDK init)
  *
  * Consumes ONLY the public headers in include/ehem/ — it doubles as living
  * documentation of the API and as the manual driver for the M1/M2 gates.
@@ -41,6 +42,7 @@
 #include "ext_cmd.h"
 #include "init_cmd.h"
 #include "keys.h"
+#include "keytypes.h"
 #include "logs.h"
 #include "random.h"
 #include "recover.h"
@@ -575,8 +577,8 @@ static int cmd_keys_update(const cli_opts *o, const char *kid)
 static int cmd_keys(const cli_opts *o, const char *subcmd, const char *arg)
 {
     if (subcmd == NULL) {
-        fprintf(stderr,
-                "error: 'keys' needs a subcommand (list, pub, gen, rm, update)\n");
+        fprintf(stderr, "error: 'keys' needs a subcommand "
+                        "(list, pub, gen, rm, update, types)\n");
         usage(stderr);
         return 2;
     }
@@ -1204,6 +1206,14 @@ int main(int argc, char **argv)
             return 2;
         }
         return 0;
+    }
+
+    /* REQ-TOOL-027: `keys types [TYPE]` is local documentation — no SDK
+     * initialisation, no URL, no credentials, so it works offline and on any
+     * crypto library (REQ-TOOL-024). */
+    if (cmd != NULL && strcmp(cmd, "keys") == 0 &&
+        subcmd != NULL && strcmp(subcmd, "types") == 0) {
+        return hem_keys_types_run(arg, stdout, stderr);
     }
 
     if (cmd == NULL) {

@@ -3,7 +3,7 @@ id: REQ-TOOL-024
 title: hem-tool initialises the SDK up front and refuses a foreign crypto library with a clear message and its own exit code
 status: verified
 priority: must
-revision: 3   # 2026-10-13: pre-gate preview recorded (STEP-M12-030). Rev 2 = 2026-10-13 (STEP-M12-020): message text and init placement settled; unit and documentation criteria recorded. No meaning change — approved status kept
+revision: 4   # 2026-10-13: `keys types` criterion closed (STEP-M12-040). Rev 3: pre-gate preview recorded (STEP-M12-030). Rev 2 = 2026-10-13 (STEP-M12-020): message text and init placement settled; unit and documentation criteria recorded. No meaning change — approved status kept
 source: ARCHITECTURE.md §11 M12 part A ("hem-tool refuses up front — hem-tool calls ehem_global_init explicitly at startup (today it calls only the cleanup) and exits with a clear message and an exit code of its own"; user decision 2026-10-10); KNOWN-ISSUES.md "Release hem-tool with a foreign libwolfssl crashes"; REQ-API-010 (the SDK check), REQ-API-011 (the versions for the message); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-API-010", "REQ-API-011", "REQ-TOOL-001"]
 supersedes: null
@@ -70,11 +70,13 @@ command is not looked up before the init — the installation is the
 problem either way).
 
 **Acceptance criteria:**
-- [ ] Unit (hem-tool-core / main.c smoke, REQ-API-010 seam forcing a
+- [x] Unit (hem-tool-core / main.c smoke, REQ-API-010 seam forcing a
       mismatch): `hem-tool status` prints one message with the backend
       name, both versions and the remedy, exits 12, and performs zero
       transport I/O; `hem-tool help`, `--help`, `--version`, `keys types`
       still succeed under the same forced mismatch.
+      *(`keys types` added by STEP-M12-040 the same day — `keys types` /
+      `keys types ED25519` exit 0 under both seam modes.)*
       *(2026-10-13, STEP-M12-020 — all but `keys types`, which joins the
       pre-init commands with STEP-M12-040 and is added to the same check
       there: `tests/unit/test_tool_startup.c` (the message for both seam

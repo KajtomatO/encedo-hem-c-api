@@ -2,10 +2,13 @@
 #
 # verifies: REQ-TOOL-024 (under a forced REQ-API-010 refusal `status` prints
 #           ONE message and exits 12 before any other output or traffic;
-#           help, --help, per-command help and --version still work; usage
-#           errors keep exit 2; without the refusal the command runs),
+#           help, --help, per-command help, --version and `keys types` still
+#           work; usage errors keep exit 2; without the refusal the command
+#           runs),
 #           REQ-TOOL-025 (`--version` / `version` print the three-line
-#           report, exit 0; the flag wins over a command)
+#           report, exit 0; the flag wins over a command),
+#           REQ-TOOL-027 (`keys types [TYPE]` offline: no URL, no passphrase,
+#           under the forced refusal; unknown TYPE exit 2)
 #
 # Run as a CTest (label `unit`):
 #   cmake -DEHEM_TOOL=<hem-tool-forced-mismatch> -DEHEM_VERSION=<x.y.z> \
@@ -149,6 +152,29 @@ expect_version_report()
 
 run(version status --version)
 expect_version_report()
+
+# `keys types` is local documentation: no URL, no passphrase (the env is
+# cleared), any crypto library.
+run(version keys types)
+expect_rc(0)
+expect_empty(_err)
+expect_in(_out "SECP256R1")
+expect_in(_out "MLDSA87")
+expect_not_in(_out "notice:")
+
+run(probe keys types ED25519)
+expect_rc(0)
+expect_in(_out "ED25519 - ")
+expect_not_in(_out "ED448")
+
+run(version keys types NOPE)
+expect_rc(2)
+expect_empty(_out)
+expect_in(_err "'NOPE'")
+expect_not_in(_err "EHEM_ERR_BACKEND_MISMATCH")
+
+run(version keys types ED25519 extra)  # one TYPE at most
+expect_rc(2)
 
 # --- usage errors stay exit 2 (reported before the init) -------------------
 run(version version extra)
