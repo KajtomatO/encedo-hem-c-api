@@ -34,7 +34,14 @@ evidence:
     function/macro gotchas in the gate script: a macro re-expands ${...}
     inside its arguments (the .pc's literal ${pcfiledir}), and ARGN splits
     any argument containing `;` (a path list) — expect_in() is a function,
-    and esc() escapes `;` before step() forwards a command.
+    and esc() escapes `;` before step() forwards a command. (4) CI
+    38428646903 failed the gate on all three Windows legs: a list element
+    cannot end in `\` (with the list's next `;` it reads as an escaped `;`),
+    and MSYS2's PATH ends in ...\WindowsPowerShell\v1.0\, so
+    `cmake -E env PATH=...` swallowed the executable ("no command given").
+    PATH and PKG_CONFIG_PATH now reach the children through the script's
+    environment, the prefix path in forward slashes; replayed on Linux (the
+    old gate fails exactly so, the new one passes).
     Design: the config's dependency block is generated per build
     (EHEM_CONFIG_DEPENDENCIES — STEP-M12-090 adds the OpenSSL one); the .pc
     is relocatable through ${pcfiledir} (one `..` per libdir component +
