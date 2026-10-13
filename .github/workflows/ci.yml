@@ -1,5 +1,14 @@
 # CI — build the library and run the unit suite on Linux and Windows (MinGW).
-# implements: REQ-BUILD-002
+# implements: REQ-BUILD-002, REQ-BUILD-006 (the build-switch legs)
+#
+# Besides the default configure, each platform builds two non-default switch
+# sets (REQ-BUILD-006): shared-only with hem-tool on the shared SDK, and
+# static-only — the unit suite + gates run on both, and the link result is
+# asserted. EHEM_DEPS_LINK=static has no leg here: Ubuntu's libcurl has no
+# static closure (libnghttp2, libidn2, … ship no archives), and the
+# configuration MSYS2 could link would put wolfSSL inside the binaries, which
+# no published package of this project does — the static dependency link is
+# exercised by the release workflow's OpenSSL builds (REQ-BUILD-009).
 #
 # Only the `unit` label runs here: integration tests need the dev-machine HEM
 # and stay local (REQ-TEST-002 gates them on EHEM_TEST_URL, which CI never
@@ -19,12 +28,23 @@ concurrency:
 
 jobs:
   linux:
-    name: Linux (${{ matrix.cc }})
+    name: Linux (${{ matrix.cc }}${{ matrix.variant && format(', {0}', matrix.variant) || '' }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         cc: [gcc, clang]
+        # The explicit empty variant makes each include below a NEW leg — an
+        # include that overwrites no original value would otherwise be merged
+        # into the default gcc leg.
+        variant: ['']
+        include:
+          - cc: gcc
+            variant: shared-only, hem-tool on the shared SDK
+            cmake_args: -DEHEM_BUILD_STATIC=OFF -DEHEM_TOOL_LINK=shared
+          - cc: gcc
+            variant: static-only
+            cmake_args: -DEHEM_BUILD_SHARED=OFF
     steps:
       - uses: actions/checkout@v5
 
@@ -35,13 +55,36 @@ jobs:
         run: ./scripts/install-deps-linux.sh --yes
 
       - name: Configure
-        run: cmake -B build -G Ninja -DCMAKE_C_COMPILER=${{ matrix.cc }}
+        run: cmake -B build -G Ninja -DCMAKE_C_COMPILER=${{ matrix.cc }} ${{ matrix.cmake_args }}
 
       - name: Build
         run: cmake --build build
 
       - name: Unit tests
         run: ctest --test-dir build -L unit --output-on-failure
+
+      # REQ-BUILD-006: the switch legs link what they say.
+      - name: Assert the link result (switch legs)
+        if: matrix.cmake_args
+        run: |
+          fail() { echo "::error::$*"; exit 1; }
+          cmake --install build --prefix "$RUNNER_TEMP/inst"
+          find "$RUNNER_TEMP/inst" -name 'libencedo-hem*' | sort
+          objdump -p build/hem-tool | grep NEEDED
+          case "${{ matrix.cmake_args }}" in
+            *EHEM_TOOL_LINK=shared*)
+              objdump -p build/hem-tool | grep -q 'NEEDED.*libencedo-hem\.so' \
+                || fail "hem-tool does not link libencedo-hem"
+              if find "$RUNNER_TEMP/inst" -name 'libencedo-hem*.a' | grep -q .; then
+                fail "a static SDK was installed"
+              fi ;;
+            *EHEM_BUILD_SHARED=OFF*)
+              if find build "$RUNNER_TEMP/inst" -name 'libencedo-hem.so*' | grep -q .; then
+                fail "a shared SDK was built"
+              fi
+              find "$RUNNER_TEMP/inst" -name 'libencedo-hem.a' | grep -q . \
+                || fail "no static SDK installed" ;;
+          esac
 
   # Re-enabled 2026-07-16: the X25519 crash was a missing wolfCrypt_Init()
   # (required on Windows for wolfSSL's global RNG mutex, which the default-on
@@ -52,11 +95,20 @@ jobs:
   # Universal C Runtime instead of msvcrt. The job name stays "Windows (MinGW)"
   # so the check name is stable.
   windows-mingw:
-    name: Windows (MinGW)
+    name: Windows (MinGW${{ matrix.variant && format(', {0}', matrix.variant) || '' }})
     runs-on: windows-latest
     defaults:
       run:
         shell: msys2 {0}          # every run step executes in the MSYS2 shell
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: ''
+          - variant: shared-only, hem-tool on the shared SDK
+            cmake_args: -DEHEM_BUILD_STATIC=OFF -DEHEM_TOOL_LINK=shared
+          - variant: static-only
+            cmake_args: -DEHEM_BUILD_SHARED=OFF
     steps:
       - uses: actions/checkout@v5
 
@@ -79,10 +131,33 @@ jobs:
             wolfssl:p
 
       - name: Configure
-        run: cmake -B build -G Ninja
+        run: cmake -B build -G Ninja ${{ matrix.cmake_args }}
 
       - name: Build
         run: cmake --build build
 
       - name: Unit tests
         run: ctest --test-dir build -L unit --output-on-failure
+
+      # REQ-BUILD-006: the switch legs link what they say.
+      - name: Assert the link result (switch legs)
+        if: matrix.cmake_args
+        run: |
+          fail() { echo "::error::$*"; exit 1; }
+          cmake --install build --prefix "$RUNNER_TEMP/inst"
+          find "$RUNNER_TEMP/inst" -iname '*encedo-hem*' | sort
+          objdump -p build/hem-tool.exe | grep 'DLL Name'
+          case "${{ matrix.cmake_args }}" in
+            *EHEM_TOOL_LINK=shared*)
+              objdump -p build/hem-tool.exe | grep -qi 'DLL Name: libencedo-hem\.dll' \
+                || fail "hem-tool.exe does not import libencedo-hem.dll"
+              if find "$RUNNER_TEMP/inst" -name 'libencedo-hem.a' | grep -q .; then
+                fail "a static SDK was installed"
+              fi ;;
+            *EHEM_BUILD_SHARED=OFF*)
+              if find build "$RUNNER_TEMP/inst" -name 'libencedo-hem.dll*' | grep -q .; then
+                fail "a shared SDK was built"
+              fi
+              find "$RUNNER_TEMP/inst" -name 'libencedo-hem.a' | grep -q . \
+                || fail "no static SDK installed" ;;
+          esac

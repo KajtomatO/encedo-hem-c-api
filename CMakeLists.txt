@@ -40,8 +40,99 @@ if(EHEM_SANITIZE AND NOT MSVC)
   add_link_options(-fsanitize=address,undefined)
 endif()
 
+# --- build configuration switches (REQ-BUILD-006) --------------------------
+# implements: REQ-BUILD-006 — which SDK variants are built, how hem-tool links
+# the SDK, how the third-party libraries link. Every default is the pre-M12
+# behaviour. Changing EHEM_DEPS_LINK in an existing build directory keeps
+# CMake's cached library lookups — use a fresh one (./dev keeps one per set).
+option(EHEM_BUILD_SHARED "Build and install the shared SDK (libencedo-hem.so/.dll)" ON)
+option(EHEM_BUILD_STATIC "Build and install the static SDK (libencedo-hem.a)" ON)
+set(EHEM_TOOL_LINK "static" CACHE STRING
+  "How hem-tool links the SDK: static (it carries the SDK) | shared")
+set_property(CACHE EHEM_TOOL_LINK PROPERTY STRINGS static shared)
+set(EHEM_DEPS_LINK "default" CACHE STRING
+  "How libcurl and the crypto library link: default (as found) | static | shared")
+set_property(CACHE EHEM_DEPS_LINK PROPERTY STRINGS default static shared)
+# hem-tool can be turned off for a library-only consumer.
+option(EHEM_BUILD_TOOL "Build the hem-tool CLI" ON)
+
+if(NOT EHEM_TOOL_LINK MATCHES "^(static|shared)$")
+  message(FATAL_ERROR "EHEM_TOOL_LINK must be static or shared, not '${EHEM_TOOL_LINK}'")
+endif()
+if(NOT EHEM_DEPS_LINK MATCHES "^(default|static|shared)$")
+  message(FATAL_ERROR "EHEM_DEPS_LINK must be default, static or shared, not '${EHEM_DEPS_LINK}'")
+endif()
+if(NOT EHEM_BUILD_SHARED AND NOT EHEM_BUILD_STATIC)
+  message(FATAL_ERROR "EHEM_BUILD_SHARED and EHEM_BUILD_STATIC are both OFF - "
+                      "nothing would be built; turn at least one on")
+endif()
+if(EHEM_BUILD_TOOL AND EHEM_TOOL_LINK STREQUAL "shared" AND NOT EHEM_BUILD_SHARED)
+  message(FATAL_ERROR "EHEM_TOOL_LINK=shared needs the shared SDK, but "
+                      "EHEM_BUILD_SHARED is OFF")
+endif()
+
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
+include(CTest)               # defines BUILD_TESTING (default ON), enables CTest
+
+# Third-party libraries the link closure may name that are never archived here:
+# glibc stays dynamic (a static glibc breaks NSS/getaddrinfo), and Windows'
+# system DLLs are reached through MinGW import libraries.
+set(EHEM_SYSTEM_LIBS m pthread dl rt c resolv
+    ws2_32 crypt32 bcrypt advapi32 secur32 iphlpapi wldap32 normaliz user32
+    kernel32 gdi32 ole32 shell32 rpcrt4 userenv)
+
+# EHEM_DEPS_LINK=static: the archives of a static link closure — each library
+# name as `pkg-config --static` prints it, resolved to lib<name>.a. The
+# package's own library (`primary`) must come from the package's own libdir —
+# never another copy found elsewhere (a system archive of another version
+# under the prefix's headers is exactly the mix REQ-API-010 refuses); the
+# others from the closure's -L dirs, then the default search path. A missing
+# archive is a configure error naming `what` and the library — never a silent
+# fall-back to a shared library.
+function(ehem_static_closure out what primary primary_dir dirs)
+  set(_paths "")
+  foreach(_name IN LISTS ARGN)
+    if(_name IN_LIST EHEM_SYSTEM_LIBS)
+      list(APPEND _paths "${_name}")
+      continue()
+    endif()
+    string(MAKE_C_IDENTIFIER "EHEM_ARCHIVE_${_name}" _var)
+    if(_name STREQUAL primary AND primary_dir)
+      find_library(${_var}
+        NAMES ${CMAKE_STATIC_LIBRARY_PREFIX}${_name}${CMAKE_STATIC_LIBRARY_SUFFIX}
+        PATHS ${primary_dir} NO_DEFAULT_PATH)
+    else()
+      find_library(${_var}
+        NAMES ${CMAKE_STATIC_LIBRARY_PREFIX}${_name}${CMAKE_STATIC_LIBRARY_SUFFIX}
+        HINTS ${dirs})
+    endif()
+    if(NOT ${_var})
+      message(FATAL_ERROR "EHEM_DEPS_LINK=static: ${what} needs lib${_name}, and "
+        "there is no static archive of it (lib${_name}${CMAKE_STATIC_LIBRARY_SUFFIX}) "
+        "- point CMAKE_PREFIX_PATH / PKG_CONFIG_PATH at a prefix that has one, "
+        "or use EHEM_DEPS_LINK=default")
+    endif()
+    list(APPEND _paths "${${_var}}")
+    unset(${_var} CACHE)
+  endforeach()
+  list(REMOVE_DUPLICATES _paths)
+  set(${out} "${_paths}" PARENT_SCOPE)
+endfunction()
+
+# The link preference steers every library lookup of the two dependencies;
+# restored afterwards so the test framework is found as usual.
+set(_ehem_saved_suffixes "${CMAKE_FIND_LIBRARY_SUFFIXES}")
+if(EHEM_DEPS_LINK STREQUAL "static")
+  set(CMAKE_FIND_LIBRARY_SUFFIXES "${CMAKE_STATIC_LIBRARY_SUFFIX}")
+  set(CURL_USE_STATIC_LIBS ON)           # FindCURL module mode (CMake >= 3.28)
+elseif(EHEM_DEPS_LINK STREQUAL "shared")
+  if(WIN32)
+    set(CMAKE_FIND_LIBRARY_SUFFIXES "${CMAKE_IMPORT_LIBRARY_SUFFIX}")
+  else()
+    set(CMAKE_FIND_LIBRARY_SUFFIXES "${CMAKE_SHARED_LIBRARY_SUFFIX}")
+  endif()
+endif()
 
 # HTTPS transport dependency (REQ-NET-002). The FindCURL module provides the
 # imported target CURL::libcurl; no cURL type appears in public headers.
@@ -62,6 +153,39 @@ endif()
 # it), so it links privately into the shared library.
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(WOLFSSL REQUIRED IMPORTED_TARGET wolfssl)
+
+if(EHEM_DEPS_LINK STREQUAL "static")
+  # wolfSSL: the `pkg-config --static` closure, every member an archive.
+  ehem_static_closure(_ehem_wolfssl_archives "wolfSSL (pkg-config wolfssl)"
+    wolfssl "${WOLFSSL_LIBDIR}" "${WOLFSSL_STATIC_LIBRARY_DIRS}"
+    ${WOLFSSL_STATIC_LIBRARIES})
+  set_property(TARGET PkgConfig::WOLFSSL
+    PROPERTY INTERFACE_LINK_LIBRARIES "${_ehem_wolfssl_archives}")
+  # libcurl: curl's own package config (a prefix built by
+  # scripts/release/build-deps.sh) carries its closure on its targets; FindCURL
+  # module mode finds the archive but not its dependencies — add the
+  # `pkg-config --static libcurl` closure, every member an archive.
+  get_target_property(_ehem_curl_aliased CURL::libcurl ALIASED_TARGET)
+  if(NOT CURL_DIR AND NOT _ehem_curl_aliased)
+    pkg_check_modules(EHEM_PC_CURL QUIET libcurl)
+    if(NOT EHEM_PC_CURL_FOUND)
+      message(FATAL_ERROR "EHEM_DEPS_LINK=static: no libcurl.pc to read libcurl's "
+                          "static dependencies from")
+    endif()
+    ehem_static_closure(_ehem_curl_archives "libcurl (pkg-config libcurl)"
+      curl "${EHEM_PC_CURL_LIBDIR}" "${EHEM_PC_CURL_STATIC_LIBRARY_DIRS}"
+      ${EHEM_PC_CURL_STATIC_LIBRARIES})
+    list(GET _ehem_curl_archives 0 _ehem_curl_archive)
+    list(REMOVE_AT _ehem_curl_archives 0)
+    set_target_properties(CURL::libcurl PROPERTIES
+      IMPORTED_LOCATION "${_ehem_curl_archive}"
+      IMPORTED_LOCATION_RELEASE "${_ehem_curl_archive}"
+      INTERFACE_LINK_LIBRARIES "${_ehem_curl_archives}")
+    set_property(TARGET CURL::libcurl APPEND PROPERTY
+      INTERFACE_COMPILE_DEFINITIONS CURL_STATICLIB)
+  endif()
+endif()
+set(CMAKE_FIND_LIBRARY_SUFFIXES "${_ehem_saved_suffixes}")
 
 # How the resolved dependencies link — a build fact ehem_build_info_get()
 # reports (REQ-API-011) and `hem-tool --version` prints (REQ-TOOL-025): a static
@@ -103,6 +227,37 @@ endforeach()
 ehem_link_mode(CURL::libcurl EHEM_TRANSPORT_LINK)
 message(STATUS "encedo-hem: crypto wolfSSL ${WOLFSSL_VERSION} (${EHEM_CRYPTO_LINK}), "
                "transport libcurl ${EHEM_CURL_VERSION} (${EHEM_TRANSPORT_LINK})")
+# A static or shared preference that the lookups could not honour is an error,
+# never a silent fall-back (REQ-BUILD-006).
+if(NOT EHEM_DEPS_LINK STREQUAL "default")
+  if(EHEM_DEPS_LINK STREQUAL "static")
+    set(_ehem_want static)
+  else()
+    set(_ehem_want dynamic)
+  endif()
+  foreach(_dep CRYPTO TRANSPORT)
+    if(NOT EHEM_${_dep}_LINK STREQUAL _ehem_want)
+      if(_dep STREQUAL "CRYPTO")
+        set(_ehem_what "wolfSSL")
+      else()
+        set(_ehem_what "libcurl")
+      endif()
+      message(FATAL_ERROR "EHEM_DEPS_LINK=${EHEM_DEPS_LINK}: ${_ehem_what} resolved "
+                          "to a ${EHEM_${_dep}_LINK} library - no ${_ehem_want} one "
+                          "was found where CMake looked")
+    endif()
+  endforeach()
+endif()
+# The licensing tripwire (ARCHITECTURE.md §1 and §12 risk 1): any build whose
+# wolfSSL is an archive puts wolfSSL inside every binary it links.
+if(EHEM_CRYPTO_LINK STREQUAL "static")
+  message(WARNING "wolfSSL resolves to a STATIC archive in this configuration: "
+    "every binary built from it carries wolfSSL, which is licensed GPLv2-or-later "
+    "(or commercially by wolfSSL Inc.) - distributing such a binary means "
+    "complying with that licence or holding a commercial one (ARCHITECTURE.md "
+    "§12 risk 1). No published package of this project links wolfSSL statically, "
+    "and the release scripts refuse to package such a build (REQ-BUILD-005).")
+endif()
 set(EHEM_LINK_DEFINITIONS "")
 if(EHEM_CRYPTO_LINK STREQUAL "static")
   list(APPEND EHEM_LINK_DEFINITIONS EHEM_CRYPTO_LINK_STATIC)
@@ -145,23 +300,29 @@ set(EHEM_SOURCES
   src/bip39.c
   src/vendor/bip39/wordlist_english.c)
 
-add_library(encedo-hem        SHARED ${EHEM_SOURCES} $<TARGET_OBJECTS:ehem-cjson>)
-add_library(encedo-hem-static STATIC ${EHEM_SOURCES} $<TARGET_OBJECTS:ehem-cjson>)
-
-# REQ-API-006 when the dependencies are STATIC archives (the release build,
-# REQ-BUILD-005): without this, every libcurl/wolfSSL symbol linked into the
-# shared library would be exported from it. --exclude-libs,ALL keeps archive
-# symbols internal; a no-op when the deps are shared. GNU ld / lld / MinGW ld
-# understand it; other linkers (ld64) simply don't get the flag.
-include(CheckLinkerFlag)
-check_linker_flag(C "-Wl,--exclude-libs,ALL" EHEM_HAVE_EXCLUDE_LIBS)
-if(EHEM_HAVE_EXCLUDE_LIBS)
-  target_link_options(encedo-hem PRIVATE "-Wl,--exclude-libs,ALL")
+# The static archive is the installed static variant (EHEM_BUILD_STATIC=ON);
+# with the variant off it is still built — privately, never installed, as
+# encedo-hem-internal — whenever hem-tool carries the SDK (EHEM_TOOL_LINK=static)
+# or the unit tests need the hidden seams. EHEM_STATIC_TARGET names it for the
+# in-tree consumers.
+if(EHEM_BUILD_STATIC)
+  set(EHEM_STATIC_TARGET encedo-hem-static)
+elseif(BUILD_TESTING OR (EHEM_BUILD_TOOL AND EHEM_TOOL_LINK STREQUAL "static"))
+  set(EHEM_STATIC_TARGET encedo-hem-internal)
+else()
+  set(EHEM_STATIC_TARGET "")
 endif()
-add_library(encedo-hem::encedo-hem        ALIAS encedo-hem)
-add_library(encedo-hem::encedo-hem-static ALIAS encedo-hem-static)
+set(EHEM_LIBRARY_TARGETS "")
+if(EHEM_BUILD_SHARED)
+  add_library(encedo-hem SHARED ${EHEM_SOURCES} $<TARGET_OBJECTS:ehem-cjson>)
+  list(APPEND EHEM_LIBRARY_TARGETS encedo-hem)
+endif()
+if(EHEM_STATIC_TARGET)
+  add_library(${EHEM_STATIC_TARGET} STATIC ${EHEM_SOURCES} $<TARGET_OBJECTS:ehem-cjson>)
+  list(APPEND EHEM_LIBRARY_TARGETS ${EHEM_STATIC_TARGET})
+endif()
 
-foreach(_t encedo-hem encedo-hem-static)
+foreach(_t IN LISTS EHEM_LIBRARY_TARGETS)
   target_include_directories(${_t}
     PUBLIC
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -173,34 +334,67 @@ foreach(_t encedo-hem encedo-hem-static)
     ${EHEM_LINK_DEFINITIONS}                # ehem_build_info link modes
     CJSON_HIDE_SYMBOLS)                     # json.c includes cJSON.h; match it
   target_compile_options(${_t} PRIVATE ${EHEM_WARNING_FLAGS})
-  set_target_properties(${_t} PROPERTIES OUTPUT_NAME encedo-hem)
 endforeach()
 
-# libcurl and wolfSSL link into the shared lib privately (baked in, not
-# re-exported), but are INTERFACE requirements of the static lib so downstream
-# links propagate.
-target_link_libraries(encedo-hem        PRIVATE CURL::libcurl PkgConfig::WOLFSSL)
-target_link_libraries(encedo-hem-static PUBLIC  CURL::libcurl PkgConfig::WOLFSSL)
-
-# Only the shared build gets the export-enabling macro.
-target_compile_definitions(encedo-hem PRIVATE EHEM_BUILDING_SHARED)
-set_target_properties(encedo-hem PROPERTIES
-  VERSION   ${PROJECT_VERSION}
-  SOVERSION ${PROJECT_VERSION_MAJOR})
-
-# MinGW: with dllexport present, restrict the DLL to those symbols only, and
-# emit a .def file listing the exports. The .def is a stable, machine-readable
-# export list (unlike `objdump -p`, whose format drifts across binutils
-# versions) that the symbol-export check parses on Windows.
-if(WIN32 AND NOT MSVC)
+if(EHEM_BUILD_SHARED)
+  # REQ-API-006 when the dependencies are STATIC archives (the release build,
+  # REQ-BUILD-005): without this, every libcurl/wolfSSL symbol linked into the
+  # shared library would be exported from it. --exclude-libs,ALL keeps archive
+  # symbols internal; a no-op when the deps are shared. GNU ld / lld / MinGW ld
+  # understand it; other linkers (ld64) simply don't get the flag.
+  include(CheckLinkerFlag)
+  check_linker_flag(C "-Wl,--exclude-libs,ALL" EHEM_HAVE_EXCLUDE_LIBS)
+  if(EHEM_HAVE_EXCLUDE_LIBS)
+    target_link_options(encedo-hem PRIVATE "-Wl,--exclude-libs,ALL")
+  endif()
+  add_library(encedo-hem::encedo-hem ALIAS encedo-hem)
   set_target_properties(encedo-hem PROPERTIES
-    WINDOWS_EXPORT_ALL_SYMBOLS OFF)
-  target_link_options(encedo-hem PRIVATE
-    "-Wl,--output-def,${CMAKE_CURRENT_BINARY_DIR}/libencedo-hem.def")
+    OUTPUT_NAME encedo-hem
+    VERSION   ${PROJECT_VERSION}
+    SOVERSION ${PROJECT_VERSION_MAJOR})
+  # libcurl and wolfSSL link into the shared lib privately (baked in, not
+  # re-exported).
+  target_link_libraries(encedo-hem PRIVATE CURL::libcurl PkgConfig::WOLFSSL)
+  # Only the shared build gets the export-enabling macro; its consumers get the
+  # import side (dllimport on Windows; nothing elsewhere) from the target.
+  target_compile_definitions(encedo-hem
+    PRIVATE   EHEM_BUILDING_SHARED
+    INTERFACE EHEM_USING_SHARED)
+  # MinGW: with dllexport present, restrict the DLL to those symbols only, and
+  # emit a .def file listing the exports. The .def is a stable, machine-readable
+  # export list (unlike `objdump -p`, whose format drifts across binutils
+  # versions) that the symbol-export check parses on Windows.
+  if(WIN32 AND NOT MSVC)
+    set_target_properties(encedo-hem PROPERTIES
+      WINDOWS_EXPORT_ALL_SYMBOLS OFF)
+    target_link_options(encedo-hem PRIVATE
+      "-Wl,--output-def,${CMAKE_CURRENT_BINARY_DIR}/libencedo-hem.def")
+  endif()
+endif()
+
+if(EHEM_STATIC_TARGET)
+  # The dependencies are INTERFACE requirements of the static lib so
+  # downstream links propagate.
+  target_link_libraries(${EHEM_STATIC_TARGET} PUBLIC CURL::libcurl PkgConfig::WOLFSSL)
+  if(EHEM_BUILD_STATIC)
+    add_library(encedo-hem::encedo-hem-static ALIAS encedo-hem-static)
+    set_target_properties(encedo-hem-static PROPERTIES OUTPUT_NAME encedo-hem)
+  else()
+    set_target_properties(${EHEM_STATIC_TARGET} PROPERTIES
+      OUTPUT_NAME encedo-hem-internal)
+  endif()
 endif()
 
 # --- install / export -----------------------------------------------------
-install(TARGETS encedo-hem encedo-hem-static
+# Only the variants built (REQ-BUILD-006); the private archive never ships.
+set(_ehem_install_targets "")
+if(EHEM_BUILD_SHARED)
+  list(APPEND _ehem_install_targets encedo-hem)
+endif()
+if(EHEM_BUILD_STATIC)
+  list(APPEND _ehem_install_targets encedo-hem-static)
+endif()
+install(TARGETS ${_ehem_install_targets}
   EXPORT encedo-hem-targets
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -226,18 +420,19 @@ install(FILES
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/encedo-hem)
 
 # --- hem-tool CLI ---------------------------------------------------------
-# Thin consumer of the PUBLIC API only (REQ-TOOL-001); links the static lib so
-# the tool carries the SDK itself (no libencedo-hem.so lookup at run time);
-# the SDK's own dependencies, curl and wolfSSL, come through the static lib's
-# interface link and are dynamic or not per the build — the release build
-# links wolfSSL dynamically (REQ-BUILD-005). Building it can be turned off for
-# a library-only consumer.
-option(EHEM_BUILD_TOOL "Build the hem-tool CLI" ON)
+# Thin consumer of the PUBLIC API only (REQ-TOOL-001). By default it links the
+# static SDK so the tool carries the SDK itself (no libencedo-hem.so lookup at
+# run time); EHEM_TOOL_LINK=shared links libencedo-hem instead (REQ-BUILD-006).
+# The SDK's own dependencies, curl and wolfSSL, come through the SDK target's
+# link interface and are dynamic or not per the build — the release build links
+# wolfSSL dynamically (REQ-BUILD-005).
 if(EHEM_BUILD_TOOL)
-  # The cert-install orchestration (REQ-TOOL-003) lives in a small static lib so
-  # the tool binary and the unit/disruptive tests share ONE copy of it. Like the
-  # rest of the tool it uses only the public API (through the static SDK).
-  add_library(hem-tool-core STATIC
+  # The tool's command code lives in a small static lib so the tool binary and
+  # the unit/disruptive tests share ONE copy of it. Like the rest of the tool it
+  # uses only the public API. hem-tool-core always sits on the static SDK — the
+  # unit tests drive it through the hidden seams; with EHEM_TOOL_LINK=shared the
+  # executable gets its own copy built against the shared SDK.
+  set(HEM_TOOL_CORE_SOURCES
     src/tools/hem-tool/cert_install.c
     src/tools/hem-tool/ext_cmd.c
     src/tools/hem-tool/init_cmd.c
@@ -258,19 +453,33 @@ if(EHEM_BUILD_TOOL)
     # Vendored qrcodegen (REQ-TOOL-016): TOOL-ONLY — never part of the SDK
     # library; the export/header gates prove the containment.
     src/tools/hem-tool/vendor/qrcodegen/qrcodegen.c)
-  target_link_libraries(hem-tool-core PUBLIC encedo-hem::encedo-hem-static)
-  target_include_directories(hem-tool-core PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/tools/hem-tool)
-  target_compile_options(hem-tool-core PRIVATE ${EHEM_WARNING_FLAGS})
+  set(_ehem_tool_cores "")
+  if(EHEM_STATIC_TARGET)
+    add_library(hem-tool-core STATIC ${HEM_TOOL_CORE_SOURCES})
+    target_link_libraries(hem-tool-core PUBLIC ${EHEM_STATIC_TARGET})
+    list(APPEND _ehem_tool_cores hem-tool-core)
+  endif()
+  if(EHEM_TOOL_LINK STREQUAL "shared")
+    add_library(hem-tool-core-shared STATIC ${HEM_TOOL_CORE_SOURCES})
+    target_link_libraries(hem-tool-core-shared PUBLIC encedo-hem::encedo-hem)
+    list(APPEND _ehem_tool_cores hem-tool-core-shared)
+    set(_ehem_tool_core hem-tool-core-shared)
+  else()
+    set(_ehem_tool_core hem-tool-core)
+  endif()
+  foreach(_t IN LISTS _ehem_tool_cores)
+    target_include_directories(${_t} PUBLIC
+      ${CMAKE_CURRENT_SOURCE_DIR}/src/tools/hem-tool)
+    target_compile_options(${_t} PRIVATE ${EHEM_WARNING_FLAGS})
+  endforeach()
 
   add_executable(hem-tool src/tools/hem-tool/main.c)
-  target_link_libraries(hem-tool PRIVATE hem-tool-core)
+  target_link_libraries(hem-tool PRIVATE ${_ehem_tool_core})
   target_compile_options(hem-tool PRIVATE ${EHEM_WARNING_FLAGS})
   install(TARGETS hem-tool RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
 # --- tests ----------------------------------------------------------------
-include(CTest)               # defines BUILD_TESTING (default ON), enables CTest
 if(BUILD_TESTING)
   add_subdirectory(tests)
 endif()

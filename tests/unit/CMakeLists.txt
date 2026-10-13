@@ -201,13 +201,16 @@ add_test(NAME public_headers_dep_free
 set_tests_properties(public_headers_dep_free PROPERTIES LABELS unit)
 
 # REQ-API-006: the shared library must export only ehem_* symbols.
-# Scripted nm/objdump check, run as a CTest with the `unit` label.
-add_test(NAME export_symbols
-  COMMAND ${CMAKE_COMMAND}
-    -DEHEM_SHARED_LIB=$<TARGET_FILE:encedo-hem>
-    -DEHEM_EXPORTS_BASELINE=${CMAKE_CURRENT_SOURCE_DIR}/exports_baseline_1.0.txt
-    -P ${CMAKE_CURRENT_SOURCE_DIR}/check_exports.cmake)
-set_tests_properties(export_symbols PROPERTIES LABELS unit)
+# Scripted nm/objdump check, run as a CTest with the `unit` label — wherever a
+# shared library is built (EHEM_BUILD_SHARED, REQ-BUILD-006).
+if(TARGET encedo-hem)
+  add_test(NAME export_symbols
+    COMMAND ${CMAKE_COMMAND}
+      -DEHEM_SHARED_LIB=$<TARGET_FILE:encedo-hem>
+      -DEHEM_EXPORTS_BASELINE=${CMAKE_CURRENT_SOURCE_DIR}/exports_baseline_1.0.txt
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/check_exports.cmake)
+  set_tests_properties(export_symbols PROPERTIES LABELS unit)
+endif()
 
 # REQ-API-007: docs/API-GUIDE.md must index every public symbol (the
 # headers are the per-symbol reference; the guide is the map to them).

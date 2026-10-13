@@ -41,15 +41,20 @@ function(ehem_add_unit_test name)
 endfunction()
 
 # ehem_add_integration_test(<name> SOURCES ...)
-# Links the shared library (public API only) and carries the `integration`
-# label. Gating is shared infra (tests/support/integration_env.h): the test
+# Links the shared library (public API only) — the static SDK when the build has
+# no shared variant (EHEM_BUILD_SHARED=OFF, REQ-BUILD-006) — and carries the
+# `integration` label. Gating is shared infra (tests/support/integration_env.h): the test
 # main() exits EHEM_SKIP_EXIT (77) when EHEM_TEST_URL is unset, and
 # SKIP_RETURN_CODE makes CTest report that as "Skipped", not a failure
 # (REQ-TEST-002).
 function(ehem_add_integration_test name)
   cmake_parse_arguments(A "" "" "SOURCES" ${ARGN})
   add_executable(${name} ${A_SOURCES})
-  target_link_libraries(${name} PRIVATE encedo-hem::encedo-hem cmocka::cmocka)
+  if(TARGET encedo-hem)
+    target_link_libraries(${name} PRIVATE encedo-hem::encedo-hem cmocka::cmocka)
+  else()
+    target_link_libraries(${name} PRIVATE ${EHEM_STATIC_TARGET} cmocka::cmocka)
+  endif()
   # PROJECT_SOURCE_DIR (not CMAKE_CURRENT_SOURCE_DIR) because this runs in the
   # caller's scope; the shared gating header lives under tests/support.
   target_include_directories(${name} PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
@@ -82,7 +87,9 @@ endfunction()
 add_library(ehem_test_support STATIC
   support/fake_transport.c
   support/ext_sim.c)
-target_link_libraries(ehem_test_support PUBLIC encedo-hem::encedo-hem-static)
+# EHEM_STATIC_TARGET: the static variant, or the private archive when the
+# variant is off (REQ-BUILD-006) — the unit tests need the hidden seams.
+target_link_libraries(ehem_test_support PUBLIC ${EHEM_STATIC_TARGET})
 target_include_directories(ehem_test_support PUBLIC
   ${PROJECT_SOURCE_DIR}/src
   ${CMAKE_CURRENT_SOURCE_DIR}/support)
