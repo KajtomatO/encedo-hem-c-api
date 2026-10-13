@@ -7,9 +7,51 @@ traces:
   architecture: ["ARCHITECTURE.md#1-decisions-fixed", "ARCHITECTURE.md#11-milestones", "ARCHITECTURE.md#12-risks--open-questions"]
 depends_on: []
 evidence:
-  commits: []
-  tests: []
-  notes: null
+  commits: ["20dd93c", "fca7425"]   # start; implementation — the CI run and the done commit follow
+  tests:
+    - "Default configure before vs after (scratch dirs, dev host): install listing (16 files), hem-tool NEEDED, hem-tool link line, libencedo-hem.so link line — all identical; exported shared target gains INTERFACE_COMPILE_DEFINITIONS EHEM_USING_SHARED (intended)"
+    - "Switch builds, Linux gcc: shared-only + EHEM_TOOL_LINK=shared → hem-tool NEEDED libencedo-hem.so.1, install = .so only, unit 54/54; static-only → install = libencedo-hem.a only, unit 53/53 (no export gate without a shared lib); shared-only (tool static) → private libencedo-hem-internal.a, not installed, unit 54/54"
+    - "Negative configures: both variants OFF; tool shared without shared variant; bad EHEM_TOOL_LINK / EHEM_DEPS_LINK values; EHEM_DEPS_LINK=static on Ubuntu (libnghttp2 has no archive) and against the release prefix (libwolfssl has no archive); EHEM_DEPS_LINK=shared against the release prefix (libcurl static) — each a FATAL_ERROR naming the option/dependency"
+    - "Static-wolfSSL WARNING: fires with an archive-only wolfssl.pc prefix (default deps link, status 'wolfSSL 5.6.6 (static)'), absent on the default configure"
+    - "ci.yml: matrix expansion emulated (Linux: gcc, clang + 2 switch legs; Windows: default + 2 switch legs, default check names unchanged); the assertion scripts run locally — pass on the matching build, fail on the default build"
+    - "./dev ci 54/54 gcc + clang; ./dev test asan 54/54; shellcheck dev clean; ./dev build --static-only builds in build-static-only"
+  notes: |
+    PENDING for done: the ci.yml switch legs' first green run (Linux gcc +
+    Windows MSYS2 shared-only/tool-shared and static-only) — needs a push.
+    Settled at start (REQ-BUILD-006 rev 2): Ubuntu ships libwolfssl.a and
+    libcurl.a but libcurl's static closure lacks 10 archives; MSYS2 UCRT64
+    ships both (+ closure ssh2/idn2/OpenSSL/zlib/brotli/zstd/nghttp*/psl).
+    No EHEM_DEPS_LINK=static CI leg: Linux cannot, MSYS2 would put wolfSSL
+    inside the binaries (§1) — the static deps link is release.yml's
+    OpenSSL build (STEP-M12-120).
+    Design: the static archive target is the installed variant
+    (encedo-hem-static) or, with EHEM_BUILD_STATIC=OFF, a private
+    encedo-hem-internal (OUTPUT_NAME libencedo-hem-internal.a, never
+    installed) built when tests or a static-linked hem-tool need it;
+    EHEM_STATIC_TARGET names it for in-tree consumers (test support,
+    hem-tool-core). hem-tool-core always sits on the static SDK (the unit
+    tests use the hidden seams); EHEM_TOOL_LINK=shared builds a second copy,
+    hem-tool-core-shared, linked to encedo-hem::encedo-hem for the exe — the
+    tool code is public-API-only, so it compiles against either. The shared
+    target gets INTERFACE EHEM_USING_SHARED. Integration tests link the
+    static SDK when no shared one exists; the export gate is registered only
+    with a shared library. include(CTest) moved up (BUILD_TESTING decides
+    the private archive). EHEM_DEPS_LINK: lookup suffixes switched around the
+    two dependency lookups only (restored before the tests find cmocka);
+    static = CURL_USE_STATIC_LIBS + archive-only closures from pkg-config
+    --static (glibc and Windows system import libs pass through by name);
+    a package's own library is looked up ONLY in its own pkg-config libdir
+    (fix: the first try mixed the prefix's 5.7.2 headers with the system's
+    5.6.6 archive); a preference the lookups could not honour is a
+    FATAL_ERROR, never a fall-back. The crypto link word (STEP-M12-020's
+    EHEM_CRYPTO_LINK_STATIC) comes from the same classification.
+    ./dev build: --shared-only / --static-only / --tool-link X / --deps X,
+    own build dir per non-default set (REQ-BUILD-004 rev 2 note).
+    ci.yml gotchas caught before pushing: (1) an `include` entry that
+    overwrites no original matrix value is MERGED into the existing combo —
+    without the explicit `variant: ['']` dimension the default gcc leg would
+    have become a switch leg; (2) `! cmd` never trips `set -e` in bash — the
+    assertions use explicit `if ...; then fail; fi`.
 reopened: []
 cancelled: null
 ---
@@ -62,22 +104,22 @@ before/after diff of `cmake --install` listings and `ldd`/`objdump -p
 hem-tool`.
 
 **Definition of done**
-- [ ] Four options with the documented defaults; default configure
+- [x] Four options with the documented defaults; default configure
       unchanged (install listing + hem-tool `ldd`/`objdump -p` diffs
       recorded in the REQ or notes).
-- [ ] Negative configures recorded: both variants OFF; tool shared without
+- [x] Negative configures recorded: both variants OFF; tool shared without
       the shared variant; `EHEM_DEPS_LINK=static` with a dependency lacking
       an archive — each fails naming the option.
 - [ ] `EHEM_TOOL_LINK=shared`: hem-tool links `libencedo-hem` (ldd/import
       table), suite green; `EHEM_BUILD_SHARED=OFF` and `EHEM_BUILD_STATIC=OFF`
       each build + pass the suite (private test archive) — ci.yml legs
       green on both platforms where the distro packages allow.
-- [ ] Static-wolfSSL WARNING fires against the REQ-BUILD-005 release prefix
+- [x] Static-wolfSSL WARNING fires against the REQ-BUILD-005 release prefix
       with `EHEM_DEPS_LINK=static` and is absent otherwise (recorded).
-- [ ] `./dev build` exposes the switches (REQ-BUILD-004 doc updated);
+- [x] `./dev build` exposes the switches (REQ-BUILD-004 doc updated);
       shared target carries `INTERFACE EHEM_USING_SHARED`;
       `EHEM_CRYPTO_LINK_STATIC` definition emitted.
-- [ ] REQ-BUILD-006 OPEN criterion (distro static archives) resolved and
+- [x] REQ-BUILD-006 OPEN criterion (distro static archives) resolved and
       recorded (rev bump); `implements: REQ-BUILD-006` tag in
       CMakeLists.txt / ci.yml; `./dev ci` gcc + clang + ASan green on the
       default configure.
