@@ -9,7 +9,7 @@ depends_on: ["STEP-M12-060"]
 evidence:
   commits: ["74b2508"]   # start — the implementation, the CI run and the done commit follow
   tests:
-    - "tests/consumer/check_consumer.cmake (CTest consumer_interface, label unit; verifies: REQ-BUILD-008): cmake --install into <build>/tests/consumer-gate/prefix; asserts the installed config (the wolfSSL lookup only with the static variant), the export (only the variants built; the shared target's INTERFACE_COMPILE_DEFINITIONS EHEM_USING_SHARED; libcurl exported as CURL::libcurl, never an aliased CURL::libcurl_static/_shared) and encedo-hem.pc (relocatable prefix, Version, Requires.private: libcurl wolfssl, Cflags, Libs); then configures tests/consumer against the install (both lookups must resolve inside it), builds (no 'auto-import' in the output) and runs every consumer: find_package shared/static, pkg-config shared/static — each prints the SDK version and its EHEM_USING_SHARED state, compared"
+    - "tests/consumer/check_consumer.cmake (CTest consumer_interface, label unit; verifies: REQ-BUILD-008): cmake --install into <build>/tests/consumer-gate/prefix; asserts the installed config (the wolfSSL lookup only with the static variant), the export (only the variants built; the shared target's INTERFACE_COMPILE_DEFINITIONS EHEM_USING_SHARED; libcurl exported as CURL::libcurl, never an aliased CURL::libcurl_static/_shared) and encedo-hem.pc (relocatable prefix, Version, Requires.private: libcurl wolfssl, Cflags, Libs); then configures tests/consumer against the install (both lookups must resolve inside it), builds (on MinGW the shared consumers link with -Wl,--disable-auto-import) and runs every consumer: find_package shared/static, pkg-config shared/static — each prints the SDK version and its EHEM_USING_SHARED state, compared"
     - "Local 2026-10-13, all green: default (55/55), shared-only + EHEM_TOOL_LINK=shared (55/55), static-only (54/54), clang (55/55), ASan (55/55; the consumer gets the sanitizer flags) and the Release build against the REQ-BUILD-005 prefix exactly as package.sh configures it (55/55). The static pkg-config consumer: the full pkg-config --static closure against the release prefix; the archive + shared libcurl/wolfSSL on Ubuntu (libcurl's private libraries have no linkable files there) — the form is printed in the test log"
     - "./dev ci 55/55 gcc + clang; ./dev test asan 55/55"
   notes: |
@@ -17,7 +17,8 @@ evidence:
     Windows MSYS2 default + the two switch legs) run consumer_interface in
     `ctest -L unit` — their first green run closes the Windows boxes (the
     gate natively on MSYS2: find_package + pkg-config, the --static closure
-    with MSYS2's packages, no auto-import note); the next release.yml
+    with MSYS2's packages, the shared consumers linked with auto-import
+    disabled); the next release.yml
     dispatch runs it in both release configurations too.
     Found while building the gate: (1) an exported link interface records a
     bare ALIAS by its aliased name — the release prefix's curl package
@@ -41,7 +42,16 @@ evidence:
     `cmake -E env PATH=...` swallowed the executable ("no command given").
     PATH and PKG_CONFIG_PATH now reach the children through the script's
     environment, the prefix path in forward slashes; replayed on Linux (the
-    old gate fails exactly so, the new one passes).
+    old gate fails exactly so, the new one passes). (5) The gate's search
+    for "auto-import" in the consumer build output could not fire: x86_64
+    ld (binutils 2.41, positive control 2026-10-14) resolved a data
+    reference without dllimport through auto-import and printed no note —
+    the same link fails under --disable-auto-import. On MinGW the shared
+    consumers now link with -Wl,--disable-auto-import, so a reference that
+    needs auto-import fails the link whatever the linker prints. The SDK
+    DLL exports no data symbol (109 functions); both shared consumers link
+    so — with and without EHEM_USING_SHARED — in the MinGW cross
+    simulation and against MSYS2's own CRT 14.0.0 + GCC 16.2 libgcc.
     Design: the config's dependency block is generated per build
     (EHEM_CONFIG_DEPENDENCIES — STEP-M12-090 adds the OpenSSL one); the .pc
     is relocatable through ${pcfiledir} (one `..` per libdir component +

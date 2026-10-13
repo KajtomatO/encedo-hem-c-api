@@ -28,7 +28,9 @@ library, whichever the build carries. The static pkg-config consumer uses the
 `pkg-config --static` closure where every library of it can be linked; on
 Ubuntu, libcurl's private libraries have no linkable files, so there it links
 the archive with the shared libcurl and wolfSSL instead and says so in the
-test's log (`ctest -R consumer_interface -V`). Native builds only.
+test's log (`ctest -R consumer_interface -V`). On MinGW the shared consumers
+link with `-Wl,--disable-auto-import`, so the DLL must be reachable without
+the linker's auto-import. Native builds only.
 
 ## Running integration tests
 

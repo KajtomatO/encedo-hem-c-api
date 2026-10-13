@@ -45,6 +45,14 @@ if(CONSUMER_SHARED)
   pkg_check_modules(EHEM_PC_SHARED REQUIRED IMPORTED_TARGET encedo-hem)
   add_executable(consumer_pc_shared consumer.c)
   target_link_libraries(consumer_pc_shared PRIVATE PkgConfig::EHEM_PC_SHARED)
+
+  # MinGW: the DLL's consumers must link without the linker's auto-import,
+  # which x86_64 ld applies silently (no note) — a reference that needs it
+  # fails the link here instead.
+  if(MINGW)
+    target_link_options(consumer_cmake_shared PRIVATE -Wl,--disable-auto-import)
+    target_link_options(consumer_pc_shared PRIVATE -Wl,--disable-auto-import)
+  endif()
 endif()
 
 if(CONSUMER_STATIC)

@@ -8,7 +8,7 @@
 #           built; the shared target carries EHEM_USING_SHARED; encedo-hem.pc
 #           is installed, relocatable, with Requires.private; a consumer builds
 #           and runs via find_package AND pkg-config for every variant built;
-#           no auto-import note on Windows)
+#           on MinGW the shared consumers link with auto-import disabled)
 #
 # Run as a CTest (label `unit`, tests/CMakeLists.txt):
 #   cmake -DEHEM_BUILD_DIR=<build> -DEHEM_SCRATCH=<dir> -DEHEM_CONSUMER_SRC=<src>
@@ -168,12 +168,6 @@ esc(_pp "${_pp}")
 step("consumer configure" ${CMAKE_COMMAND} "-DCMAKE_PREFIX_PATH=${_pp}" ${_args})
 string(REGEX MATCH "consumer_pc_static: [^\n]*" _form "${_step_out}")
 step("consumer build" ${CMAKE_COMMAND} --build "${_build}")
-# Windows: the shared consumers reach the DLL through dllimport, never through
-# the linker's auto-import fallback.
-string(FIND "${_step_out}" "auto-import" _pos)
-if(NOT _pos EQUAL -1)
-  message(FATAL_ERROR "the consumer link used auto-import:\n${_step_out}")
-endif()
 
 set(_runs "")
 if(EHEM_SHARED)
