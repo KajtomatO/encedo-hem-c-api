@@ -6,13 +6,14 @@
  *           EHEMTEST AES-256 key + tamper → 406; the AES256-key-serves-
  *           AES128 width rule; alignment probes [20-byte and 8-byte msgs];
  *           ECDH-KEK flow cross-checked BYTE-EXACTLY against a local
- *           wolfCrypt wc_AesKeyWrap under HKDF-SHA256(shared,
+ *           AES key wrap (RFC 3394) under HKDF-SHA256(shared,
  *           "encedo-kek" ‖ ctx) — arbitrating the HKDF info string the doc
  *           ("encedo") and firmware source ("encedo-kek", crypto.c:57)
  *           disagree on)
  *
  * Links the STATIC lib + internal headers (ehem_test_support) for the shim
- * X25519/HMAC (local HKDF) and direct wolfCrypt wc_AesKeyWrap.
+ * X25519/HMAC (local HKDF) and the reference key wrap of
+ * tests/support/crypto_ref (the build's crypto library, either backend).
  */
 #include <stdarg.h>
 #include <stddef.h>
@@ -22,15 +23,13 @@
 #include <string.h>
 #include <cmocka.h>
 
-#include <wolfssl/options.h>
-#include <wolfssl/wolfcrypt/aes.h>
-#include <wolfssl/wolfcrypt/error-crypt.h>
 
 #include "ehem/ehem.h"
 #include "ehem/auth.h"
 #include "ehem/crypto.h"
 #include "ehem/keymgmt.h"
 #include "crypto_shim.h"
+#include "crypto_ref.h"
 #include "integration_env.h"
 #include "ehem_test_keys.h"
 
@@ -209,7 +208,7 @@ static void test_ecdh_kek_local_crosscheck(void **state)
     uint8_t info[80];
     ehem_key_details *d = NULL;
     ehem_wrapped *w = NULL;
-    Aes aes;
+    size_t local_len = 0;
     int wret;
 
     create_key(s, "CURVE25519", kid_dev);
@@ -223,7 +222,7 @@ static void test_ecdh_kek_local_crosscheck(void **state)
     assert_int_equal((int)w->data_len, 24);
 
     /* Local: same KEK (info = "encedo-kek" ‖ ctx — firmware crypto.c:57;
-     * NOT the doc's "encedo"), then wc_AesKeyWrap. */
+     * NOT the doc's "encedo"), then the RFC 3394 key wrap. */
     assert_int_equal(ehem_key_get(s->ctx, kid_dev, &d), EHEM_OK);
     assert_int_equal(ehem_x25519_shared(priv, d->pubkey, shared), EHEM_OK);
     ehem_key_details_free(d);
@@ -233,34 +232,26 @@ static void test_ecdh_kek_local_crosscheck(void **state)
     local_hkdf(shared, sizeof shared, info,
                sizeof INFO_KEK - 1 + sizeof CTXB, kek, sizeof kek);
 
-    (void)aes;
-#ifdef HAVE_AES_KEYWRAP
-    /* Debian wolfSSL compiles the RFC 3394 key-wrap; the byte-exact local
-     * cross-check runs there. */
-    wret = wc_AesKeyWrap(kek, sizeof kek, SECRET32, 16,
-                         local_wrapped, sizeof local_wrapped, NULL);
-    if (wret == 24) {
+    /* Debian's wolfSSL and OpenSSL 3 have the RFC 3394 key wrap; MSYS2's
+     * wolfSSL is built WITHOUT HAVE_AES_KEYWRAP, the same class of gap as its
+     * missing HAVE_COMP_KEY (STEP-M4-020) — there the finding stands on the
+     * firmware source (crypto.c:57) plus the byte-exact match elsewhere. */
+    wret = ref_aes_keywrap(kek, sizeof kek, SECRET32, 16, local_wrapped,
+                           sizeof local_wrapped, &local_len);
+    if (wret == 0 && local_len == 24) {
         int match = (memcmp(local_wrapped, w->data, 24) == 0);
-        printf("[probe] ECDH-KEK wrap vs local wc_AesKeyWrap"
-               "(HKDF info \"encedo-kek\"‖ctx): %s\n",
+        printf("[probe] ECDH-KEK wrap vs local %s key wrap"
+               "(HKDF info \"encedo-kek\"‖ctx): %s\n", ref_backend(),
                match ? "BYTE-EXACT MATCH" : "MISMATCH");
         assert_true(match);
+    } else if (wret == CRYPTO_REF_UNSUPPORTED) {
+        printf("[probe] %s built without the AES key wrap — local "
+               "cross-check skipped on this platform\n", ref_backend());
     } else {
-        printf("[probe] local wc_AesKeyWrap failed (ret=%d) — local "
-               "cross-check skipped; info string stands on fw source\n", wret);
+        printf("[probe] local %s key wrap failed (ret=%d) — local "
+               "cross-check skipped; info string stands on fw source\n",
+               ref_backend(), wret);
     }
-#else
-    /* MSYS2 wolfSSL is built WITHOUT HAVE_AES_KEYWRAP (wc_AesKeyWrap is not
-     * even declared — a compile error, not a runtime NOT_COMPILED_IN), the
-     * same class of gap as its missing HAVE_COMP_KEY (STEP-M4-020). The
-     * local cross-check is Linux-only; the finding stands on the firmware
-     * source (crypto.c:57) plus the Debian-verified byte-exact match. */
-    (void)wret;
-    (void)local_wrapped;
-    memset(local_wrapped, 0, sizeof local_wrapped);
-    printf("[probe] wolfSSL built without HAVE_AES_KEYWRAP — local "
-           "cross-check skipped on this platform\n");
-#endif
 
     ehem_wrapped_free(w);
     ehem_zeroize(priv, sizeof priv);

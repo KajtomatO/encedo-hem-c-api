@@ -12,8 +12,9 @@
  *           key → 406; PROBE: derived-mode AES key = HKDF-SHA256(secret,
  *           info="encedo-aes"‖ctx) — reproduced locally byte-for-byte)
  *
- * Links the STATIC lib + internal headers (shim X25519) + wolfCrypt
- * (HKDF, AES-GCM) — same exception as test_ecdh_live. EHEMTEST hygiene per
+ * Links the STATIC lib + internal headers (shim X25519) + the reference HKDF
+ * and AES-GCM of tests/support/crypto_ref (the build's crypto library, either
+ * backend) — same exception as test_ecdh_live. EHEMTEST hygiene per
  * REQ-TEST-003.
  */
 #include <stdarg.h>
@@ -25,16 +26,13 @@
 #include <string.h>
 #include <cmocka.h>
 
-#include <wolfssl/options.h>
-#include <wolfssl/wolfcrypt/aes.h>
-#include <wolfssl/wolfcrypt/hmac.h>
-#include <wolfssl/wolfcrypt/kdf.h>
 
 #include "ehem/ehem.h"
 #include "ehem/auth.h"
 #include "ehem/crypto.h"
 #include "ehem/keymgmt.h"
 #include "crypto_shim.h"
+#include "crypto_ref.h"
 #include "integration_env.h"
 #include "ehem_test_keys.h"
 
@@ -235,28 +233,18 @@ static bool candidate_matches(const uint8_t secret[EHEM_X25519_KEYSIZE],
     uint8_t key[32];
     uint8_t ct[PT_LEN];
     uint8_t tag[16];
-    Aes aes;
-    int ret;
 
     memcpy(info, info_prefix, info_len);
     if (ctx_sfx != NULL) {
         memcpy(info + info_len, ctx_sfx, ctx_sfx_len);
         info_len += ctx_sfx_len;
     }
-    if (wc_HKDF(WC_SHA256, secret, EHEM_X25519_KEYSIZE, NULL, 0,
-                info, (word32)info_len, key, sizeof key) != 0) {
+    if (ref_hkdf_sha256(secret, EHEM_X25519_KEYSIZE, NULL, 0,
+                        info, info_len, key, sizeof key) != 0) {
         return false;
     }
-    if (wc_AesInit(&aes, NULL, INVALID_DEVID) != 0) {
-        return false;
-    }
-    ret = wc_AesGcmSetKey(&aes, key, sizeof key);
-    if (ret == 0) {
-        ret = wc_AesGcmEncrypt(&aes, ct, PT, PT_LEN, dev->iv, 16,
-                               tag, 16, NULL, 0);
-    }
-    wc_AesFree(&aes);
-    if (ret != 0) {
+    if (ref_aes_gcm_encrypt(key, sizeof key, dev->iv, 16, PT, PT_LEN,
+                            NULL, 0, ct, tag, sizeof tag) != 0) {
         return false;
     }
     return dev->ciphertext_len == PT_LEN &&

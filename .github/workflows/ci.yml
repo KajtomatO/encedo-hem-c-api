@@ -1,10 +1,13 @@
 # CI — build the library and run the unit suite on Linux and Windows (MinGW).
-# implements: REQ-BUILD-002, REQ-BUILD-006 (the build-switch legs)
+# implements: REQ-BUILD-002, REQ-BUILD-006 (the build-switch legs),
+#             REQ-BUILD-007 (the OpenSSL backend legs)
 #
 # Besides the default configure, each platform builds two non-default switch
 # sets (REQ-BUILD-006): shared-only with hem-tool on the shared SDK, and
 # static-only — the unit suite + gates run on both, and the link result is
-# asserted. EHEM_DEPS_LINK=static has no leg here: Ubuntu's libcurl has no
+# asserted. The OpenSSL legs (REQ-BUILD-007: Linux gcc + clang against the
+# distro's libssl-dev, Windows against MSYS2's openssl) run the same suite —
+# gates and the consumer gate included — on the other crypto backend. EHEM_DEPS_LINK=static has no leg here: Ubuntu's libcurl has no
 # static closure (libnghttp2, libidn2, … ship no archives), and the
 # configuration MSYS2 could link would put wolfSSL inside the binaries, which
 # no published package of this project does — the static dependency link is
@@ -45,6 +48,12 @@ jobs:
           - cc: gcc
             variant: static-only
             cmake_args: -DEHEM_BUILD_SHARED=OFF
+          - cc: gcc
+            variant: OpenSSL
+            cmake_args: -DEHEM_CRYPTO_BACKEND=openssl
+          - cc: clang
+            variant: OpenSSL
+            cmake_args: -DEHEM_CRYPTO_BACKEND=openssl
     steps:
       - uses: actions/checkout@v5
 
@@ -53,6 +62,10 @@ jobs:
       # crypto packages are installed too (no --no-crypto).
       - name: Install dependencies
         run: ./scripts/install-deps-linux.sh --yes
+
+      - name: Install OpenSSL development files (OpenSSL legs)
+        if: contains(matrix.cmake_args, 'EHEM_CRYPTO_BACKEND=openssl')
+        run: sudo apt-get install -y --no-install-recommends libssl-dev
 
       - name: Configure
         run: cmake -B build -G Ninja -DCMAKE_C_COMPILER=${{ matrix.cc }} ${{ matrix.cmake_args }}
@@ -72,6 +85,12 @@ jobs:
           find "$RUNNER_TEMP/inst" -name 'libencedo-hem*' | sort
           objdump -p build/hem-tool | grep NEEDED
           case "${{ matrix.cmake_args }}" in
+            *EHEM_CRYPTO_BACKEND=openssl*)
+              objdump -p build/hem-tool | grep -q 'NEEDED.*libcrypto\.so' \
+                || fail "hem-tool does not link OpenSSL's libcrypto"
+              if objdump -p build/hem-tool | grep -q 'NEEDED.*libwolfssl'; then
+                fail "hem-tool links libwolfssl on the OpenSSL backend"
+              fi ;;
             *EHEM_TOOL_LINK=shared*)
               objdump -p build/hem-tool | grep -q 'NEEDED.*libencedo-hem\.so' \
                 || fail "hem-tool does not link libencedo-hem"
@@ -109,6 +128,8 @@ jobs:
             cmake_args: -DEHEM_BUILD_STATIC=OFF -DEHEM_TOOL_LINK=shared
           - variant: static-only
             cmake_args: -DEHEM_BUILD_SHARED=OFF
+          - variant: OpenSSL
+            cmake_args: -DEHEM_CRYPTO_BACKEND=openssl
     steps:
       - uses: actions/checkout@v5
 
@@ -129,6 +150,7 @@ jobs:
             curl:p
             cmocka:p
             wolfssl:p
+            openssl:p
 
       - name: Configure
         run: cmake -B build -G Ninja ${{ matrix.cmake_args }}
@@ -148,6 +170,12 @@ jobs:
           find "$RUNNER_TEMP/inst" -iname '*encedo-hem*' | sort
           objdump -p build/hem-tool.exe | grep 'DLL Name'
           case "${{ matrix.cmake_args }}" in
+            *EHEM_CRYPTO_BACKEND=openssl*)
+              objdump -p build/hem-tool.exe | grep -qi 'DLL Name: libcrypto-3' \
+                || fail "hem-tool.exe does not import OpenSSL's libcrypto"
+              if objdump -p build/hem-tool.exe | grep -qi 'DLL Name: libwolfssl'; then
+                fail "hem-tool.exe imports libwolfssl on the OpenSSL backend"
+              fi ;;
             *EHEM_TOOL_LINK=shared*)
               objdump -p build/hem-tool.exe | grep -qi 'DLL Name: libencedo-hem\.dll' \
                 || fail "hem-tool.exe does not import libencedo-hem.dll"

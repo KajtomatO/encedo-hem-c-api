@@ -7,16 +7,33 @@ traces:
   architecture: ["ARCHITECTURE.md#1-decisions-fixed", "ARCHITECTURE.md#3-component-overview", "ARCHITECTURE.md#9-testing-policy", "ARCHITECTURE.md#11-milestones"]
 depends_on: ["STEP-M12-070", "STEP-M12-080"]
 evidence:
-  commits: []
-  tests: []
+  commits: ["46e3882", "da9d14a"]   # first start (parked, see notes); restart — the implementation (cherry-picked from e84a29f) follows
+  tests:
+    - "tests/support/crypto_ref.h + crypto_ref_wolfssl.c / crypto_ref_openssl.c (supports: REQ-BUILD-007): ref_sha256, ref_hkdf_sha256 (wc_HKDF / EVP_KDF \"HKDF\"), ref_aes_gcm_encrypt (wc_AesGcm* / EVP_aes_*_gcm), ref_aes_keywrap (wc_AesKeyWrap under HAVE_AES_KEYWRAP, else CRYPTO_REF_UNSUPPORTED / EVP_aes_*_wrap with EVP_CIPHER_CTX_FLAG_WRAP_ALLOW); compiled into ehem_test_support per backend. test_cipher_live, test_wrap_live, test_ecdh_live use it — no backend include left under tests/ outside crypto_ref_*.c; the three now build on both backends"
+    - "tests_backend_free (tests/unit/check_tests_backend_free.cmake, label unit, verifies: REQ-BUILD-007): passes on the tree; a copy with `#include <openssl/evp.h>` planted in unit/test_crypto.c → FAIL; it also fails if either crypto_ref file stops including its library (the scan must find both)"
+    - "public_headers_dep_free extended (openssl/ includes; EVP_, X509, OSSL_, BIO, SSL_ identifiers): planted include → FAIL, planted EVP_PKEY * → FAIL, real headers → pass"
+    - "Local: ./dev ci 56/56 gcc + clang; ./dev ci --openssl 56/56 gcc + clang; ./dev test asan 56/56 and --openssl 56/56; MinGW cross builds of both backends (MSYS2 wolfSSL 5.9.4 without key wrap / OpenSSL 3.6.5) compile and link incl. crypto_ref and the three live tests; GCC 16.2 over both backends' 142 compile commands -O2: clean"
+    - "Live, 2026-10-13: ./dev test it --openssl against the dev device (my.ence.do, fw v1.2.2-DIAG): 23/23 green in 312 s — incl. test_wrap_live '[probe] ECDH-KEK wrap vs local OpenSSL key wrap (HKDF info encedo-kek‖ctx): BYTE-EXACT MATCH', test_cipher_live's derived-mode HKDF/AES-GCM reproduction and test_ecdh_live's reference SHA-256 through crypto_ref_openssl.c"
+    - "ci.yml: Linux gcc + clang OpenSSL legs (libssl-dev step), Windows OpenSSL leg (openssl:p); the link assertion for the OpenSSL legs (hem-tool NEEDS / imports libcrypto, never libwolfssl) simulated locally: PASS on the OpenSSL build, FAIL on the wolfSSL build"
   notes: |
-    2026-10-13: started too early (46e3882) — its dependency STEP-M12-070
-    was still in doing/, waiting for its CI legs (§5.4 precondition breach;
-    I read only 080 as its dependency). Moved back here; the finished work
-    (crypto_ref, the tests_backend_free gate, the header-gate patterns, the
-    ci.yml openssl legs, a green live run on OpenSSL) waits on the local
-    branch park/step-m12-090 (e84a29f). Restart after 070 is done: git mv
-    to doing/, start commit, cherry-pick e84a29f.
+    PROCESS: this step was started (46e3882) while its dependency
+    STEP-M12-070 was still in doing/ (waiting for its CI legs) — a breach of
+    the §5.4 precondition, mine (I read only 080 as its dependency). The work
+    was complete and parked on the local branch park/step-m12-090; the step
+    went back to todo/ on development (a023e4b). Restarted 2026-10-14 once
+    070 was done (f2f4de9): git mv todo→doing (da9d14a), the parked
+    commit cherry-picked — only this file conflicted.
+    PENDING for done (after the restart): the ci.yml openssl legs green
+    (Linux gcc + clang, Windows MSYS2 — unit suite, gates, consumer gate on
+    the OpenSSL package config, which closes REQ-BUILD-008's "on both
+    backends" criterion).
+    Design: crypto_ref is the test-side twin of the crypto shim — the device's
+    computations reproduced with the build's library directly, independent of
+    the shim, one file per backend, the only backend includes under tests/.
+    test_wrap_live keeps its MSYS2 path as a run-time CRYPTO_REF_UNSUPPORTED
+    (was a compile-time #ifdef). test_ecdh_live could have used the shim's
+    ehem_sha256 but takes ref_sha256 to stay an independent check.
+    test_sign_live's comments now say "the crypto shim", not wolfCrypt.
 reopened: []
 cancelled: null
 ---

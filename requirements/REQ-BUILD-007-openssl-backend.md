@@ -3,7 +3,7 @@ id: REQ-BUILD-007
 title: OpenSSL 3.x crypto backend behind the unchanged crypto shim — EHEM_CRYPTO_BACKEND=wolfssl|openssl
 status: approved
 priority: must
-revision: 2   # 2026-10-13 (STEP-M12-080): OPEN criterion (compressed-point ECDSA) resolved; local evidence recorded; four criteria ticked. No meaning change — approved status kept
+revision: 3   # 2026-10-13 (STEP-M12-090): the header-gate criterion ticked, crypto_ref + live-suite evidence recorded; rev 2 (STEP-M12-080): OPEN criterion (compressed-point ECDSA) resolved, four criteria ticked. No meaning change — approved status kept
 source: user decision 2026-10-12 (M12 planning: the alternative library is OpenSSL 3.x — Apache-2.0, so it may be linked statically; static packages use OpenSSL, never wolfSSL); ARCHITECTURE.md §1 (crypto backend switch, wolfSSL the default), §11 M12 part D, §12 risk 1; REQ-AUTH-001 (the shim's contract), REQ-AUTH-012 (PBKDF2-SHA512, SHA-256), REQ-SYS-006 (X.509 leaf parse), REQ-OPS-001 (local ECDSA/EdDSA verify), REQ-TEST-006 (AES-128-CBC); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-AUTH-001", "REQ-API-002", "REQ-API-010", "REQ-BUILD-006"]
 supersedes: null
@@ -103,14 +103,28 @@ includer for exactly this reason (ARCHITECTURE §3 containment rule).
       over all 138 OpenSSL compile commands at -O0/-O2/-O3, and a MinGW
       cross build against MSYS2's OpenSSL 3.6.5 (no deprecation warning
       under -Werror). The CI legs: STEP-M12-090.)*
-- [ ] `public_headers_dep_free` rejects a planted `#include <openssl/evp.h>`
+- [x] `public_headers_dep_free` rejects a planted `#include <openssl/evp.h>`
       and a planted `EVP_PKEY *` in a public header (negative test
       recorded), passes the real headers on both backends.
-- [ ] Integration suite (`./dev test it`) green on the OpenSSL build
+      *(2026-10-13, STEP-M12-090: the include pattern gained `openssl`, a
+      new identifier pattern rejects `EVP_*`, `X509`, `OSSL_*`, `BIO`,
+      `SSL_*`. Negative runs against a copy of include/: a planted
+      `#include <openssl/evp.h>` in crypto.h → FAIL; a planted
+      `typedef struct x { EVP_PKEY *key; } x;` → FAIL; the real headers →
+      pass ("libcurl-, wolfSSL- and OpenSSL-free"), in `./dev ci` and
+      `./dev ci --openssl`.)*
+- [x] Integration suite (`./dev test it`) green on the OpenSSL build
       against the dev device, including the three reference-computation
       tests through `crypto_ref`; no file under `tests/` other than
       `tests/support/crypto_ref*.c` includes a wolfSSL or OpenSSL header
       (grep).
+      *(2026-10-13, STEP-M12-090: `./dev test it --openssl` against
+      my.ence.do (fw v1.2.2-DIAG) — 23/23 in 312 s; test_wrap_live's
+      ECDH-KEK cross-check "BYTE-EXACT MATCH" against OpenSSL's RFC 3394
+      key wrap, test_cipher_live's derived-mode HKDF + AES-GCM and
+      test_ecdh_live's SHA-256 reproduced through crypto_ref_openssl.c.
+      The grep is the `tests_backend_free` CTest (label `unit`): passes
+      on the tree, fails on a planted `#include <openssl/evp.h>`.)*
 - [x] REQ-API-002 idempotency test (double init / double cleanup /
       init-after-cleanup) passes on the OpenSSL backend; REQ-API-010's
       same-major + known-answer check and REQ-API-011's build info are

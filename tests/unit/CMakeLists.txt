@@ -193,12 +193,21 @@ ehem_add_unit_test(test_bip39 SOURCES test_bip39.c)
 # REQ-AUTH-011: device initialisation binding via the fake transport (M10).
 ehem_add_unit_test(test_init SOURCES test_init.c)
 
-# REQ-NET-002 + REQ-AUTH-001: public headers must not reference libcurl/wolfSSL.
+# REQ-NET-002 + REQ-AUTH-001 + REQ-BUILD-007: public headers must not reference
+# libcurl, wolfSSL or OpenSSL.
 add_test(NAME public_headers_dep_free
   COMMAND ${CMAKE_COMMAND}
     -DEHEM_INCLUDE_DIR=${PROJECT_SOURCE_DIR}/include
     -P ${CMAKE_CURRENT_SOURCE_DIR}/check_public_headers.cmake)
 set_tests_properties(public_headers_dep_free PROPERTIES LABELS unit)
+
+# REQ-BUILD-007: no test knows the crypto backend — only the per-backend
+# tests/support/crypto_ref_<backend>.c includes a wolfSSL or OpenSSL header.
+add_test(NAME tests_backend_free
+  COMMAND ${CMAKE_COMMAND}
+    -DEHEM_TESTS_DIR=${PROJECT_SOURCE_DIR}/tests
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/check_tests_backend_free.cmake)
+set_tests_properties(tests_backend_free PROPERTIES LABELS unit)
 
 # REQ-API-006: the shared library must export only ehem_* symbols.
 # Scripted nm/objdump check, run as a CTest with the `unit` label — wherever a

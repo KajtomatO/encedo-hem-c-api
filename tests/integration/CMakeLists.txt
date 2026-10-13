@@ -42,17 +42,13 @@ set_tests_properties(test_update_import_live PROPERTIES LABELS integration SKIP_
 
 # REQ-OPS-009: live wrap/unwrap — direct round-trip + tamper + width +
 # alignment probes + the ECDH-KEK byte-exact local wc_AesKeyWrap cross-check.
-# Internal-linking (shim + wolfCrypt key wrap).
-# wolfSSL backend only until STEP-M12-090 moves its wolfCrypt reference
-# computation into tests/support/crypto_ref (REQ-BUILD-007).
-if(EHEM_CRYPTO_BACKEND STREQUAL "wolfssl")
-  add_executable(test_wrap_live test_wrap_live.c)
-  target_link_libraries(test_wrap_live PRIVATE ehem_test_support cmocka::cmocka)
-  target_include_directories(test_wrap_live PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
-  target_compile_options(test_wrap_live PRIVATE ${EHEM_WARNING_FLAGS})
-  add_test(NAME test_wrap_live COMMAND test_wrap_live)
-  set_tests_properties(test_wrap_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
-endif()
+# Internal-linking (shim + the crypto_ref key wrap, either backend).
+add_executable(test_wrap_live test_wrap_live.c)
+target_link_libraries(test_wrap_live PRIVATE ehem_test_support cmocka::cmocka)
+target_include_directories(test_wrap_live PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
+target_compile_options(test_wrap_live PRIVATE ${EHEM_WARNING_FLAGS})
+add_test(NAME test_wrap_live COMMAND test_wrap_live)
+set_tests_properties(test_wrap_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
 
 # REQ-AUTH-008: live broker session probe (GET + POST-with-eid) — the one
 # notify endpoint under the plain integration label (REQ-TEST-006).
@@ -103,8 +99,9 @@ target_compile_options(test_derive_live PRIVATE ${EHEM_WARNING_FLAGS})
 add_test(NAME test_derive_live COMMAND test_derive_live)
 set_tests_properties(test_derive_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
 
-# REQ-OPS-001 (+ REQ-KEY-006 live cross-check): live sign → local wolfCrypt
-# verify (the M4 gate criterion) + the sign scope probe closing §12 risk 3.
+# REQ-OPS-001 (+ REQ-KEY-006 live cross-check): live sign → local verify
+# through the crypto shim, either backend (the M4 gate criterion) + the sign
+# scope probe closing §12 risk 3.
 # Internal-linking like test_keymgmt_get_live (probe + crypto shim).
 add_executable(test_sign_live test_sign_live.c)
 target_link_libraries(test_sign_live PRIVATE ehem_test_support cmocka::cmocka)
@@ -117,17 +114,13 @@ set_tests_properties(test_sign_live PROPERTIES LABELS integration SKIP_RETURN_CO
 ehem_add_integration_test(test_verify_live SOURCES test_verify_live.c)
 
 # REQ-OPS-004: live ECDH — X25519 shim cross-check + P-384 truncation probe.
-# Internal-linking (crypto shim + wolfCrypt SHA-256), like test_sign_live.
-# wolfSSL backend only until STEP-M12-090 moves its wolfCrypt reference
-# computation into tests/support/crypto_ref (REQ-BUILD-007).
-if(EHEM_CRYPTO_BACKEND STREQUAL "wolfssl")
-  add_executable(test_ecdh_live test_ecdh_live.c)
-  target_link_libraries(test_ecdh_live PRIVATE ehem_test_support cmocka::cmocka)
-  target_include_directories(test_ecdh_live PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
-  target_compile_options(test_ecdh_live PRIVATE ${EHEM_WARNING_FLAGS})
-  add_test(NAME test_ecdh_live COMMAND test_ecdh_live)
-  set_tests_properties(test_ecdh_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
-endif()
+# Internal-linking (crypto shim + crypto_ref SHA-256), like test_sign_live.
+add_executable(test_ecdh_live test_ecdh_live.c)
+target_link_libraries(test_ecdh_live PRIVATE ehem_test_support cmocka::cmocka)
+target_include_directories(test_ecdh_live PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
+target_compile_options(test_ecdh_live PRIVATE ${EHEM_WARNING_FLAGS})
+add_test(NAME test_ecdh_live COMMAND test_ecdh_live)
+set_tests_properties(test_ecdh_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
 
 # REQ-OPS-005: live HMAC round-trips + the derived-key HKDF-conflict probe.
 # Internal-linking (crypto shim X25519/HMAC), like test_ecdh_live.
@@ -139,17 +132,13 @@ add_test(NAME test_hmac_live COMMAND test_hmac_live)
 set_tests_properties(test_hmac_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
 
 # REQ-OPS-006: live cipher matrix + HKDF-info probe. Internal-linking (shim
-# X25519 + wolfCrypt HKDF/AES-GCM), like test_ecdh_live.
-# wolfSSL backend only until STEP-M12-090 moves its wolfCrypt reference
-# computation into tests/support/crypto_ref (REQ-BUILD-007).
-if(EHEM_CRYPTO_BACKEND STREQUAL "wolfssl")
-  add_executable(test_cipher_live test_cipher_live.c)
-  target_link_libraries(test_cipher_live PRIVATE ehem_test_support cmocka::cmocka)
-  target_include_directories(test_cipher_live PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
-  target_compile_options(test_cipher_live PRIVATE ${EHEM_WARNING_FLAGS})
-  add_test(NAME test_cipher_live COMMAND test_cipher_live)
-  set_tests_properties(test_cipher_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
-endif()
+# X25519 + crypto_ref HKDF/AES-GCM), like test_ecdh_live.
+add_executable(test_cipher_live test_cipher_live.c)
+target_link_libraries(test_cipher_live PRIVATE ehem_test_support cmocka::cmocka)
+target_include_directories(test_cipher_live PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
+target_compile_options(test_cipher_live PRIVATE ${EHEM_WARNING_FLAGS})
+add_test(NAME test_cipher_live COMMAND test_cipher_live)
+set_tests_properties(test_cipher_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
 
 # REQ-OPS-007/008: live ML-KEM/ML-DSA round-trips + quirk probes (public API,
 # longer keygen timeout).

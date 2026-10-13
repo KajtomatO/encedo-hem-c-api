@@ -86,7 +86,10 @@ endfunction()
 # tests linking it resolve the internal symbols the fake calls.
 add_library(ehem_test_support STATIC
   support/fake_transport.c
-  support/ext_sim.c)
+  support/ext_sim.c
+  # The live tests' reference computations on the build's crypto library
+  # (REQ-BUILD-007) — the only test sources that include a backend header.
+  support/crypto_ref_${EHEM_CRYPTO_BACKEND}.c)
 # EHEM_STATIC_TARGET: the static variant, or the private archive when the
 # variant is off (REQ-BUILD-006) — the unit tests need the hidden seams.
 target_link_libraries(ehem_test_support PUBLIC ${EHEM_STATIC_TARGET})

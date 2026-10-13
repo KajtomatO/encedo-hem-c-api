@@ -17,6 +17,19 @@ cmake --build build
 ctest --test-dir build -L unit --output-on-failure
 ```
 
+### Two crypto backends
+
+The SDK builds on wolfSSL (default) or OpenSSL 3 (`-DEHEM_CRYPTO_BACKEND=openssl`,
+REQ-BUILD-007); every suite runs on both — `./dev test <suite> --openssl` and
+`./dev ci --openssl` build in their own `-openssl` directories, and CI has an
+OpenSSL leg per platform. No test knows the backend: where a live test checks
+the device's crypto locally (HKDF, AES-GCM, AES key wrap, SHA-256), it calls
+`tests/support/crypto_ref.h`, implemented once per backend
+(`crypto_ref_wolfssl.c` / `crypto_ref_openssl.c`) — the only test sources that
+include a crypto library header. The `tests_backend_free` gate (label `unit`)
+enforces that. MSYS2's wolfSSL has no AES key wrap, so `test_wrap_live`'s
+byte-exact local cross-check is skipped there (it says so).
+
 ### The consumer gate
 
 `consumer_interface` (label `unit`, REQ-BUILD-008) checks the SDK as a user
