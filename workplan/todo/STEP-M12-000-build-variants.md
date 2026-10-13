@@ -11,7 +11,7 @@ evidence:
   tests: []
   notes: null
 reopened: []
-cancelled: null
+cancelled: "M12 decomposed 2026-10-12 (user-approved, §5.3) — replaced by STEP-M12-010..140; scope carried by REQ-API-010/011, REQ-BUILD-006..009, REQ-TOOL-024..028"
 ---
 
 **Goal:** Placeholder for milestone M12 (REQUIREMENTS-MANAGEMENT.md §5.3

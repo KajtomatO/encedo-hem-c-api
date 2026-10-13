@@ -1,10 +1,10 @@
 ---
 id: REQ-NET-005
 title: Automatic certificate recovery via check-in on expired-cert failure
-status: verified
+status: needs-reverify
 priority: must
-revision: 1
-source: user decision 2026-07-15 ("Lib should run check-in automatically when needed, e.g. when TLS is expired"); M1 gate finding (device cert expired 2026-04-18)
+revision: 2
+source: user decision 2026-07-15 ("Lib should run check-in automatically when needed, e.g. when TLS is expired"); M1 gate finding (device cert expired 2026-04-18); rev 2 — M12 decomposition 2026-10-12 (§6.2 report approved in chat): the classifier of STEP-M10-065 also accepts wolfSSL verify result `-150`, which is `ASN_BEFORE_DATE_E` (certificate NOT YET valid) in wolfSSL 5.6.6 and 5.7.2 alike — not an older spelling of "expired" as REQ-BUILD-005's record claimed — so the "only expired" criterion is violated; an explicit not-yet-valid criterion is added, status → needs-reverify, rework = STEP-M12-030 (user decision 2026-10-12, ARCHITECTURE.md §11 M12 part A)
 depends_on: ["REQ-SYS-003", "REQ-NET-002", "REQ-NET-003", "REQ-API-004"]
 supersedes: null
 superseded_by: null
@@ -42,8 +42,15 @@ refresh the cert, set the RTC, and discover updates):
       sees the retried result (unit test via fake transport asserting the
       request sequence).
 - [ ] The trigger classifies **only** expired certificates (TLS verify result
-      `certificate has expired`); other TLS failures return unchanged (unit
-      test).
+      `certificate has expired` — OpenSSL verify result 10, wolfSSL `-151`
+      `ASN_AFTER_DATE_E`, or the stacks' texts); other TLS failures return
+      unchanged (unit test).
+- [ ] Not-yet-valid is NOT expired (rev 2, 2026-10-12): a verify result of
+      wolfSSL `-150` (`ASN_BEFORE_DATE_E`) or OpenSSL `9`
+      (`X509_V_ERR_CERT_NOT_YET_VALID`) returns the original TLS error
+      unchanged — no check-in leg, `tls_expired` false (unit test). *(The
+      STEP-M10-065 classifier accepted `-150` on a mistaken record; `-150`
+      is "not yet valid" in 5.6.6 and 5.7.2 alike. Rework: STEP-M12-030.)*
 - [ ] `no_auto_checkin` option disables the behavior: no extra requests, the
       original error is returned (unit test).
 - [ ] Recovery failure (check-in itself fails): the ORIGINAL TLS error is

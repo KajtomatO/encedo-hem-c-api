@@ -126,7 +126,8 @@ the context.
   shared wolfSSL ships as a separate asset with its license text, its build
   configuration and the corresponding source; static packages use a
   different library — **OpenSSL 3.x** (user decision 2026-10-12, M12;
-  Apache-2.0), selected by a build-time crypto backend switch with
+  Apache-2.0; release pin on the 3.5 LTS line — 3.0 LTS reached end of
+  life 2026-09-07), selected by a build-time crypto backend switch with
   wolfSSL the default. libcurl (permissive curl license) may be compiled
   in.
 - **PBKDF2-HMAC-SHA256 as the login KDF, per Encedo Manager** (user
@@ -439,7 +440,10 @@ src/                   library sources
   proto_*.c            protocol bindings per API group
   transport.c          vtable + helpers
   transport_curl.c     libcurl implementation
-  crypto_shim.c        wolfCrypt wrappers
+  crypto_shim.h        crypto backend contract (backend-free)
+  crypto_shim.c        wolfCrypt wrappers — M12 splits it into
+                       crypto_shim_{wolfssl,openssl,common}.c, one
+                       backend compiled per configure (REQ-BUILD-007)
   jwt.c                eJWT encode/decode
   vendor/cjson/        vendored cJSON
   tools/hem-tool/      CLI (inside src/ so implements-tags are greppable)
@@ -710,9 +714,17 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   constraint (diag support must not enter the production SDK). The
   number is not reused.
 - **M12 — build variants, multi-package releases & hem-tool UX**
-  *(early draft 2026-10-09; **planned 2026-10-12** — the user settled the
-  scope and the questions deferred in the draft at M12 planning; NOT yet
-  decomposed: no requirements, no steps; placeholder STEP-M12-000)*. One
+  *(early draft 2026-10-09; planned 2026-10-12; **decomposed 2026-10-12**
+  — REQ-API-010/011, REQ-BUILD-006/007/008/009, REQ-TOOL-024/025/026/027/028
+  drafted; STEP-M12-010 … 140 in `workplan/todo/`, placeholder STEP-M12-000
+  cancelled. Names settled: error code `EHEM_ERR_BACKEND_MISMATCH`; API
+  `ehem_build_info_get`; options `EHEM_BUILD_SHARED` / `EHEM_BUILD_STATIC`
+  / `EHEM_TOOL_LINK` / `EHEM_DEPS_LINK` / `EHEM_CRYPTO_BACKEND`; asset
+  suffix `-static` = OpenSSL backend + every third-party library static
+  (glibc dynamic on Linux), library packages
+  `encedo-hem-<label>-<os>-x86_64[-static]`; hem-tool `keys types`,
+  `init-wizard`, exit 12 = the SDK could not be initialised, 6 = wizard
+  cancelled)*. One
   milestone, one release — **1.2.0** (additive: a new error code, CMake
   options, hem-tool commands; the public ABI otherwise unchanged). Today
   both SDK variants are always built, hem-tool always links the static
@@ -749,8 +761,11 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
       and the libcurl version (today `--version` is an unknown option).
     - **Friendly missing-DLL message on Windows** *(BACKLOG item 5,
       moved in by user decision 2026-10-12)* — `libwolfssl.dll` is loaded
-      on demand (a delay-load import; the MinGW mechanism is proven at
-      decomposition), so hem-tool says what is missing and where to put
+      on demand (a delay-load import: `dlltool --output-delaylib` +
+      mingw-w64's `libdelayimp.a`, failure hook `__pfnDliFailureHook2`;
+      proven to *link* at the decomposition 2026-10-12 with the Debian
+      cross toolchain, run-time proof in the Windows release job —
+      REQ-TOOL-026), so hem-tool says what is missing and where to put
       it instead of Windows failing with 0xC0000135 before any of its
       code runs.
     - **Expired-cert classifier fix** *(user decision 2026-10-12)* — the
@@ -773,11 +788,14 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
       declares only `find_dependency(CURL)`, so the exported static
       target's crypto link interface cannot resolve in a consumer; the
       config follows the selected backend.
-    - **Windows static consumers** — `include/ehem/ehem.h` declares the
-      API `dllimport` on Windows unless the shared library is being
-      built (MinGW tolerates it); the static target carries a define
-      (e.g. `EHEM_STATIC`) as a usage requirement so static consumers
-      get plain declarations.
+    - **Export macro for consumers** — *corrected at the decomposition
+      2026-10-12:* `include/ehem/ehem.h` already expands `EHEM_API` to
+      nothing unless `EHEM_BUILDING_SHARED` or `EHEM_USING_SHARED` is
+      defined, so static consumers get plain declarations today; the
+      gap is the opposite one — the shared target does not advertise
+      `EHEM_USING_SHARED` as a usage requirement (MinGW's auto-import
+      hides it; MSVC would not). The shared target gains the INTERFACE
+      definition; no `EHEM_STATIC` define (REQ-BUILD-008).
     - **pkg-config file** *(user decision 2026-10-12)* —
       `encedo-hem.pc` is generated and installed (`Requires.private`:
       libcurl and the selected crypto library), honouring the §1 name;
@@ -797,7 +815,10 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
     - **Static SDK library package** — the library package flavour
       built on the OpenSSL backend.
     - Asset names: today's `hem-tool-<label>-<os>-x86_64` stays; new
-      variants get a suffix (scheme fixed at decomposition). `ci.yml`
+      variants get a suffix — *settled at the decomposition:* `-static`
+      means OpenSSL backend + every third-party library static, no
+      companion library; library packages are
+      `encedo-hem-<label>-<os>-x86_64[-static]` (REQ-BUILD-009). `ci.yml`
       gains legs that exercise the switches and both backends (unit
       suite on every push); `release.yml` builds the published variants.
     - *Dropped (user decision 2026-10-12):* the full-dynamic hem-tool
@@ -819,7 +840,14 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
     `scripts/release/build-deps.sh`), and the REQ-NET-005 classifier is
     proven under it too. Other touchpoints: `ehem_global_init`
     (`wolfCrypt_Init`), the `public_headers_dep_free` gate (extended to
-    OpenSSL identifiers).
+    OpenSSL identifiers). *Found at the decomposition 2026-10-12:* three
+    integration tests (`test_cipher_live.c`, `test_wrap_live.c`,
+    `test_ecdh_live.c`) include wolfCrypt directly for reference
+    computations — they move to a per-backend `tests/support/crypto_ref`
+    so the live suite runs on both backends (REQ-BUILD-007). *Version
+    line:* any OpenSSL 3.x serves development; the release pin is the
+    **3.5 LTS line** — 3.0 LTS reached end of life on 2026-09-07
+    (REQ-BUILD-007/009).
   - **E. hem-tool UX**
     - **Key types** *(user request 2026-10-10)* — `hem-tool keys gen -h`
       lists every key type the device creates (the 23 of REQ-TEST-004;
@@ -848,11 +876,15 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
     demonstrated (the release hem-tool against the host's wolfSSL 5.6.6
     refuses instead of crashing); an attended wizard run; the docs
     checklist (REQUIREMENTS-MANAGEMENT.md §5.3).
-  - *For the decomposition:* suggested order A and E first (independent),
-    then B, then D (needs B), then C (needs A, B, D), then the gate.
-    Expected §6.2 runs: REQ-API-008 (`.pc`), REQ-API-003 (new error
-    code), REQ-NET-005 (`-150`), REQ-BUILD-005 (variants, asset names),
-    REQ-TOOL-009 (`keys gen` help).
+  - *Decomposition (2026-10-12):* order as suggested — A and E first
+    (STEP-M12-010/020/030, 040/050; independent starts), then B (060,
+    070), then D (080, 090), then C (100 Windows delay-load, 110 library
+    packages, 120 static variants), then 130 (1.2.0 + docs + rc) and the
+    gate 140. §6.2 run and approved in chat: REQ-NET-005 rev 2 →
+    **needs-reverify** (rework STEP-M12-030); REQ-API-002 rev 3,
+    REQ-API-003 rev 2, REQ-API-008 rev 2, REQ-BUILD-005 rev 4 (record
+    correction: `-150`), REQ-TOOL-009 rev 2 — wording/record bumps,
+    statuses kept.
 - **MFW — firmware-pending** *(created by user decision 2026-08-07: one
   generic future milestone for every feature that is documented — or
   shipped dormant — but MISSING from the running firmware; nothing here

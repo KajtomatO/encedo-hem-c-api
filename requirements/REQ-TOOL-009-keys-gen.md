@@ -3,8 +3,8 @@ id: REQ-TOOL-009
 title: hem-tool keys gen — generate a key on the device
 status: verified
 priority: should
-revision: 1
-source: user decision 2026-07-16 (M5 decomposition: add hem-tool keys gen); ARCHITECTURE.md §8 (thin consumer, subcommands grow with milestones); HEM-SDK-6 (generate); approved 2026-07-16
+revision: 2
+source: user decision 2026-07-16 (M5 decomposition: add hem-tool keys gen); ARCHITECTURE.md §8 (thin consumer, subcommands grow with milestones); HEM-SDK-6 (generate); approved 2026-07-16; rev 2 — note 2026-10-12 (M12 decomposition, §6.2 approved in chat; no status change): `keys gen -h` lists every creatable type and points at `keys types` (REQ-TOOL-027); the verbatim pass-through and every behaviour here are unchanged
 depends_on: ["REQ-TOOL-001", "REQ-KEY-005", "REQ-KEY-006"]
 supersedes: null
 superseded_by: null
@@ -34,7 +34,10 @@ to stdout. Options:
   default lives in the tool.
 
 `TYPE` is passed through verbatim (no tool-side allowlist — REQ-KEY-005;
-an unknown type is a device 400 reported as a runtime failure).
+an unknown type is a device 400 reported as a runtime failure). *(Rev 2,
+2026-10-12: from 1.2.0 the per-command help lists the 23 creatable types
+grouped by purpose and points at `keys types` — REQ-TOOL-027; the list is
+documentation, the pass-through stays.)*
 Connection and credentials follow the existing tool conventions
 (`EHEM_URL`/`--url`, `EHEM_PASSPHRASE`/`--passphrase`); exit 0 on
 success, 2 on usage/environment errors (missing TYPE or `--label`,

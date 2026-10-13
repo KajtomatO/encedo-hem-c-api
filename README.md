@@ -21,7 +21,7 @@ module.
 > its binding; what is still unbound (firmware/UI upgrade, factory
 > provisioning, diagnostics) is parked in [BACKLOG.md](BACKLOG.md). The
 > 1.0 ABI is unchanged in 1.1 (SONAME `.so.1`, additive only). Next
-> milestone: M12 (planned, not yet decomposed — ARCHITECTURE.md §11):
+> milestone: M12 (decomposed 2026-10-12 — ARCHITECTURE.md §11):
 > a fix for the 1.1.0 crash with a foreign wolfSSL, build variants, an
 > OpenSSL-based static hem-tool, SDK library packages, and hem-tool
 > key-type help and an initialisation wizard.
