@@ -7,13 +7,14 @@ traces:
   architecture: ["ARCHITECTURE.md#8-hem-tool-cli", "ARCHITECTURE.md#9-testing-policy", "ARCHITECTURE.md#11-milestones"]
 depends_on: []
 evidence:
-  commits: ["7f516f5", "78a7940"]   # start; implementation (the done commit follows)
+  commits: ["7f516f5", "78a7940", "0d51b34", "4f697cd"]   # start; implementation; done; post-done release-build fix
   tests:
     - "tests/unit/test_wizard.c (verifies: REQ-TOOL-028) — 7 scripted dialogues over the fake transport: all defaults + typed mnemonic, generated words (seam) and explicit answers each POST byte-identical bodies to hem_init_device_run with the equivalent flags; passphrase empty/mismatch re-asks; wrong backup word re-shows the words; wrong hostname / end of input at six points → exit 6 with zero requests; invalid mnemonic re-asks without quoting it; 406 → 3; reboot question yes/no; no passphrase and no post-display word in any output"
     - "tests/unit/test_prompt.c (verifies: REQ-TOOL-028) — the non-terminal path verbatim (incl. the exactly-full-line boundary, CRLF, over-long, EOF, the one notice); on a POSIX pseudo-terminal: echo off during the hidden read (nothing echoed to the keyboard side), restored after the normal return, after Ctrl-D and after SIGINT (which still kills the process); 30/30 repeated runs"
     - "tool_startup_cli (check_tool_startup.cmake, verifies: REQ-TOOL-028 among others) — on the real main.c: `init-wizard --user alice` → exit 2; empty stdin → exit 6, nothing sent"
     - "test_registry / test_init_tool unchanged and green (top page 45 lines; init-device's exits and --reboot behaviour unchanged by the confirm_reboot hook)"
     - "./dev ci 54/54 gcc + clang; ./dev test asan 54/54; MinGW -fsyntax-only clean for prompt.c (Windows console branch), wizard.c, init_cmd.c, main.c, registry.c, test_wizard.c, test_prompt.c; prompt.c / wizard.c also compiled -O3 -Wall -Wextra -Werror with gcc and clang"
+    - "2026-10-13, after done: the release workflow's Linux job (run 38407235207, ubuntu-22.04: GCC 11.4, cmocka 1.1.5, Release -O3) failed to compile test_prompt.c — cmocka 1.1.5 does not declare skip() noreturn (1.1.7 does), so GCC 11 saw `slave` used after a skip() that returns (-Werror=maybe-uninitialized). Fix 4f697cd: `return` after both skip() calls. Reproduced and re-checked with GCC 11.4 (conda-forge) + jammy's cmocka 1.1.5 header + Ubuntu's hardening defaults: the release configure's 139 compile commands clean after the fix (test_prompt.c the only failure before); a full GCC 11 Release build against the pinned prefix passes the unit suite 54/54; ./dev ci 54/54"
   notes: |
     OPEN criterion settled at start, as the step plan recommended (REQ-TOOL-028
     rev 2): --url / EHEM_URL is the only pre-fill. EHEM_PASSPHRASE and
