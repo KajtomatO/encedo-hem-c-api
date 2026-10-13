@@ -742,6 +742,13 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   stays the gate's. The first runs found two latent compile failures
   outside the newest steps — MSYS2's GCC 16 (STEP-M12-010 code) and the
   release job's GCC 11 + cmocka 1.1.5 (a STEP-M12-050 test) — both fixed.
+  **STEP-M12-080 done 2026-10-13** — REQ-BUILD-007's OpenSSL 3 backend:
+  `EHEM_CRYPTO_BACKEND=openssl`, the shim split per backend, the unit suite
+  and ASan green on OpenSSL locally (CI legs: STEP-M12-090).
+  **STEP-M12-070 implemented 2026-10-13, in `doing/`** — REQ-BUILD-008's
+  installed consumer interface (package config resolves the crypto
+  dependency, relocatable `encedo-hem.pc`, the consumer gate); waits for
+  its CI legs.
   Names settled: error code `EHEM_ERR_BACKEND_MISMATCH`; API
   `ehem_build_info_get`; options `EHEM_BUILD_SHARED` / `EHEM_BUILD_STATIC`
   / `EHEM_TOOL_LINK` / `EHEM_DEPS_LINK` / `EHEM_CRYPTO_BACKEND`; asset
