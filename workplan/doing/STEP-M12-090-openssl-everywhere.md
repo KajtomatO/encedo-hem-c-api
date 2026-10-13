@@ -7,7 +7,7 @@ traces:
   architecture: ["ARCHITECTURE.md#1-decisions-fixed", "ARCHITECTURE.md#3-component-overview", "ARCHITECTURE.md#9-testing-policy", "ARCHITECTURE.md#11-milestones"]
 depends_on: ["STEP-M12-070", "STEP-M12-080"]
 evidence:
-  commits: ["46e3882", "da9d14a"]   # first start (parked, see notes); restart — the implementation (cherry-picked from e84a29f) follows
+  commits: ["46e3882", "da9d14a", "91b447f"]   # first start (parked, see notes); restart; the implementation (cherry-picked from e84a29f) — the CI run and the done commit follow
   tests:
     - "tests/support/crypto_ref.h + crypto_ref_wolfssl.c / crypto_ref_openssl.c (supports: REQ-BUILD-007): ref_sha256, ref_hkdf_sha256 (wc_HKDF / EVP_KDF \"HKDF\"), ref_aes_gcm_encrypt (wc_AesGcm* / EVP_aes_*_gcm), ref_aes_keywrap (wc_AesKeyWrap under HAVE_AES_KEYWRAP, else CRYPTO_REF_UNSUPPORTED / EVP_aes_*_wrap with EVP_CIPHER_CTX_FLAG_WRAP_ALLOW); compiled into ehem_test_support per backend. test_cipher_live, test_wrap_live, test_ecdh_live use it — no backend include left under tests/ outside crypto_ref_*.c; the three now build on both backends"
     - "tests_backend_free (tests/unit/check_tests_backend_free.cmake, label unit, verifies: REQ-BUILD-007): passes on the tree; a copy with `#include <openssl/evp.h>` planted in unit/test_crypto.c → FAIL; it also fails if either crypto_ref file stops including its library (the scan must find both)"
@@ -15,6 +15,7 @@ evidence:
     - "Local: ./dev ci 56/56 gcc + clang; ./dev ci --openssl 56/56 gcc + clang; ./dev test asan 56/56 and --openssl 56/56; MinGW cross builds of both backends (MSYS2 wolfSSL 5.9.4 without key wrap / OpenSSL 3.6.5) compile and link incl. crypto_ref and the three live tests; GCC 16.2 over both backends' 142 compile commands -O2: clean"
     - "Live, 2026-10-13: ./dev test it --openssl against the dev device (my.ence.do, fw v1.2.2-DIAG): 23/23 green in 312 s — incl. test_wrap_live '[probe] ECDH-KEK wrap vs local OpenSSL key wrap (HKDF info encedo-kek‖ctx): BYTE-EXACT MATCH', test_cipher_live's derived-mode HKDF/AES-GCM reproduction and test_ecdh_live's reference SHA-256 through crypto_ref_openssl.c"
     - "ci.yml: Linux gcc + clang OpenSSL legs (libssl-dev step), Windows OpenSSL leg (openssl:p); the link assertion for the OpenSSL legs (hem-tool NEEDS / imports libcrypto, never libwolfssl) simulated locally: PASS on the OpenSSL build, FAIL on the wolfSSL build"
+    - "After the restart, 2026-10-14 (91b447f — src/, the unit/integration/support tests, CMake and the workflows byte-identical to the parked e84a29f; the difference is STEP-M12-070's consumer-gate fixes): ./dev ci 56/56 gcc + clang; ./dev ci --openssl 56/56 gcc + clang; ./dev test asan 56/56 and --openssl 56/56. The OpenSSL install the gate checks: encedo-hem-config.cmake → find_dependency(CURL) + find_dependency(OpenSSL 3); encedo-hem.pc → Requires.private: libcurl libcrypto, the rest as on wolfSSL"
   notes: |
     PROCESS: this step was started (46e3882) while its dependency
     STEP-M12-070 was still in doing/ (waiting for its CI legs) — a breach of
@@ -73,18 +74,27 @@ STEP-M12-120's (needs the static release prefix). MinGW printf gotcha
 applies to anything new in the tests.
 
 **Definition of done**
-- [ ] `tests/support/crypto_ref.{h,c}` per backend; the three live tests
+- [x] `tests/support/crypto_ref.{h,c}` per backend; the three live tests
       compile on both backends with no backend include; the tests-backend-
       free grep gate is a CTest (label `unit`).
-- [ ] `public_headers_dep_free` rejects the planted OpenSSL include and
+      (crypto_ref_wolfssl.c / crypto_ref_openssl.c are the only test sources
+      with a crypto library include; `tests_backend_free`, label `unit`.)
+- [x] `public_headers_dep_free` rejects the planted OpenSSL include and
       identifier (negative run recorded) and passes the real headers on
       both backends.
+      (Negative runs in the evidence; passes in `./dev ci` and
+      `./dev ci --openssl`.)
 - [ ] `ci.yml` openssl legs (Linux gcc + clang, Windows MSYS2) green on
       push: unit suite, gates, consumer gate (REQ-BUILD-008 OpenSSL
       criteria checked); run id recorded.
-- [ ] `./dev test it` green on the OpenSSL build against the dev device
+- [x] `./dev test it` green on the OpenSSL build against the dev device
       (count + time recorded in REQ-BUILD-007).
-- [ ] tests/README documents the backend switch and the new gate;
+      (23/23 in 312 s, 2026-10-13, on e84a29f; the restarted tree's src/
+      and tests are byte-identical to it.)
+- [x] tests/README documents the backend switch and the new gate;
       `supports:`/`verifies:` tags on crypto_ref and the gate.
+      ("Two crypto backends"; `supports:` on crypto_ref.h and both
+      implementations, `verifies:` on check_tests_backend_free.cmake and
+      check_public_headers.cmake.)
 - [ ] REQ-BUILD-007 criteria all checked except the release-classifier
       one (STEP-M12-120); `./dev ci` green on both backends locally.
