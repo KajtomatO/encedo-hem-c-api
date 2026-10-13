@@ -745,10 +745,11 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   **STEP-M12-080 done 2026-10-13** — REQ-BUILD-007's OpenSSL 3 backend:
   `EHEM_CRYPTO_BACKEND=openssl`, the shim split per backend, the unit suite
   and ASan green on OpenSSL locally (CI legs: STEP-M12-090).
-  **STEP-M12-070 implemented 2026-10-13, in `doing/`** — REQ-BUILD-008's
-  installed consumer interface (package config resolves the crypto
-  dependency, relocatable `encedo-hem.pc`, the consumer gate); waits for
-  its CI legs.
+  **STEP-M12-070 done 2026-10-14** — REQ-BUILD-008 on wolfSSL: the package
+  config resolves the crypto dependency, `encedo-hem.pc` is relocatable,
+  and the consumer gate (find_package + pkg-config, shared + static) is
+  green on every CI leg and in both release jobs (runs 38481008774,
+  38481505956); the OpenSSL variants: STEP-M12-090.
   Names settled: error code `EHEM_ERR_BACKEND_MISMATCH`; API
   `ehem_build_info_get`; options `EHEM_BUILD_SHARED` / `EHEM_BUILD_STATIC`
   / `EHEM_TOOL_LINK` / `EHEM_DEPS_LINK` / `EHEM_CRYPTO_BACKEND`; asset

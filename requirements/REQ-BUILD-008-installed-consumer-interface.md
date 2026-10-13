@@ -1,9 +1,9 @@
 ---
 id: REQ-BUILD-008
 title: Installed consumer interface — CMake package config and pkg-config file that resolve the selected backend's dependencies
-status: approved
+status: verified
 priority: must
-revision: 2   # 2026-10-13 (STEP-M12-070): wolfSSL-backend evidence recorded under each criterion; the REQ-API-008 / ARCHITECTURE criterion ticked (applied at the decomposition). No meaning change — approved status kept
+revision: 3   # 2026-10-14 (STEP-M12-070 done): the wolfSSL CI evidence recorded under criteria 2 and 3; criterion 3 ticked (backend-independent). No meaning change. Rev 2 = 2026-10-13 (STEP-M12-070): wolfSSL-backend evidence recorded under each criterion; the REQ-API-008 / ARCHITECTURE criterion ticked (applied at the decomposition)
 source: user decision 2026-10-12 (M12 planning: ship `encedo-hem.pc`); ARCHITECTURE.md §1 (artifact name — "pkg-config `encedo-hem`"), §11 M12 part B ("CMake package config fix": cmake/encedo-hem-config.cmake.in declares only find_dependency(CURL); the static target's crypto link interface cannot resolve in a consumer); REQ-API-008 criterion record "No separate pkg-config .pc file is shipped" (reversed here, §6.2 at the M12 decomposition); finding at the M12 decomposition 2026-10-12: ehem.h already gives static consumers plain declarations — the real gap is that the shared target does not advertise EHEM_USING_SHARED to its consumers (MinGW auto-import hides it); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-BUILD-001", "REQ-BUILD-006", "REQ-BUILD-007", "REQ-API-006"]
 supersedes: null
@@ -93,16 +93,23 @@ autotools-style builds expect a `.pc`.
       private libraries (nghttp2, idn2, rtmp, ssh, psl, gssapi_krb5, lber,
       ldap, zstd, brotlidec) have no linkable file, so there it links the
       archive with the shared libcurl + wolfSSL named by the .pc's
-      Requires.private, and the log says which. CI legs: pending the
-      push; OpenSSL: STEP-M12-090.)*
-- [ ] The installed shared target's `INTERFACE_COMPILE_DEFINITIONS`
+      Requires.private, and the log says which. CI (wolfSSL), 2026-10-13:
+      run 38481008774 — Linux gcc, clang and both switch legs, Windows
+      MSYS2 UCRT64 default and both switch legs — and release run
+      38481505956's two jobs against the REQ-BUILD-005 prefix. OpenSSL:
+      STEP-M12-090.)*
+- [x] The installed shared target's `INTERFACE_COMPILE_DEFINITIONS`
       carry `EHEM_USING_SHARED`; the Windows consumer built against the
       DLL shows no auto-import linker note (recorded from the CI log).
-      *(The gate asserts both: the installed `set_target_properties(
+      *(The gate asserts the installed `set_target_properties(
       encedo-hem::encedo-hem … INTERFACE_COMPILE_DEFINITIONS
-      "EHEM_USING_SHARED"` and no "auto-import" in the consumer build
-      output; the find_package shared consumer reports the define, the
-      static and pkg-config ones do not. Windows: pending the CI legs.)*
+      "EHEM_USING_SHARED"`; the find_package shared consumer reports the
+      define, the static and pkg-config ones do not. The note itself
+      never appears on x86_64: ld auto-imports a data reference silently
+      (control 2026-10-14), so on MinGW the shared consumers link with
+      `-Wl,--disable-auto-import` — a reference that needs auto-import
+      fails the link. The DLL exports no data symbol. Green on the three
+      Windows legs of CI run 38481008774, 2026-10-13.)*
 - [ ] `pkg-config --libs --static encedo-hem` on an OpenSSL static-deps
       install links the consumer with no unresolved symbol (release
       prefix, REQ-BUILD-009).

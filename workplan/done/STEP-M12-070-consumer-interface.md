@@ -7,19 +7,22 @@ traces:
   architecture: ["ARCHITECTURE.md#1-decisions-fixed", "ARCHITECTURE.md#11-milestones"]
 depends_on: ["STEP-M12-060"]
 evidence:
-  commits: ["74b2508"]   # start — the implementation, the CI run and the done commit follow
+  commits: ["74b2508", "4a9ca07", "5117426", "b0046df", "338e921"]   # start; implementation; three gate fixes from the CI runs — the done commit follows
   tests:
     - "tests/consumer/check_consumer.cmake (CTest consumer_interface, label unit; verifies: REQ-BUILD-008): cmake --install into <build>/tests/consumer-gate/prefix; asserts the installed config (the wolfSSL lookup only with the static variant), the export (only the variants built; the shared target's INTERFACE_COMPILE_DEFINITIONS EHEM_USING_SHARED; libcurl exported as CURL::libcurl, never an aliased CURL::libcurl_static/_shared) and encedo-hem.pc (relocatable prefix, Version, Requires.private: libcurl wolfssl, Cflags, Libs); then configures tests/consumer against the install (both lookups must resolve inside it), builds (on MinGW the shared consumers link with -Wl,--disable-auto-import) and runs every consumer: find_package shared/static, pkg-config shared/static — each prints the SDK version and its EHEM_USING_SHARED state, compared"
     - "Local 2026-10-13, all green: default (55/55), shared-only + EHEM_TOOL_LINK=shared (55/55), static-only (54/54), clang (55/55), ASan (55/55; the consumer gets the sanitizer flags) and the Release build against the REQ-BUILD-005 prefix exactly as package.sh configures it (55/55). The static pkg-config consumer: the full pkg-config --static closure against the release prefix; the archive + shared libcurl/wolfSSL on Ubuntu (libcurl's private libraries have no linkable files there) — the form is printed in the test log"
     - "./dev ci 55/55 gcc + clang; ./dev test asan 55/55"
+    - "CI run 38428646903 (push 5117426, 2026-10-13): Linux 4/4 green; Windows 3/3 failed in consumer_interface at the first consumer run — 'cmake -E env: no command given' (notes (4)); fixed b0046df"
+    - "CI run 38478312779 (push b0046df, 2026-10-13): ALL 7 legs green — Linux gcc, clang, 'gcc, shared-only, hem-tool on the shared SDK', 'gcc, static-only'; Windows (MinGW), '(MinGW, shared-only, hem-tool on the shared SDK)', '(MinGW, static-only)'; Unit tests (ctest -L unit, consumer_interface = test #1) on each. Release run 38478949244 (workflow_dispatch on development, b0046df): both jobs green — Linux x86_64 (ubuntu-22.04) and Windows x86_64 (MinGW UCRT64) run the gate in package.sh's ctest -L unit against the REQ-BUILD-005 prefix"
+    - "CI run 38481008774 (push 338e921, 2026-10-13): ALL 7 legs green, the three Windows legs linking the shared consumers with -Wl,--disable-auto-import; release run 38481505956 (workflow_dispatch on development, 338e921): both jobs green. No failure annotation on any job. The API's step records are stale (pending / in_progress on completed jobs), so the job conclusions are the record — neither workflow has continue-on-error or always()/failure() conditions"
   notes: |
-    PENDING for done: the CI legs (Linux gcc + clang + the two switch legs,
-    Windows MSYS2 default + the two switch legs) run consumer_interface in
-    `ctest -L unit` — their first green run closes the Windows boxes (the
-    gate natively on MSYS2: find_package + pkg-config, the --static closure
-    with MSYS2's packages, the shared consumers linked with auto-import
-    disabled); the next release.yml
-    dispatch runs it in both release configurations too.
+    DONE 2026-10-14 with CI run 38481008774 (all 7 legs green: the gate
+    natively on MSYS2 — find_package + pkg-config, shared + static, the
+    --static closure with MSYS2's packages, the shared consumers linked
+    with auto-import disabled) and release run 38481505956 (both release
+    jobs run the gate against the REQ-BUILD-005 prefix). The first Windows
+    run (38428646903) found the PATH glue (4); closing found the auto-import
+    check that could not fire (5).
     Found while building the gate: (1) an exported link interface records a
     bare ALIAS by its aliased name — the release prefix's curl package
     config makes CURL::libcurl an alias of CURL::libcurl_static, which
@@ -112,12 +115,18 @@ the decomposition — nothing to edit there.
       dependency lookup and `lib/pkgconfig/encedo-hem.pc` (contents
       recorded in the REQ); a shared-only / static-only install exports
       only what was built and installs the `.pc` accordingly.
-- [ ] Consumer gate (`tests/consumer`, CTest label `unit`) passes on Linux
+- [x] Consumer gate (`tests/consumer`, CTest label `unit`) passes on Linux
       gcc + clang and Windows MSYS2 for shared and static targets via
       find_package AND pkg-config (CI logs recorded).
-- [ ] Installed shared target's `INTERFACE_COMPILE_DEFINITIONS` carry
+      (CI run 38481008774, all 7 legs; release run 38481505956, both jobs.)
+- [x] Installed shared target's `INTERFACE_COMPILE_DEFINITIONS` carry
       `EHEM_USING_SHARED`; the Windows consumer against the DLL shows no
       auto-import note (CI log).
+      (The gate asserts the define in the installed export and in the
+      find_package shared consumer's output, on every leg. x86_64 ld never
+      prints the note — notes (5) — so on the Windows legs of CI run
+      38481008774 both shared consumers link with -Wl,--disable-auto-import
+      instead: no reference to the DLL needs auto-import.)
 - [x] `pkg-config --libs --static encedo-hem` consumer links cleanly where
       a static wolfSSL exists locally, else recorded as proven by
       STEP-M12-120 against the OpenSSL prefix.
