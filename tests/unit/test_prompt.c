@@ -170,6 +170,7 @@ static void test_tty_echo_restored(void **state)
 
     if (!open_pty(&master, &slave)) {
         skip();
+        return;       /* cmocka < 1.1.7 does not mark skip() noreturn */
     }
     assert_true(echo_is_on(slave));
     assert_int_equal(pipe(sync_fd), 0);
@@ -239,6 +240,7 @@ static void test_tty_ctrl_c_restores(void **state)
 
     if (!open_pty(&master, &slave)) {
         skip();
+        return;       /* cmocka < 1.1.7 does not mark skip() noreturn */
     }
     alarm(20);
     child = fork();
