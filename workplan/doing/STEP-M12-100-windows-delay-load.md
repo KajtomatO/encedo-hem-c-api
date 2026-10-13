@@ -22,6 +22,13 @@ evidence:
     "libwolfssl.dll was not found" + exit 12, `help` / `keys types` exit 0,
     `--version` reads "not found (loaded)"; then the positive smoke with the
     DLL beside it reports 5.7.2 loaded. Run id → here and REQ-TOOL-026.
+    The job compiles with MSYS2's GCC 16.2 like ci.yml's Windows legs, so
+    it needs b00620d (on f52b02c the SDK build fails — STEP-M12-010's probe
+    message array; CI run 38400370544). The rebuilt deps cache is not a new
+    GCC exposure: build-deps.sh was unchanged from 10-10 11:49Z to this
+    step, so the first release run after that change (all green from 12:00Z
+    to the 1.1.0 tag) built wolfSSL 5.7.2 (its own -Werror) and curl 8.10.1
+    from scratch on that day's MSYS2 GCC.
     Design: build-deps.sh (Windows) adds -Wl,--output-def to the wolfSSL DLL
     link (gendef fallback) and makes $PREFIX/lib/libwolfssl.delay.a with
     dlltool --output-delaylib. CMake EHEM_WOLFSSL_DELAYLOAD_LIB (WIN32 only,

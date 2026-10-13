@@ -15,9 +15,12 @@ evidence:
     - "Static-wolfSSL WARNING: fires with an archive-only wolfssl.pc prefix (default deps link, status 'wolfSSL 5.6.6 (static)'), absent on the default configure"
     - "ci.yml: matrix expansion emulated (Linux: gcc, clang + 2 switch legs; Windows: default + 2 switch legs, default check names unchanged); the assertion scripts run locally — pass on the matching build, fail on the default build"
     - "./dev ci 54/54 gcc + clang; ./dev test asan 54/54; shellcheck dev clean; ./dev build --static-only builds in build-static-only"
+    - "CI run 38400370544 (push f52b02c, 2026-10-13): Linux 4/4 green — gcc, clang, 'gcc, shared-only, hem-tool on the shared SDK' and 'gcc, static-only', each Build + Unit tests + (switch legs) 'Assert the link result' success. Windows 3/3 failed at Build (3 s in): STEP-M12-010's probe message array, rejected by MSYS2's GCC 16.2 — fixed b00620d (see STEP-M12-010 evidence), not a switch defect"
+    - "Before the re-run, locally: MinGW cross-builds (posix-thread GCC 13 against MSYS2 wolfSSL 5.9.4 / curl 8.22.0 / cmocka 1.1.8) of the three Windows legs compile and link; the ci.yml assertions hold on them — shared-only: hem-tool.exe imports libencedo-hem.dll, no libencedo-hem.a installed; static-only: no libencedo-hem.dll* built or installed, libencedo-hem.a installed"
   notes: |
-    PENDING for done: the ci.yml switch legs' first green run (Linux gcc +
-    Windows MSYS2 shared-only/tool-shared and static-only) — needs a push.
+    PENDING for done: the Windows legs' first green run (MSYS2 default,
+    shared-only/tool-shared, static-only) — the Linux legs are green
+    (38400370544); needs a push of b00620d.
     Settled at start (REQ-BUILD-006 rev 2): Ubuntu ships libwolfssl.a and
     libcurl.a but libcurl's static closure lacks 10 archives; MSYS2 UCRT64
     ships both (+ closure ssh2/idn2/OpenSSL/zlib/brotli/zstd/nghttp*/psl).

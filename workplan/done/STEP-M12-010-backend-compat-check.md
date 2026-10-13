@@ -7,11 +7,12 @@ traces:
   architecture: ["ARCHITECTURE.md#4-public-api--conventions", "ARCHITECTURE.md#11-milestones", "ARCHITECTURE.md#12-risks--open-questions"]
 depends_on: []
 evidence:
-  commits: []   # the user commits (never-commit rule); SHA to be backfilled
+  commits: ["873d363", "b00620d"]   # done (committed 2026-10-13); post-done Windows build fix
   tests:
     - "verifies: REQ-API-010 — tests/unit/test_backend_compat.c (7: the matching library passes version + six probes; forced version mismatch and forced probe failure each → EHEM_ERR_BACKEND_MISMATCH, re-derived on every call; refusal leaves cleanup a no-op and a cleared re-init succeeds (REQ-API-002 extended); ehem_ctx_create with the default transport → BACKEND_MISMATCH and *out NULL, both forcings; login flow over the fake transport → BACKEND_MISMATCH at the first acquisition with zero requests and the 'process-global init failed' message; value == UNSUPPORTED + 1 and ehem_rc_str names it (REQ-API-003))"
     - "tests/unit/test_context.c test_rc_str_covers_every_value iterates to EHEM_ERR_BACKEND_MISMATCH (sentinel moved to +1)"
     - "2026-10-12: ./dev ci 48/48 gcc + clang (export_symbols, public_headers_dep_free, docs_coverage, ascii_strings green); ./dev test asan 48/48; x86_64-w64-mingw32-gcc -fsyntax-only clean for src/context.c and src/crypto_shim.c (Linux wolfSSL headers via -I; the real Windows build is CI's windows-mingw leg)"
+    - "2026-10-13, after done: the first CI run with this code (38400370544, f52b02c) failed all three Windows legs at Build — MSYS2's GCC 16.2 rejects `static const uint8_t probe_ed_msg[31] = \"...\"` (31 characters, the NUL dropped: -Wunterminated-string-initialization, in -Wextra since GCC 15; the Linux runners' GCC 13 / clang 18 lack it). Fix b00620d: unsized array, length sizeof - 1 — the signed message is the same 31 bytes. Checked with GCC 16.2 (conda-forge): all 139 compile commands of the default configure clean at -O0, -O2 and -O3 -DNDEBUG; ./dev ci 54/54 gcc + clang; MinGW cross-builds (posix-thread GCC 13, MSYS2 wolfSSL 5.9.4 / curl 8.22.0 / cmocka) of the three ci.yml Windows legs compile and link"
   notes: >
     2026-10-12. Shim (src/crypto_shim.c, section "Backend compatibility
     check", implements: REQ-API-010 at line 502): step 1 exact version —
