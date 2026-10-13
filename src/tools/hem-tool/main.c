@@ -16,7 +16,8 @@
  *             REQ-TOOL-015 (the `tls-recover` subcommand),
  *             REQ-TOOL-024 (ehem_global_init up front, exit 12 on refusal),
  *             REQ-TOOL-025 (`--version` / `version`),
- *             REQ-TOOL-027 (`keys types`, dispatched before the SDK init)
+ *             REQ-TOOL-027 (`keys types`, dispatched before the SDK init),
+ *             REQ-TOOL-028 (the `init-wizard` subcommand)
  *
  * Consumes ONLY the public headers in include/ehem/ — it doubles as living
  * documentation of the API and as the manual driver for the M1/M2 gates.
@@ -52,6 +53,7 @@
 #include "sign.h"
 #include "startup.h"
 #include "wipe.h"
+#include "wizard.h"
 #include "tool_auth.h"
 
 #define MAX_LABEL_PREFIXES 32
@@ -822,6 +824,48 @@ static int cmd_init_device(const cli_opts *o)
     return ret;
 }
 
+/* `init-wizard` — REQ-TOOL-028 (attended-only, REQ-TEST-007). The wizard asks
+ * for every input itself; --url / EHEM_URL is its only pre-fill (settled at
+ * STEP-M12-050: nothing secret from the environment in an interactive flow).
+ * init-device's input flags are refused, and secrets in the environment are
+ * ignored with a notice. */
+static int cmd_init_wizard(const cli_opts *o)
+{
+    ehem_ctx *ctx = NULL;
+    hem_wizard_opts wo;
+    int ret;
+
+    if (o->pw_flag || o->user != NULL || o->email != NULL ||
+        o->hostname != NULL || o->ip != NULL || o->origin != NULL ||
+        o->master_words != NULL || o->master_hex != NULL ||
+        o->master_generate || o->csr_out != NULL || o->storage_mode != 0 ||
+        o->disk0_size != 0 || o->dnsd || o->no_trusted_ts ||
+        o->no_trusted_backend || o->no_allow_keysearch || o->gen_csr ||
+        o->ctx_id != 0 || o->reboot_flag) {
+        fprintf(stderr, "error: init-wizard asks for every value itself - "
+                        "for a scripted run with flags use init-device\n");
+        return 2;
+    }
+    if ((o->passphrase != NULL && o->passphrase[0] != '\0') ||
+        getenv("EHEM_MASTER_WORDS") != NULL) {
+        fprintf(stderr, "notice: init-wizard ignores EHEM_PASSPHRASE and "
+                        "EHEM_MASTER_WORDS - it asks for both\n");
+    }
+    ret = make_ctx(o, &ctx);
+    if (ret != 0) {
+        return ret;
+    }
+    memset(&wo, 0, sizeof wo);
+    wo.url           = o->url;
+    wo.in            = stdin;
+    wo.out           = stdout;
+    wo.err           = stderr;
+    wo.poll_delay_ms = HEM_INIT_POLL_DELAY_MS;
+    ret = hem_init_wizard_run(ctx, &wo);
+    ehem_ctx_destroy(ctx);
+    return ret;
+}
+
 /* `recovery` — REQ-TOOL-023: three postures on one device. */
 static int cmd_recovery(const cli_opts *o)
 {
@@ -1286,6 +1330,14 @@ int main(int argc, char **argv)
             ret = 2;
         } else {
             ret = cmd_init_device(&o);
+        }
+    } else if (strcmp(cmd, "init-wizard") == 0) {
+        if (subcmd != NULL) {
+            fprintf(stderr, "error: unexpected argument '%s'\n", subcmd);
+            usage(stderr);
+            ret = 2;
+        } else {
+            ret = cmd_init_wizard(&o);
         }
     } else if (strcmp(cmd, "wipe-device") == 0) {
         if (subcmd != NULL) {

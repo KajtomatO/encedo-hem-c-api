@@ -97,6 +97,14 @@ if(TARGET hem-tool-core)
   ehem_add_unit_test(test_init_tool SOURCES test_init_tool.c)
   target_link_libraries(test_init_tool PRIVATE hem-tool-core)
 
+  # REQ-TOOL-028: `init-wizard` — scripted dialogues over the fake transport
+  # (byte-identical init body to init-device), and the no-echo prompt helper
+  # (plain lines off a terminal; a pseudo-terminal for echo off/restore).
+  ehem_add_unit_test(test_wizard SOURCES test_wizard.c)
+  target_link_libraries(test_wizard PRIVATE hem-tool-core)
+  ehem_add_unit_test(test_prompt SOURCES test_prompt.c)
+  target_link_libraries(test_prompt PRIVATE hem-tool-core)
+
   # REQ-TOOL-023: `recovery` — the five diagnoses and their remediations (M10).
   ehem_add_unit_test(test_recovery SOURCES test_recovery.c)
   target_link_libraries(test_recovery PRIVATE hem-tool-core)

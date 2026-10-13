@@ -8,7 +8,9 @@
 #           REQ-TOOL-025 (`--version` / `version` print the three-line
 #           report, exit 0; the flag wins over a command),
 #           REQ-TOOL-027 (`keys types [TYPE]` offline: no URL, no passphrase,
-#           under the forced refusal; unknown TYPE exit 2)
+#           under the forced refusal; unknown TYPE exit 2),
+#           REQ-TOOL-028 (`init-wizard` refuses init-device's flags with exit
+#           2 and cancels on the end of input with exit 6, zero traffic)
 #
 # Run as a CTest (label `unit`):
 #   cmake -DEHEM_TOOL=<hem-tool-forced-mismatch> -DEHEM_VERSION=<x.y.z> \
@@ -31,13 +33,17 @@ endif()
 set(_url "http://127.0.0.1:1")
 
 # run(<force> <args...>) → _rc, _out, _err in the caller's scope. The device
-# environment is cleared so a sourced hem.env cannot leak in.
+# environment is cleared so a sourced hem.env cannot leak in; stdin is an
+# empty file (an interactive command sees the end of input at once).
+set(_empty_input "${CMAKE_CURRENT_BINARY_DIR}/tool_startup_empty_input.txt")
+file(WRITE "${_empty_input}" "")
 function(run force)
   execute_process(
     COMMAND ${CMAKE_COMMAND} -E env
       --unset=EHEM_URL --unset=EHEM_PASSPHRASE --unset=EHEM_MASTER_WORDS
       EHEM_TEST_FORCE_MISMATCH=${force}
       ${EHEM_TOOL} ${ARGN}
+    INPUT_FILE "${_empty_input}"
     RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err
     TIMEOUT 60)
   set(_rc "${rc}" PARENT_SCOPE)
@@ -192,6 +198,18 @@ run(none --url ${_url} status)
 expect_rc(1)                          # unreachable — the command DID run
 expect_not_in(_err "EHEM_ERR_BACKEND_MISMATCH")
 expect_in(_err "system status")
+
+# init-wizard (REQ-TOOL-028): init-device's flags are refused (exit 2); the
+# end of input at the first prompt cancels — exit 6, and nothing reached the
+# device (a request to the closed port would have failed with exit 1).
+run(none --url ${_url} init-wizard --user alice)
+expect_rc(2)
+expect_in(_err "init-device")
+
+run(none --url ${_url} init-wizard)
+expect_rc(6)
+expect_in(_out "cancelled - nothing was sent to the device")
+expect_not_in(_err "EHEM_ERR_")
 
 run(none --version)
 expect_version_report()

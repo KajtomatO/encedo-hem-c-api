@@ -3,7 +3,8 @@
  * resolution (see registry.h).
  *
  * implements: REQ-TOOL-017, REQ-TOOL-019, REQ-TOOL-020, REQ-TOOL-027 (the
- *             keys gen type list and the keys types entry)
+ *             keys gen type list and the keys types entry), REQ-TOOL-028
+ *             (the init-wizard entry)
  */
 #include "registry.h"
 
@@ -136,6 +137,21 @@ static const hem_command COMMANDS[] = {
       "on, dnsd off, origin *). Exit 3 = already initialised, 4 = RTC unset,\n"
       "5 = cfg rejected.",
       HEM_AUTH_NONE, N(OPT_INIT), HEM_SECTION_MAIN, NULL },
+
+    { NULL, "init-wizard", "init-wizard",
+      "initialise a device step by step - every setting asked and explained",
+      "Walks you through initialising an UNINITIALISED device (use its\n"
+      "http:// URL): one explained prompt per setting with Encedo Manager's\n"
+      "default, the passphrase hidden and typed twice, the master secret as\n"
+      "24 new words shown once and checked by re-typing three of them (or an\n"
+      "existing mnemonic typed in), a summary you confirm by typing the\n"
+      "hostname - then exactly what init-device does, asking before the\n"
+      "reboot. Nothing reaches the device before that confirmation; only\n"
+      "--url / EHEM_URL comes from outside (init-device's flags are refused,\n"
+      "EHEM_PASSPHRASE / EHEM_MASTER_WORDS ignored). Exit codes as\n"
+      "init-device (3 = already initialised, 4 = RTC unset, 5 = cfg\n"
+      "rejected); 6 = cancelled (end of input, or a wrong hostname).",
+      HEM_AUTH_NONE, NULL, 0, HEM_SECTION_MAIN, NULL },
 
     { NULL, "cert-install", "cert-install [--force]",
       "harvest + install the cloud TLS certificate (REBOOTS)",

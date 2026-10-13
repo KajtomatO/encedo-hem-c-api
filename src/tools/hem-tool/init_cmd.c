@@ -93,6 +93,7 @@ int hem_init_device_run(ehem_ctx *ctx, const hem_init_opts *o)
     ehem_rc rc;
     int sources;
     int ret = HEM_INIT_OK;
+    int do_reboot = o->reboot;
 
     /* 1. Inputs — zero traffic on a usage error. */
     if (o->passphrase == NULL || o->passphrase[0] == '\0') {
@@ -227,12 +228,15 @@ int hem_init_device_run(ehem_ctx *ctx, const hem_init_opts *o)
             fprintf(out, "csr:\n%s\n", info->csr);
         }
     }
+    if (info->reboot_required && o->confirm_reboot != NULL) {
+        do_reboot = o->confirm_reboot(o->confirm_arg) != 0;
+    }
     fprintf(out, "next: %slog in with the passphrase\n",
-            info->reboot_required && !o->reboot
+            info->reboot_required && !do_reboot
                 ? "hem-tool reboot (required), then " : "");
 
     /* 5. Optional reboot + wait (the cached system:config bearer is used). */
-    if (o->reboot && info->reboot_required) {
+    if (do_reboot && info->reboot_required) {
         unsigned i;
         int seen_down = 0;
         rc = ehem_system_reboot(ctx);

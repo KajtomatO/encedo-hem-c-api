@@ -59,6 +59,11 @@ typedef struct {
     /* output / follow-up: */
     const char *csr_out;        /* --csr-out FILE: write the PEM CSR here too */
     int         reboot;         /* --reboot: reboot when required and wait */
+    /* Asked instead of `reboot` when the device reports reboot_required
+     * (init-wizard, REQ-TOOL-028): nonzero = reboot now and wait. NULL (the
+     * init-device case) = `reboot` decides. */
+    int       (*confirm_reboot)(void *arg);
+    void       *confirm_arg;
     unsigned    poll_attempts;  /* 0 → HEM_INIT_POLL_ATTEMPTS */
     unsigned    poll_delay_ms;  /* VERBATIM (0 = none) */
     FILE       *out;            /* report (NULL → stdout) */

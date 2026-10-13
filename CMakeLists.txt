@@ -244,6 +244,7 @@ if(EHEM_BUILD_TOOL)
     src/tools/hem-tool/keys.c
     src/tools/hem-tool/keytypes.c
     src/tools/hem-tool/logs.c
+    src/tools/hem-tool/prompt.c
     src/tools/hem-tool/random.c
     src/tools/hem-tool/recover.c
     src/tools/hem-tool/recovery.c
@@ -253,6 +254,7 @@ if(EHEM_BUILD_TOOL)
     src/tools/hem-tool/startup.c
     src/tools/hem-tool/tool_auth.c
     src/tools/hem-tool/wipe.c
+    src/tools/hem-tool/wizard.c
     # Vendored qrcodegen (REQ-TOOL-016): TOOL-ONLY — never part of the SDK
     # library; the export/header gates prove the containment.
     src/tools/hem-tool/vendor/qrcodegen/qrcodegen.c)
