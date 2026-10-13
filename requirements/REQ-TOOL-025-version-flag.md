@@ -1,7 +1,7 @@
 ---
 id: REQ-TOOL-025
 title: hem-tool --version — SDK version, crypto backend compiled-against and loaded versions, libcurl version
-status: approved
+status: verified
 priority: should
 revision: 2   # 2026-10-13 (STEP-M12-020): output text settled (= the proposal); unit criteria recorded. No meaning change — approved status kept
 source: user decision 2026-10-12 (M12 planning: "`hem-tool --version` — the SDK version, the wolfSSL version compiled against and the one loaded, and the libcurl version (today `--version` is an unknown option)"); ARCHITECTURE.md §11 M12 part A; REQ-API-011 (the facts); approved 2026-10-12 (M12 decomposition, user: "approve")

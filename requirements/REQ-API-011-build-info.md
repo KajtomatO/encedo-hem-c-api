@@ -1,7 +1,7 @@
 ---
 id: REQ-API-011
 title: Build information API — crypto and transport backend names and versions (compiled against vs loaded)
-status: approved
+status: verified
 priority: should
 revision: 2   # 2026-10-13 (STEP-M12-020): shape settled (link-mode fields + a fixed-size reserved tail for 1.x growth); unit criteria ticked. No meaning change — approved status kept
 source: user decision 2026-10-12 (M12 planning: `hem-tool --version` shows the SDK version, the wolfSSL version compiled against and the one loaded, and the libcurl version); ARCHITECTURE.md §11 M12 part A; §3 (hem-tool uses the public API only — it cannot include wolfSSL or libcurl headers itself); approved 2026-10-12 (M12 decomposition, user: "approve")
