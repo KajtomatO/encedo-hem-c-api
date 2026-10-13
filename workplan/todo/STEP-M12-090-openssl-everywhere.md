@@ -9,7 +9,14 @@ depends_on: ["STEP-M12-070", "STEP-M12-080"]
 evidence:
   commits: []
   tests: []
-  notes: null
+  notes: |
+    2026-10-13: started too early (46e3882) — its dependency STEP-M12-070
+    was still in doing/, waiting for its CI legs (§5.4 precondition breach;
+    I read only 080 as its dependency). Moved back here; the finished work
+    (crypto_ref, the tests_backend_free gate, the header-gate patterns, the
+    ci.yml openssl legs, a green live run on OpenSSL) waits on the local
+    branch park/step-m12-090 (e84a29f). Restart after 070 is done: git mv
+    to doing/, start commit, cherry-pick e84a29f.
 reopened: []
 cancelled: null
 ---
