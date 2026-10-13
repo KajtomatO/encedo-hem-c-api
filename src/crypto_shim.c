@@ -750,10 +750,13 @@ static int probe_aes(void)
     return probe_close(&box) && answer_ok;
 }
 
-/* The message both Edwards probes verify a signature over; keys and signatures
- * were produced with OpenSSL 3.0.13 (openssl genpkey / pkeyutl -sign -rawin)
- * on 2026-10-12 — a second implementation, so the answer is independent. */
-static const uint8_t probe_ed_msg[31] = "encedo-hem crypto backend probe";
+/* The message both Edwards probes verify a signature over — its 31 bytes, the
+ * literal's NUL is not part of it (a [31] array would drop the NUL silently,
+ * which GCC 15+ -Wextra rejects); keys and signatures were produced with
+ * OpenSSL 3.0.13 (openssl genpkey / pkeyutl -sign -rawin) on 2026-10-12 — a
+ * second implementation, so the answer is independent. */
+static const uint8_t probe_ed_msg[] = "encedo-hem crypto backend probe";
+#define PROBE_ED_MSG_LEN ((word32)(sizeof probe_ed_msg - 1))
 
 static const uint8_t probe_ed25519_pub[EHEM_ED25519_PUB_SIZE] = {
     0x8b, 0xf9, 0x48, 0x60, 0x9a, 0xf5, 0x6d, 0xd7, 0xdf, 0x9c, 0xae, 0xe0,
@@ -803,7 +806,7 @@ static int probe_ed25519(void)
         if (wc_ed25519_import_public(probe_ed25519_pub, EHEM_ED25519_PUB_SIZE,
                                      k) == 0 &&
             wc_ed25519_verify_msg(probe_ed25519_sig, EHEM_ED25519_SIG_SIZE,
-                                  probe_ed_msg, (word32)sizeof probe_ed_msg,
+                                  probe_ed_msg, PROBE_ED_MSG_LEN,
                                   &res, k) == 0) {
             answer_ok = (res == 1);
         }
@@ -832,7 +835,7 @@ static int probe_ed448(void)
         if (wc_ed448_import_public(probe_ed448_pub, EHEM_ED448_PUB_SIZE,
                                    k) == 0 &&
             wc_ed448_verify_msg(probe_ed448_sig, EHEM_ED448_SIG_SIZE,
-                                probe_ed_msg, (word32)sizeof probe_ed_msg,
+                                probe_ed_msg, PROBE_ED_MSG_LEN,
                                 &res, k, NULL, 0) == 0) {
             answer_ok = (res == 1);
         }
