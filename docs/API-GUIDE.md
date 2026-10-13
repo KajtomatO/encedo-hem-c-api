@@ -84,7 +84,11 @@ One `ehem_ctx` (opaque) = one HEM device, created from a URL + options,
 destroyed with `ehem_ctx_destroy()` (which zeroizes credential material).
 There is no global mutable state beyond `ehem_global_init()` /
 `ehem_global_cleanup()`, which wrap the backends' process-global setup
-(libcurl, wolfCrypt) and are idempotent. In 1.x a context is used by one
+(libcurl, wolfCrypt) and are idempotent. Since 1.2 init also checks that the
+crypto library loaded at run time is the one the SDK was built against
+(`EHEM_ERR_BACKEND_MISMATCH` otherwise — see the error model); a refused
+init leaves the global state untouched, so cleanup is a no-op and a later
+init re-checks. In 1.x a context is used by one
 thread at a time; internals keep all mutable state inside the context so a
 per-context lock can be added later without redesign.
 
@@ -96,7 +100,13 @@ distinguish every condition a PKCS#11 backend must map: `EHEM_ERR_NETWORK`,
 `EHEM_ERR_SCOPE_DENIED`, `EHEM_ERR_USER_REJECTED`,
 `EHEM_ERR_CONFIRM_TIMEOUT`, `EHEM_ERR_NOT_FOUND`, `EHEM_ERR_DEVICE`,
 `EHEM_ERR_PROTOCOL`, `EHEM_ERR_ARG`, `EHEM_ERR_NOMEM`,
-`EHEM_ERR_UNSUPPORTED`. The enum is append-only — values never renumber.
+`EHEM_ERR_UNSUPPORTED`, `EHEM_ERR_BACKEND_MISMATCH`. The enum is append-only
+— values never renumber. `EHEM_ERR_BACKEND_MISMATCH` (added in 1.2) is
+`ehem_global_init()`'s refusal of a crypto library other than the one the
+SDK was built against — on wolfSSL the exact version plus a self-test of the
+structs the SDK allocates itself; the implicit init paths (`ehem_ctx_create()`
+with the default transport, the login flow's first token acquisition) return
+the same code, and nothing else works until the right library is installed.
 `ehem_rc_str()` names any value. Detail for the LAST call —
 HTTP status, the device's error payload, a human-readable message — is
 retrievable from the context via `ehem_last_error()`; the returned struct
@@ -210,7 +220,7 @@ rate-sensitive devices).
 | `ehem_tls_mode` | `EHEM_TLS_SYSTEM` / `EHEM_TLS_CA_FILE` / `EHEM_TLS_INSECURE` |
 | `ehem_error`, `ehem_last_error` | last-call detail (http status, device payload, message) |
 | `ehem_cert_refreshed` | sticky flag: automatic cert recovery took effect |
-| `ehem_global_init`, `ehem_global_cleanup` | idempotent process-global backend setup |
+| `ehem_global_init`, `ehem_global_cleanup` | idempotent process-global backend setup; init refuses a foreign crypto library with `EHEM_ERR_BACKEND_MISMATCH` (1.2) |
 | `ehem_transport` | opaque transport-override slot in the options (testing seam) |
 | `EHEM_DEFAULT_CONNECT_TIMEOUT_MS`, `EHEM_DEFAULT_TOTAL_TIMEOUT_MS`, `EHEM_DEFAULT_CONFIRM_TIMEOUT_MS` | documented option defaults |
 | `EHEM_DEFAULT_CHECKIN_URL` | the Encedo cloud check-in endpoint |

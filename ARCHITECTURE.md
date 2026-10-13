@@ -716,8 +716,10 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
 - **M12 — build variants, multi-package releases & hem-tool UX**
   *(early draft 2026-10-09; planned 2026-10-12; **decomposed 2026-10-12**
   — REQ-API-010/011, REQ-BUILD-006/007/008/009, REQ-TOOL-024/025/026/027/028
-  drafted; STEP-M12-010 … 140 in `workplan/todo/`, placeholder STEP-M12-000
-  cancelled. Names settled: error code `EHEM_ERR_BACKEND_MISMATCH`; API
+  drafted and **approved the same day**; STEP-M12-010 … 140 created,
+  placeholder STEP-M12-000 cancelled. **STEP-M12-010 done 2026-10-12** —
+  REQ-API-010 verified: the backend check is live on `development`,
+  `EHEM_ERR_BACKEND_MISMATCH` exists. Names settled: error code `EHEM_ERR_BACKEND_MISMATCH`; API
   `ehem_build_info_get`; options `EHEM_BUILD_SHARED` / `EHEM_BUILD_STATIC`
   / `EHEM_TOOL_LINK` / `EHEM_DEPS_LINK` / `EHEM_CRYPTO_BACKEND`; asset
   suffix `-static` = OpenSSL backend + every third-party library static

@@ -325,8 +325,14 @@ Discovered while building and attending the M8 mobile-auth milestone
 
 ## OPEN — Release hem-tool with a foreign libwolfssl crashes ("stack smashing detected")
 
-**Status:** open; the fix is M12 scope (user decision 2026-10-10 — not
-M10). **Affected:** the REQ-BUILD-005 release binaries (1.1.0), and any
+**Status:** fixed on `development` 2026-10-12 (STEP-M12-010, REQ-API-010:
+`ehem_global_init()` refuses the foreign library with
+`EHEM_ERR_BACKEND_MISMATCH` — exact wolfSSL version plus a guard-banded
+self-test of the six structs the SDK allocates; the implicit init paths
+return the same code instead of `EHEM_ERR_NOMEM`); the hem-tool message and
+exit code follow in STEP-M12-020, and the demo against the host's 5.6.6 is
+the M12 gate's (STEP-M12-140). Ships in 1.2.0 — the 1.1.0 binaries still
+crash. **Affected:** the REQ-BUILD-005 release binaries (1.1.0), and any
 consumer of the SDK built against one wolfSSL and run with another.
 
 ### Symptom

@@ -8,6 +8,10 @@ ehem_add_unit_test(test_json SOURCES test_json.c)
 # REQ-API-001..004: context lifecycle, options, error enum, last-error.
 ehem_add_unit_test(test_context SOURCES test_context.c)
 
+# REQ-API-010: crypto-backend compatibility check at ehem_global_init — the
+# seam-forced refusals, implicit-init propagation, idempotency across a refusal.
+ehem_add_unit_test(test_backend_compat SOURCES test_backend_compat.c)
+
 # REQ-NET-001, REQ-TEST-001: transport vtable seam via the injected fake.
 ehem_add_unit_test(test_transport SOURCES test_transport.c)
 

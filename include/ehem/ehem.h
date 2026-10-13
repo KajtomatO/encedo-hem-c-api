@@ -86,7 +86,11 @@ typedef enum ehem_rc {
     EHEM_ERR_PROTOCOL,         /* malformed/unparseable response or missing field */
     EHEM_ERR_ARG,              /* invalid argument from the caller */
     EHEM_ERR_NOMEM,            /* out of memory */
-    EHEM_ERR_UNSUPPORTED       /* operation/parameter not supported by this build */
+    EHEM_ERR_UNSUPPORTED,      /* operation/parameter not supported by this build */
+    EHEM_ERR_BACKEND_MISMATCH  /* the crypto library loaded at run time is not the
+                                * one this SDK was built against (1.2, REQ-API-010)
+                                * — ehem_global_init() refused it; no SDK call can
+                                * proceed until the right library is installed */
 } ehem_rc;
 
 /*
@@ -307,6 +311,12 @@ EHEM_API int ehem_cert_refreshed(const ehem_ctx *ctx);
  * needs, and the login flow self-initializes. Not thread-safe against
  * concurrent context creation (1.x single-thread-per-context model); call at
  * startup.
+ *
+ * Init also checks the crypto library loaded at run time against the one this
+ * SDK was built with (1.2, REQ-API-010): a different one is refused with
+ * EHEM_ERR_BACKEND_MISMATCH before anything else touches it, and the implicit
+ * init paths return that same code. The refusal leaves the process-global
+ * state untouched — cleanup is then a no-op and a later init re-checks.
  * ========================================================================== */
 EHEM_API ehem_rc ehem_global_init(void);
 EHEM_API void ehem_global_cleanup(void);
