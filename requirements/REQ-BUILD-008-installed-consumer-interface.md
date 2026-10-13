@@ -3,7 +3,7 @@ id: REQ-BUILD-008
 title: Installed consumer interface — CMake package config and pkg-config file that resolve the selected backend's dependencies
 status: approved
 priority: must
-revision: 1
+revision: 2   # 2026-10-13 (STEP-M12-070): wolfSSL-backend evidence recorded under each criterion; the REQ-API-008 / ARCHITECTURE criterion ticked (applied at the decomposition). No meaning change — approved status kept
 source: user decision 2026-10-12 (M12 planning: ship `encedo-hem.pc`); ARCHITECTURE.md §1 (artifact name — "pkg-config `encedo-hem`"), §11 M12 part B ("CMake package config fix": cmake/encedo-hem-config.cmake.in declares only find_dependency(CURL); the static target's crypto link interface cannot resolve in a consumer); REQ-API-008 criterion record "No separate pkg-config .pc file is shipped" (reversed here, §6.2 at the M12 decomposition); finding at the M12 decomposition 2026-10-12: ehem.h already gives static consumers plain declarations — the real gap is that the shared target does not advertise EHEM_USING_SHARED to its consumers (MinGW auto-import hides it); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-BUILD-001", "REQ-BUILD-006", "REQ-BUILD-007", "REQ-API-006"]
 supersedes: null
@@ -61,15 +61,58 @@ autotools-style builds expect a `.pc`.
       dependency lookup) and `lib/pkgconfig/encedo-hem.pc`; an OpenSSL
       build installs the OpenSSL variants of both (file contents
       recorded).
+      *(wolfSSL backend, 2026-10-13, STEP-M12-070 — asserted by the
+      consumer gate on every configuration: `encedo-hem-config.cmake`
+      gains, when the static variant is installed, `find_dependency(CURL)`,
+      `find_dependency(PkgConfig)` and `pkg_check_modules(WOLFSSL QUIET
+      IMPORTED_TARGET wolfssl)` with a NOT_FOUND message naming
+      PKG_CONFIG_PATH; a shared-only install resolves nothing (the shared
+      library carries both privately). `encedo-hem.pc` (default install):
+      `prefix=${pcfiledir}/../..`, `libdir=${prefix}/lib`,
+      `includedir=${prefix}/include`, `Name: encedo-hem`, `Version: 1.1.0`,
+      `Requires.private: libcurl wolfssl`, `Cflags: -I${includedir}`,
+      `Libs: -L${libdir} -lencedo-hem` — relocatable (one `..` per
+      component of the libdir + pkgconfig; absolute install dirs give
+      absolute paths). The export names libcurl as `$<1:CURL::libcurl>`:
+      a bare name is recorded by its ALIASED target when curl's own
+      package config made it an alias (`CURL::libcurl_static` with the
+      release prefix — found by the gate), which FindCURL's module mode
+      never defines. Shared-only / static-only installs export only their
+      target (asserted). The OpenSSL variants: STEP-M12-090.)*
 - [ ] The consumer gate passes on Linux (gcc, clang) and Windows (MSYS2)
       for shared and static targets via find_package AND pkg-config, on
       both backends (CI legs).
+      *(The gate: `tests/consumer/` + `check_consumer.cmake`, CTest
+      `consumer_interface`, label `unit`. Local 2026-10-13, all green:
+      default, shared-only + tool shared, static-only, clang, ASan (the
+      consumer built with the same sanitizer flags) and the Release build
+      against the REQ-BUILD-005 prefix — each consumer prints the SDK
+      version and the expected `EHEM_USING_SHARED` state. The static
+      pkg-config consumer uses the `pkg-config --static` closure where
+      every library of it links (the release prefix); on Ubuntu, libcurl's
+      private libraries (nghttp2, idn2, rtmp, ssh, psl, gssapi_krb5, lber,
+      ldap, zstd, brotlidec) have no linkable file, so there it links the
+      archive with the shared libcurl + wolfSSL named by the .pc's
+      Requires.private, and the log says which. CI legs: pending the
+      push; OpenSSL: STEP-M12-090.)*
 - [ ] The installed shared target's `INTERFACE_COMPILE_DEFINITIONS`
       carry `EHEM_USING_SHARED`; the Windows consumer built against the
       DLL shows no auto-import linker note (recorded from the CI log).
+      *(The gate asserts both: the installed `set_target_properties(
+      encedo-hem::encedo-hem … INTERFACE_COMPILE_DEFINITIONS
+      "EHEM_USING_SHARED"` and no "auto-import" in the consumer build
+      output; the find_package shared consumer reports the define, the
+      static and pkg-config ones do not. Windows: pending the CI legs.)*
 - [ ] `pkg-config --libs --static encedo-hem` on an OpenSSL static-deps
       install links the consumer with no unresolved symbol (release
       prefix, REQ-BUILD-009).
-- [ ] REQ-API-008's 1.0 record is annotated (rev bump, no status change —
+      *(Partial 2026-10-13: against the REQ-BUILD-005 prefix — shared
+      wolfSSL, static libcurl whose CMake-written libcurl.pc leaks
+      `-lgcc -lgcc_s -lc` — the full `pkg-config --static` closure linked
+      and ran. The all-static OpenSSL install: STEP-M12-120.)*
+- [x] REQ-API-008's 1.0 record is annotated (rev bump, no status change —
       the ABI promise is untouched) and ARCHITECTURE §11 part B text
       corrected per the finding above.
+      *(Applied at the M12 decomposition 2026-10-12: REQ-API-008 rev 2;
+      ARCHITECTURE §11 part B "Export macro for consumers — corrected at
+      the decomposition"; checked at STEP-M12-070.)*

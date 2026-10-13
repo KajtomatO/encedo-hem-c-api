@@ -7,9 +7,40 @@ traces:
   architecture: ["ARCHITECTURE.md#1-decisions-fixed", "ARCHITECTURE.md#11-milestones"]
 depends_on: ["STEP-M12-060"]
 evidence:
-  commits: []
-  tests: []
-  notes: null
+  commits: ["74b2508"]   # start — the implementation, the CI run and the done commit follow
+  tests:
+    - "tests/consumer/check_consumer.cmake (CTest consumer_interface, label unit; verifies: REQ-BUILD-008): cmake --install into <build>/tests/consumer-gate/prefix; asserts the installed config (the wolfSSL lookup only with the static variant), the export (only the variants built; the shared target's INTERFACE_COMPILE_DEFINITIONS EHEM_USING_SHARED; libcurl exported as CURL::libcurl, never an aliased CURL::libcurl_static/_shared) and encedo-hem.pc (relocatable prefix, Version, Requires.private: libcurl wolfssl, Cflags, Libs); then configures tests/consumer against the install (both lookups must resolve inside it), builds (no 'auto-import' in the output) and runs every consumer: find_package shared/static, pkg-config shared/static — each prints the SDK version and its EHEM_USING_SHARED state, compared"
+    - "Local 2026-10-13, all green: default (55/55), shared-only + EHEM_TOOL_LINK=shared (55/55), static-only (54/54), clang (55/55), ASan (55/55; the consumer gets the sanitizer flags) and the Release build against the REQ-BUILD-005 prefix exactly as package.sh configures it (55/55). The static pkg-config consumer: the full pkg-config --static closure against the release prefix; the archive + shared libcurl/wolfSSL on Ubuntu (libcurl's private libraries have no linkable files there) — the form is printed in the test log"
+    - "./dev ci 55/55 gcc + clang; ./dev test asan 55/55"
+  notes: |
+    PENDING for done: the CI legs (Linux gcc + clang + the two switch legs,
+    Windows MSYS2 default + the two switch legs) run consumer_interface in
+    `ctest -L unit` — their first green run closes the Windows boxes (the
+    gate natively on MSYS2: find_package + pkg-config, the --static closure
+    with MSYS2's packages, no auto-import note); the next release.yml
+    dispatch runs it in both release configurations too.
+    Found while building the gate: (1) an exported link interface records a
+    bare ALIAS by its aliased name — the release prefix's curl package
+    config makes CURL::libcurl an alias of CURL::libcurl_static, which
+    FindCURL's module mode never defines, so a consumer with another curl
+    lookup could not import the static target. The static target now
+    links $<BUILD_INTERFACE:CURL::libcurl> + $<INSTALL_INTERFACE:$<1:CURL::libcurl>>
+    (INSTALL_INTERFACE content alone is unwrapped and still resolved). (2)
+    curl 8.10.1's CMake-written libcurl.pc leaks the compiler's implicit
+    libraries (-lgcc -lgcc_s -lc) into Libs/Libs.private — linkable by name,
+    so the consumer treats them like system libraries. (3) CMake
+    function/macro gotchas in the gate script: a macro re-expands ${...}
+    inside its arguments (the .pc's literal ${pcfiledir}), and ARGN splits
+    any argument containing `;` (a path list) — expect_in() is a function,
+    and esc() escapes `;` before step() forwards a command.
+    Design: the config's dependency block is generated per build
+    (EHEM_CONFIG_DEPENDENCIES — STEP-M12-090 adds the OpenSSL one); the .pc
+    is relocatable through ${pcfiledir} (one `..` per libdir component +
+    pkgconfig; absolute install dirs give absolute paths) — the library
+    packages of STEP-M12-110/120 unpack anywhere. pkg-config consumers of
+    the DLL on Windows define EHEM_USING_SHARED themselves (the .pc cannot:
+    its Cflags serve the static library too) — API-GUIDE's EHEM_API row
+    says so; README "Install" shows the pkg-config line.
 reopened: []
 cancelled: null
 ---
@@ -57,7 +88,7 @@ here, do it against the dev host's wolfSSL only if its archive exists
 the decomposition — nothing to edit there.
 
 **Definition of done**
-- [ ] Fresh `cmake --install` of the default build installs
+- [x] Fresh `cmake --install` of the default build installs
       `lib/cmake/encedo-hem/encedo-hem-config.cmake` with the wolfSSL
       dependency lookup and `lib/pkgconfig/encedo-hem.pc` (contents
       recorded in the REQ); a shared-only / static-only install exports
@@ -68,8 +99,11 @@ the decomposition — nothing to edit there.
 - [ ] Installed shared target's `INTERFACE_COMPILE_DEFINITIONS` carry
       `EHEM_USING_SHARED`; the Windows consumer against the DLL shows no
       auto-import note (CI log).
-- [ ] `pkg-config --libs --static encedo-hem` consumer links cleanly where
+- [x] `pkg-config --libs --static encedo-hem` consumer links cleanly where
       a static wolfSSL exists locally, else recorded as proven by
       STEP-M12-120 against the OpenSSL prefix.
-- [ ] `./dev ci` green incl. the new CTest; `implements: REQ-BUILD-008` tag
+      (The full --static closure linked and ran against the REQ-BUILD-005
+      prefix; the dev host's libwolfssl.a exists but libcurl's closure has
+      no linkable files on Ubuntu — the all-static install: STEP-M12-120.)
+- [x] `./dev ci` green incl. the new CTest; `implements: REQ-BUILD-008` tag
       in CMakeLists.txt / the config template; tests/README lists the gate.

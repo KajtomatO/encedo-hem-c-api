@@ -215,7 +215,7 @@ rate-sensitive devices).
 
 | Symbol | What it is |
 |---|---|
-| `EHEM_API` | export/visibility macro (define `EHEM_USING_SHARED` when consuming the DLL on Windows) |
+| `EHEM_API` | export/visibility macro — `EHEM_USING_SHARED` selects dllimport when consuming the DLL on Windows: the CMake target `encedo-hem::encedo-hem` defines it for its consumers; with pkg-config, define it yourself (never for the static library) |
 | `ehem_version` | runtime SDK version string |
 | `ehem_rc`, `ehem_rc_str` | the error enum (append-only) + name lookup |
 | `ehem_ctx`, `ehem_ctx_create`, `ehem_ctx_destroy` | opaque per-device context lifecycle |

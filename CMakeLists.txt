@@ -426,8 +426,14 @@ endif()
 
 if(EHEM_STATIC_TARGET)
   # The dependencies are INTERFACE requirements of the static lib so
-  # downstream links propagate.
-  target_link_libraries(${EHEM_STATIC_TARGET} PUBLIC CURL::libcurl ${EHEM_WOLFSSL_LINK})
+  # downstream links propagate. The installed export names libcurl as
+  # CURL::libcurl, the name every lookup defines (REQ-BUILD-008): curl's own
+  # package config makes it an ALIAS of CURL::libcurl_static / _shared, and an
+  # export records a bare alias by the aliased name — which FindCURL's module
+  # mode never defines. Inside $<1:…> the name is written as it stands.
+  target_link_libraries(${EHEM_STATIC_TARGET} PUBLIC
+    $<BUILD_INTERFACE:CURL::libcurl> $<INSTALL_INTERFACE:$<1:CURL::libcurl>>
+    ${EHEM_WOLFSSL_LINK})
   if(EHEM_BUILD_STATIC)
     add_library(encedo-hem::encedo-hem-static ALIAS encedo-hem-static)
     set_target_properties(encedo-hem-static PROPERTIES OUTPUT_NAME encedo-hem)
@@ -458,6 +464,29 @@ install(EXPORT encedo-hem-targets
   FILE encedo-hem-targets.cmake
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/encedo-hem)
 
+# implements: REQ-BUILD-008 — the installed consumer interface: the package
+# config resolves what the static library's link interface names (libcurl and
+# the crypto library) before importing the targets; the shared library carries
+# both privately, so a shared-only install has nothing to resolve.
+if(EHEM_BUILD_STATIC)
+  set(EHEM_CONFIG_DEPENDENCIES [=[
+# The static library's link interface names libcurl and wolfSSL: resolve both
+# before importing the targets (the shared library carries them privately).
+find_dependency(CURL)
+# wolfSSL through pkg-config, as in the SDK's own build (the distributions ship
+# no CMake package for it): the imported target PkgConfig::WOLFSSL.
+find_dependency(PkgConfig)
+pkg_check_modules(WOLFSSL QUIET IMPORTED_TARGET wolfssl)
+if(NOT TARGET PkgConfig::WOLFSSL)
+  set(encedo-hem_FOUND FALSE)
+  set(encedo-hem_NOT_FOUND_MESSAGE "encedo-hem: the static library needs wolfSSL, and pkg-config finds no wolfssl.pc - point PKG_CONFIG_PATH at it")
+  return()
+endif()]=])
+else()
+  set(EHEM_CONFIG_DEPENDENCIES
+    "# Shared library only: libcurl and wolfSSL are linked into it privately.")
+endif()
+
 configure_package_config_file(
   ${CMAKE_CURRENT_SOURCE_DIR}/cmake/encedo-hem-config.cmake.in
   ${CMAKE_CURRENT_BINARY_DIR}/encedo-hem-config.cmake
@@ -470,6 +499,30 @@ install(FILES
   ${CMAKE_CURRENT_BINARY_DIR}/encedo-hem-config.cmake
   ${CMAKE_CURRENT_BINARY_DIR}/encedo-hem-config-version.cmake
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/encedo-hem)
+
+# encedo-hem.pc (REQ-BUILD-008): relocatable — its paths are relative to its own
+# directory (${pcfiledir}) unless an install directory is absolute.
+# Requires.private names the packages `pkg-config --static` adds for the static
+# library; `-lencedo-hem` alone is the shared one wherever it is installed.
+set(EHEM_PC_REQUIRES_PRIVATE "libcurl wolfssl")
+if(IS_ABSOLUTE "${CMAKE_INSTALL_LIBDIR}" OR IS_ABSOLUTE "${CMAKE_INSTALL_INCLUDEDIR}")
+  set(EHEM_PC_PREFIX "${CMAKE_INSTALL_PREFIX}")
+  set(EHEM_PC_LIBDIR "${CMAKE_INSTALL_FULL_LIBDIR}")
+  set(EHEM_PC_INCLUDEDIR "${CMAKE_INSTALL_FULL_INCLUDEDIR}")
+else()
+  # ${pcfiledir} = <prefix>/<libdir>/pkgconfig: one ".." per component.
+  string(REGEX MATCHALL "[^/]+" _ehem_pc_parts "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
+  set(EHEM_PC_PREFIX "\${pcfiledir}")
+  foreach(_ehem_pc_part IN LISTS _ehem_pc_parts)
+    string(APPEND EHEM_PC_PREFIX "/..")
+  endforeach()
+  set(EHEM_PC_LIBDIR "\${prefix}/${CMAKE_INSTALL_LIBDIR}")
+  set(EHEM_PC_INCLUDEDIR "\${prefix}/${CMAKE_INSTALL_INCLUDEDIR}")
+endif()
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/cmake/encedo-hem.pc.in
+  ${CMAKE_CURRENT_BINARY_DIR}/encedo-hem.pc @ONLY)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/encedo-hem.pc
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
 
 # --- hem-tool CLI ---------------------------------------------------------
 # Thin consumer of the PUBLIC API only (REQ-TOOL-001). By default it links the

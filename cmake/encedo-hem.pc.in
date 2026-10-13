@@ -1,0 +1,17 @@
+# pkg-config file for the Encedo HEM C SDK (REQ-BUILD-008). Relocatable: every
+# path is relative to this file's own directory, so an unpacked package works
+# wherever it lands.
+#   pkg-config --cflags --libs encedo-hem             the shared library
+#   pkg-config --static --cflags --libs encedo-hem    + the static closure
+prefix=@EHEM_PC_PREFIX@
+exec_prefix=${prefix}
+libdir=@EHEM_PC_LIBDIR@
+includedir=@EHEM_PC_INCLUDEDIR@
+
+Name: encedo-hem
+Description: Encedo HEM C SDK - the Encedo HEM device REST API in C
+URL: https://github.com/KajtomatO/encedo-hem-c-api
+Version: @PROJECT_VERSION@
+Requires.private: @EHEM_PC_REQUIRES_PRIVATE@
+Cflags: -I${includedir}
+Libs: -L${libdir} -lencedo-hem

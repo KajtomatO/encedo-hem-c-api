@@ -17,6 +17,19 @@ cmake --build build
 ctest --test-dir build -L unit --output-on-failure
 ```
 
+### The consumer gate
+
+`consumer_interface` (label `unit`, REQ-BUILD-008) checks the SDK as a user
+gets it: it `cmake --install`s the build into `<build>/tests/consumer-gate/`,
+checks the installed package config, export and `encedo-hem.pc`, then builds
+and runs `tests/consumer/` (a few public calls, no traffic) against that
+install — via `find_package` and via pkg-config, for the shared and the static
+library, whichever the build carries. The static pkg-config consumer uses the
+`pkg-config --static` closure where every library of it can be linked; on
+Ubuntu, libcurl's private libraries have no linkable files, so there it links
+the archive with the shared libcurl and wolfSSL instead and says so in the
+test's log (`ctest -R consumer_interface -V`). Native builds only.
+
 ## Running integration tests
 
 Integration tests talk to a real Encedo HEM. They are **skipped** (reported by

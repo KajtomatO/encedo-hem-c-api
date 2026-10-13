@@ -263,13 +263,21 @@ the phone). `hem-tool --help` shows the grouped command summary.
 cmake --install build --prefix /your/prefix
 ```
 
-Downstream CMake projects then consume the SDK via its exported target:
+Downstream CMake projects then consume the SDK via its exported target — the
+package config finds libcurl and wolfSSL for the static target itself:
 
 ```cmake
 find_package(encedo-hem CONFIG REQUIRED)
 target_link_libraries(app PRIVATE encedo-hem::encedo-hem)         # shared
 # or, for embedding:
 target_link_libraries(app PRIVATE encedo-hem::encedo-hem-static)  # static
+```
+
+Other build systems use pkg-config (`lib/pkgconfig/encedo-hem.pc`, relocatable
+with the install; `--static` adds libcurl and wolfSSL for the static library):
+
+```bash
+cc app.c $(pkg-config --cflags --libs encedo-hem)
 ```
 
 ## Layout

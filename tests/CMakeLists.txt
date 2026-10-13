@@ -97,6 +97,31 @@ target_compile_options(ehem_test_support PRIVATE ${EHEM_WARNING_FLAGS})
 
 add_subdirectory(unit)
 add_subdirectory(integration)
+
+# REQ-BUILD-008: the consumer gate — install this build into a scratch prefix,
+# then build and run tests/consumer against it via find_package and pkg-config
+# for every variant built (consumer/check_consumer.cmake). Native builds only:
+# the consumer must run. CMAKE_PREFIX_PATH travels with `|` for `;`.
+if(NOT CMAKE_CROSSCOMPILING)
+  string(REPLACE ";" "|" _ehem_prefix_path "${CMAKE_PREFIX_PATH}")
+  add_test(NAME consumer_interface
+    COMMAND ${CMAKE_COMMAND}
+      "-DEHEM_BUILD_DIR=${PROJECT_BINARY_DIR}"
+      "-DEHEM_SCRATCH=${CMAKE_CURRENT_BINARY_DIR}/consumer-gate"
+      "-DEHEM_CONSUMER_SRC=${CMAKE_CURRENT_SOURCE_DIR}/consumer"
+      -DEHEM_VERSION=${PROJECT_VERSION}
+      "-DEHEM_LIBDIR=${CMAKE_INSTALL_LIBDIR}"
+      -DEHEM_SHARED=${EHEM_BUILD_SHARED}
+      -DEHEM_STATIC=${EHEM_BUILD_STATIC}
+      "-DEHEM_GENERATOR=${CMAKE_GENERATOR}"
+      "-DEHEM_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}"
+      "-DEHEM_C_COMPILER=${CMAKE_C_COMPILER}"
+      "-DEHEM_BUILD_TYPE=${CMAKE_BUILD_TYPE}"
+      "-DEHEM_PREFIX_PATH=${_ehem_prefix_path}"
+      -DEHEM_SANITIZE=${EHEM_SANITIZE}
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/consumer/check_consumer.cmake)
+  set_tests_properties(consumer_interface PROPERTIES LABELS unit)
+endif()
 # Disruptive live tests need the shared tool code (hem-tool-core), which only
 # exists when the CLI is built.
 if(TARGET hem-tool-core)
