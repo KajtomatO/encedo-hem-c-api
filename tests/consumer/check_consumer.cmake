@@ -16,6 +16,7 @@
 #         -DEHEM_STATIC=ON|OFF -DEHEM_GENERATOR=<gen> [-DEHEM_MAKE_PROGRAM=<path>]
 #         -DEHEM_C_COMPILER=<cc> [-DEHEM_BUILD_TYPE=<type>]
 #         [-DEHEM_PREFIX_PATH=<a|b>] [-DEHEM_SANITIZE=ON]
+#         [-DEHEM_CRYPTO_BACKEND=wolfssl|openssl]
 #         -P check_consumer.cmake
 # EHEM_PREFIX_PATH is the build's CMAKE_PREFIX_PATH with `|` for `;`: the
 # consumer resolves the SDK's dependencies where the build did (the release
@@ -29,6 +30,17 @@ foreach(_v EHEM_BUILD_DIR EHEM_SCRATCH EHEM_CONSUMER_SRC EHEM_VERSION EHEM_LIBDI
     message(FATAL_ERROR "check_consumer.cmake: ${_v} not set")
   endif()
 endforeach()
+
+if(NOT EHEM_CRYPTO_BACKEND)
+  set(EHEM_CRYPTO_BACKEND wolfssl)
+endif()
+if(EHEM_CRYPTO_BACKEND STREQUAL "wolfssl")
+  set(_crypto_lookup "pkg_check_modules(WOLFSSL QUIET IMPORTED_TARGET wolfssl)")
+  set(_crypto_pc "wolfssl")
+else()
+  set(_crypto_lookup "find_dependency(OpenSSL 3)")
+  set(_crypto_pc "libcrypto")
+endif()
 
 set(_prefix "${EHEM_SCRATCH}/prefix")
 set(_build "${EHEM_SCRATCH}/build")
@@ -83,7 +95,7 @@ set(_pcdir "${_prefix}/${EHEM_LIBDIR}/pkgconfig")
 file(READ "${_cmakedir}/encedo-hem-config.cmake" _text)
 if(EHEM_STATIC)
   expect_in("encedo-hem-config.cmake" "find_dependency(CURL)")
-  expect_in("encedo-hem-config.cmake" "pkg_check_modules(WOLFSSL QUIET IMPORTED_TARGET wolfssl)")
+  expect_in("encedo-hem-config.cmake" "${_crypto_lookup}")
 else()
   expect_not_in("encedo-hem-config.cmake" "find_dependency(")
 endif()
@@ -114,7 +126,7 @@ endif()
 file(READ "${_pcdir}/encedo-hem.pc" _text)
 expect_in("encedo-hem.pc" "prefix=\${pcfiledir}/")       # relocatable
 expect_in("encedo-hem.pc" "Version: ${EHEM_VERSION}\n")
-expect_in("encedo-hem.pc" "Requires.private: libcurl wolfssl\n")
+expect_in("encedo-hem.pc" "Requires.private: libcurl ${_crypto_pc}\n")
 expect_in("encedo-hem.pc" "Cflags: -I\${includedir}\n")
 expect_in("encedo-hem.pc" "Libs: -L\${libdir} -lencedo-hem\n")
 

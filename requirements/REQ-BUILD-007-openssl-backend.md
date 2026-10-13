@@ -3,7 +3,7 @@ id: REQ-BUILD-007
 title: OpenSSL 3.x crypto backend behind the unchanged crypto shim — EHEM_CRYPTO_BACKEND=wolfssl|openssl
 status: approved
 priority: must
-revision: 1
+revision: 2   # 2026-10-13 (STEP-M12-080): OPEN criterion (compressed-point ECDSA) resolved; local evidence recorded; four criteria ticked. No meaning change — approved status kept
 source: user decision 2026-10-12 (M12 planning: the alternative library is OpenSSL 3.x — Apache-2.0, so it may be linked statically; static packages use OpenSSL, never wolfSSL); ARCHITECTURE.md §1 (crypto backend switch, wolfSSL the default), §11 M12 part D, §12 risk 1; REQ-AUTH-001 (the shim's contract), REQ-AUTH-012 (PBKDF2-SHA512, SHA-256), REQ-SYS-006 (X.509 leaf parse), REQ-OPS-001 (local ECDSA/EdDSA verify), REQ-TEST-006 (AES-128-CBC); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-AUTH-001", "REQ-API-002", "REQ-API-010", "REQ-BUILD-006"]
 supersedes: null
@@ -80,13 +80,29 @@ impossible by construction. The shim was built as the single wolfCrypt
 includer for exactly this reason (ARCHITECTURE §3 containment rule).
 
 **Acceptance criteria:**
-- [ ] `EHEM_CRYPTO_BACKEND` exists (`wolfssl` default, `openssl`, anything
+- [x] `EHEM_CRYPTO_BACKEND` exists (`wolfssl` default, `openssl`, anything
       else a configure error); exactly one shim source compiles per
       configure; `src/crypto_shim.h` has no diff.
+      *(2026-10-13, STEP-M12-080: cache string in CMakeLists.txt, refused by
+      name otherwise; EHEM_SOURCES = `crypto_shim_common.c` +
+      `crypto_shim_${EHEM_CRYPTO_BACKEND}.c`; `src/crypto_shim.c` →
+      `crypto_shim_wolfssl.c` by `git mv` (history kept), the shared parts →
+      `crypto_shim_common.{h,c}` (ehem_zeroize, ehem_serial_hex, the ISO
+      date formatter, the REQ-API-010 test seam); `git diff` of
+      `src/crypto_shim.h` across the step: 0 lines. The wolfSSL build after
+      the pure split: `./dev ci` 55/55 gcc + clang, ASan 55/55.)*
 - [ ] `./dev ci` (gcc + clang) and `./dev test asan` are green with
       `EHEM_CRYPTO_BACKEND=openssl` on Linux — every fixture-pinned test
       included; the MSYS2 OpenSSL build passes `ctest -L unit` on
       Windows (CI legs on both platforms).
+      *(Linux, local 2026-10-13 against the dev host's OpenSSL 3.0.13:
+      `./dev ci --openssl` 55/55 gcc + 55/55 clang, `./dev test asan
+      --openssl` 55/55 — every fixture-pinned test unchanged (eJWT login
+      vector, BIP39 fixtures, RFC 6979 / 8032 / 4231 / 7748 vectors), the
+      consumer gate on the OpenSSL package config. Also clean: GCC 16.2
+      over all 138 OpenSSL compile commands at -O0/-O2/-O3, and a MinGW
+      cross build against MSYS2's OpenSSL 3.6.5 (no deprecation warning
+      under -Werror). The CI legs: STEP-M12-090.)*
 - [ ] `public_headers_dep_free` rejects a planted `#include <openssl/evp.h>`
       and a planted `EVP_PKEY *` in a public header (negative test
       recorded), passes the real headers on both backends.
@@ -95,14 +111,33 @@ includer for exactly this reason (ARCHITECTURE §3 containment rule).
       tests through `crypto_ref`; no file under `tests/` other than
       `tests/support/crypto_ref*.c` includes a wolfSSL or OpenSSL header
       (grep).
-- [ ] REQ-API-002 idempotency test (double init / double cleanup /
+- [x] REQ-API-002 idempotency test (double init / double cleanup /
       init-after-cleanup) passes on the OpenSSL backend; REQ-API-010's
       same-major + known-answer check and REQ-API-011's build info are
       exercised there.
-- [ ] Export gate and docs gate unchanged in outcome on both backends
+      *(test_context, test_backend_compat (7 cases: the matching library,
+      both forced refusals through the shared seam, refusal → cleanup no-op
+      → re-init, the two implicit-init paths) and test_build_info ("OpenSSL",
+      3.0.13 compiled and loaded, dynamic) pass on OpenSSL. The check: the
+      loaded `OPENSSL_version_major()` equals `OPENSSL_VERSION_MAJOR`, then
+      HMAC-SHA256 (RFC 4231 #1) and SHA-256("abc") through the shim; global
+      cleanup is a no-op (OPENSSL_cleanup is one-shot).)*
+- [x] Export gate and docs gate unchanged in outcome on both backends
       (no OpenSSL symbol exported from the shared library — with static
       OpenSSL this needs the existing `--exclude-libs,ALL`).
-- [ ] OPEN (needs verification at the step): compressed-point ECDSA
-      public keys via `EVP_DigestVerify` on OpenSSL 3 — expected to work
-      through `EC_POINT_oct2point`; if the default provider rejects the
-      compressed form for some curve, the shim decompresses (record which).
+      *(export_symbols and docs_coverage green in both `./dev ci` runs —
+      the shim's symbols stay hidden on either backend. A static OpenSSL is
+      first built by STEP-M12-120, whose release build runs the same gate
+      with `--exclude-libs,ALL` doing the work.)*
+- [x] RESOLVED at STEP-M12-080 (2026-10-13) — was OPEN: compressed-point
+      ECDSA public keys via `EVP_DigestVerify` on OpenSSL 3 — expected to
+      work through `EC_POINT_oct2point`; if the default provider rejects
+      the compressed form for some curve, the shim decompresses (record which).
+      *(No curve refuses: the shim imports the X9.63 point with
+      `EVP_PKEY_fromdata` (OSSL_PKEY_PARAM_GROUP_NAME + PUB_KEY), which
+      decodes 0x02/0x03 as well as 0x04 and checks the point is on the
+      curve. A scratch program signed with OpenSSL on P-256, P-384, P-521
+      and secp256k1 and verified through ehem_ecdsa_verify with the
+      compressed (both prefixes seen) and the uncompressed point — valid —
+      and a tampered message — clean invalid — on every curve; test_crypto's
+      device vector (compressed P-256) verifies too. No decompression code.)*

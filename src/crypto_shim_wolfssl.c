@@ -1,5 +1,7 @@
 /*
- * crypto_shim.c — wolfCrypt-backed implementation of the auth primitives.
+ * crypto_shim_wolfssl.c — the wolfCrypt (wolfSSL) implementation of the crypto
+ * shim: EHEM_CRYPTO_BACKEND=wolfssl, the default. crypto_shim_openssl.c is the
+ * other backend; crypto_shim_common.c holds what both share.
  *
  * implements: REQ-AUTH-001
  *
@@ -9,6 +11,7 @@
  * byte order (verified against RFC 7748 §6.1 in tests/unit/test_crypto.c).
  */
 #include "crypto_shim.h"
+#include "crypto_shim_common.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -194,42 +197,6 @@ ehem_rc ehem_x25519_shared(const uint8_t priv[EHEM_X25519_KEYSIZE],
     return x25519_scalarmult(priv, peer_pub, out);
 }
 
-void ehem_zeroize(void *p, size_t n)
-{
-    if (p == NULL) {
-        return;
-    }
-    /* volatile write loop: the compiler may not treat these stores as dead,
-     * so the scrub survives -O2 (proven in test_crypto.c via a volatile read). */
-    volatile unsigned char *vp = (volatile unsigned char *)p;
-    while (n-- > 0) {
-        *vp++ = 0;
-    }
-}
-
-void ehem_serial_hex(const uint8_t *serial, size_t len, char *out, size_t cap)
-{
-    static const char HEX[] = "0123456789ABCDEF";
-    size_t pos = 0;
-    size_t i = 0;
-
-    if (cap == 0) {
-        return;
-    }
-    if (serial == NULL) {
-        out[0] = '\0';
-        return;
-    }
-    if (len > 1 && serial[0] == 0x00) {
-        i = 1;   /* drop the DER sign byte */
-    }
-    for (; i < len && pos + 2 < cap; i++) {
-        out[pos++] = HEX[(serial[i] >> 4) & 0x0F];
-        out[pos++] = HEX[serial[i] & 0x0F];
-    }
-    out[pos] = '\0';
-}
-
 /* Decode a certificate date field (tag+len+value bytes as DecodedCert stores
  * it) into "YYYY-MM-DDTHH:MM:SSZ". Leaves out="" on any failure (tolerant). */
 static void date_to_iso(const byte *cert_date, int cert_date_sz,
@@ -251,19 +218,7 @@ static void date_to_iso(const byte *cert_date, int cert_date_sz,
     if (wc_GetDateAsCalendarTime(date, length, format, &t) != 0) {
         return;
     }
-    /* Clamp every field to its digit width so the formatted length is provably
-     * 20 + NUL = EHEM_CERT_DATE_CAP (GCC -O3 -Wformat-truncation, which the
-     * Release build of REQ-BUILD-005 runs with, cannot see that itself). */
-    {
-        unsigned y  = (unsigned)(t.tm_year + 1900) % 10000u;
-        unsigned mo = (unsigned)(t.tm_mon + 1) % 100u;
-        unsigned d  = (unsigned)t.tm_mday % 100u;
-        unsigned hh = (unsigned)t.tm_hour % 100u;
-        unsigned mi = (unsigned)t.tm_min % 100u;
-        unsigned s  = (unsigned)t.tm_sec % 100u;
-        (void)snprintf(out, cap, "%04u-%02u-%02uT%02u:%02u:%02uZ",
-                       y, mo, d, hh, mi, s);
-    }
+    ehem_crypto_iso_date(&t, out, cap);
 }
 
 ehem_rc ehem_cert_parse_leaf(const uint8_t *der, size_t der_len,
@@ -522,15 +477,6 @@ ehem_rc ehem_aes128_cbc_decrypt(const uint8_t key[EHEM_AES128_KEY_SIZE],
  * stack is exactly what this check exists to prevent.
  * -------------------------------------------------------------------------- */
 
-/* Test seam (crypto_shim.h). Never exported; unit tests reach it through the
- * static library. */
-static int g_force_mismatch = EHEM_CRYPTO_FORCE_NONE;
-
-void ehem_crypto_test_force_mismatch(int mode)
-{
-    g_force_mismatch = mode;
-}
-
 #define PROBE_LEAD   64u     /* leading canary band (keeps 16-byte alignment) */
 #define PROBE_TRAIL  4096u   /* trailing band: > any plausible struct growth
                               * (the 5.6.6/5.7.2 DecodedCert delta was 1048) */
@@ -605,7 +551,7 @@ static int probe_hmac(void)
             wc_HmacFinal(h, out) == 0) {
             /* Seam: a forced probe failure corrupts the answer, so the
              * comparison path (not a shortcut) produces the refusal. */
-            if (g_force_mismatch == EHEM_CRYPTO_FORCE_PROBE) {
+            if (ehem_crypto_forced_mismatch() == EHEM_CRYPTO_FORCE_PROBE) {
                 out[0] ^= 0x01;
             }
             answer_ok = (memcmp(out, expect, sizeof out) == 0);
@@ -876,7 +822,7 @@ ehem_rc ehem_crypto_backend_global_init(void)
      *    touch its global state. */
     {
         word32 loaded = wolfSSL_lib_version_hex();
-        if (g_force_mismatch == EHEM_CRYPTO_FORCE_VERSION) {
+        if (ehem_crypto_forced_mismatch() == EHEM_CRYPTO_FORCE_VERSION) {
             loaded ^= 0x1u;
         }
         if (loaded != (word32)LIBWOLFSSL_VERSION_HEX) {

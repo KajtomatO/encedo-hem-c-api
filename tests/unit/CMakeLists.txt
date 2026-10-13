@@ -13,12 +13,12 @@ ehem_add_unit_test(test_context SOURCES test_context.c)
 ehem_add_unit_test(test_backend_compat SOURCES test_backend_compat.c)
 
 # REQ-API-011: build information. The expected values come from the build's
-# own dependency discovery (pkg-config, FindCURL, the link-mode detection in
-# the top-level CMakeLists.txt) — no test includes a backend header.
+# own dependency discovery (pkg-config / FindOpenSSL, FindCURL, the link-mode
+# detection in the top-level CMakeLists.txt) — no test includes a backend header.
 ehem_add_unit_test(test_build_info SOURCES test_build_info.c)
 target_compile_definitions(test_build_info PRIVATE
-  EHEM_TEST_CRYPTO_BACKEND="wolfSSL"
-  EHEM_TEST_CRYPTO_VERSION="${WOLFSSL_VERSION}"
+  EHEM_TEST_CRYPTO_BACKEND="${EHEM_CRYPTO_NAME}"
+  EHEM_TEST_CRYPTO_VERSION="${EHEM_CRYPTO_VERSION}"
   EHEM_TEST_CRYPTO_LINK="${EHEM_CRYPTO_LINK}"
   EHEM_TEST_TRANSPORT_VERSION="${EHEM_CURL_VERSION}"
   EHEM_TEST_TRANSPORT_LINK="${EHEM_TRANSPORT_LINK}")

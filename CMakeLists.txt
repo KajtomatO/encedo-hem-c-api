@@ -55,7 +55,15 @@ set(EHEM_DEPS_LINK "default" CACHE STRING
 set_property(CACHE EHEM_DEPS_LINK PROPERTY STRINGS default static shared)
 # hem-tool can be turned off for a library-only consumer.
 option(EHEM_BUILD_TOOL "Build the hem-tool CLI" ON)
+# implements: REQ-BUILD-007 — the crypto library behind src/crypto_shim.h:
+# wolfSSL (the default) or OpenSSL 3; exactly one shim source per configure.
+set(EHEM_CRYPTO_BACKEND "wolfssl" CACHE STRING
+  "The crypto library behind the crypto shim: wolfssl | openssl (3.x)")
+set_property(CACHE EHEM_CRYPTO_BACKEND PROPERTY STRINGS wolfssl openssl)
 
+if(NOT EHEM_CRYPTO_BACKEND MATCHES "^(wolfssl|openssl)$")
+  message(FATAL_ERROR "EHEM_CRYPTO_BACKEND must be wolfssl or openssl, not '${EHEM_CRYPTO_BACKEND}'")
+endif()
 if(NOT EHEM_TOOL_LINK MATCHES "^(static|shared)$")
   message(FATAL_ERROR "EHEM_TOOL_LINK must be static or shared, not '${EHEM_TOOL_LINK}'")
 endif()
@@ -145,22 +153,42 @@ else()
   set(EHEM_CURL_VERSION "${CURL_VERSION}")
 endif()
 
-# Crypto primitives for the auth flow (REQ-AUTH-001): wolfCrypt via wolfSSL,
-# used from M2 on (PBKDF2-HMAC-SHA256 / HMAC-SHA256 / X25519). The dev distros
-# (Debian/Ubuntu apt, MSYS2 pacman) ship a pkg-config file but no CMake package
-# config, so discover via pkg-config into the imported target PkgConfig::WOLFSSL.
-# Like libcurl, no wolfSSL type appears in public headers (crypto_shim contains
-# it), so it links privately into the shared library.
+# Crypto primitives for the auth flow (REQ-AUTH-001) from the backend
+# EHEM_CRYPTO_BACKEND names (REQ-BUILD-007). Like libcurl, no type of either
+# library appears in a public header (the crypto shim contains it), so it links
+# privately into the shared library. pkg-config also reads libcurl's static
+# closure below, whichever the backend.
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(WOLFSSL REQUIRED IMPORTED_TARGET wolfssl)
+if(EHEM_CRYPTO_BACKEND STREQUAL "wolfssl")
+  # wolfCrypt via wolfSSL, used from M2 on. The dev distros (Debian/Ubuntu apt,
+  # MSYS2 pacman) ship a pkg-config file but no CMake package config, so
+  # discover via pkg-config into the imported target PkgConfig::WOLFSSL.
+  pkg_check_modules(WOLFSSL REQUIRED IMPORTED_TARGET wolfssl)
+  set(EHEM_CRYPTO_NAME "wolfSSL")
+  set(EHEM_CRYPTO_VERSION "${WOLFSSL_VERSION}")
+  set(EHEM_CRYPTO_LINK_LIBS PkgConfig::WOLFSSL)
+else()
+  # OpenSSL 3: libcrypto only (libssl is libcurl's business) — FindOpenSSL's
+  # imported target OpenSSL::Crypto; static archives on request.
+  if(EHEM_DEPS_LINK STREQUAL "static")
+    set(OPENSSL_USE_STATIC_LIBS TRUE)
+  endif()
+  find_package(OpenSSL 3 REQUIRED COMPONENTS Crypto)
+  set(EHEM_CRYPTO_NAME "OpenSSL")
+  set(EHEM_CRYPTO_VERSION "${OPENSSL_VERSION}")
+  set(EHEM_CRYPTO_LINK_LIBS OpenSSL::Crypto)
+endif()
 
 if(EHEM_DEPS_LINK STREQUAL "static")
-  # wolfSSL: the `pkg-config --static` closure, every member an archive.
-  ehem_static_closure(_ehem_wolfssl_archives "wolfSSL (pkg-config wolfssl)"
-    wolfssl "${WOLFSSL_LIBDIR}" "${WOLFSSL_STATIC_LIBRARY_DIRS}"
-    ${WOLFSSL_STATIC_LIBRARIES})
-  set_property(TARGET PkgConfig::WOLFSSL
-    PROPERTY INTERFACE_LINK_LIBRARIES "${_ehem_wolfssl_archives}")
+  if(EHEM_CRYPTO_BACKEND STREQUAL "wolfssl")
+    # wolfSSL: the `pkg-config --static` closure, every member an archive.
+    # (OpenSSL: FindOpenSSL's static mode adds its own system libraries.)
+    ehem_static_closure(_ehem_wolfssl_archives "wolfSSL (pkg-config wolfssl)"
+      wolfssl "${WOLFSSL_LIBDIR}" "${WOLFSSL_STATIC_LIBRARY_DIRS}"
+      ${WOLFSSL_STATIC_LIBRARIES})
+    set_property(TARGET PkgConfig::WOLFSSL
+      PROPERTY INTERFACE_LINK_LIBRARIES "${_ehem_wolfssl_archives}")
+  endif()
   # libcurl: curl's own package config (a prefix built by
   # scripts/release/build-deps.sh) carries its closure on its targets; FindCURL
   # module mode finds the archive but not its dependencies — add the
@@ -218,15 +246,20 @@ function(ehem_link_mode lib out)
 endfunction()
 
 set(EHEM_CRYPTO_LINK dynamic)
-foreach(_lib IN LISTS WOLFSSL_LINK_LIBRARIES)
-  if(_lib MATCHES "wolfssl")
-    ehem_link_mode("${_lib}" EHEM_CRYPTO_LINK)
-    break()
-  endif()
-endforeach()
+if(EHEM_CRYPTO_BACKEND STREQUAL "wolfssl")
+  foreach(_lib IN LISTS WOLFSSL_LINK_LIBRARIES)
+    if(_lib MATCHES "wolfssl")
+      ehem_link_mode("${_lib}" EHEM_CRYPTO_LINK)
+      break()
+    endif()
+  endforeach()
+else()
+  ehem_link_mode(OpenSSL::Crypto EHEM_CRYPTO_LINK)
+endif()
 ehem_link_mode(CURL::libcurl EHEM_TRANSPORT_LINK)
-message(STATUS "encedo-hem: crypto wolfSSL ${WOLFSSL_VERSION} (${EHEM_CRYPTO_LINK}), "
-               "transport libcurl ${EHEM_CURL_VERSION} (${EHEM_TRANSPORT_LINK})")
+message(STATUS "encedo-hem: crypto ${EHEM_CRYPTO_NAME} ${EHEM_CRYPTO_VERSION} "
+               "(${EHEM_CRYPTO_LINK}), transport libcurl ${EHEM_CURL_VERSION} "
+               "(${EHEM_TRANSPORT_LINK})")
 # A static or shared preference that the lookups could not honour is an error,
 # never a silent fall-back (REQ-BUILD-006).
 if(NOT EHEM_DEPS_LINK STREQUAL "default")
@@ -238,7 +271,7 @@ if(NOT EHEM_DEPS_LINK STREQUAL "default")
   foreach(_dep CRYPTO TRANSPORT)
     if(NOT EHEM_${_dep}_LINK STREQUAL _ehem_want)
       if(_dep STREQUAL "CRYPTO")
-        set(_ehem_what "wolfSSL")
+        set(_ehem_what "${EHEM_CRYPTO_NAME}")
       else()
         set(_ehem_what "libcurl")
       endif()
@@ -249,8 +282,9 @@ if(NOT EHEM_DEPS_LINK STREQUAL "default")
   endforeach()
 endif()
 # The licensing tripwire (ARCHITECTURE.md §1 and §12 risk 1): any build whose
-# wolfSSL is an archive puts wolfSSL inside every binary it links.
-if(EHEM_CRYPTO_LINK STREQUAL "static")
+# wolfSSL is an archive puts wolfSSL inside every binary it links. (OpenSSL 3
+# is Apache-2.0: a static OpenSSL is the -static packages' design, REQ-BUILD-009.)
+if(EHEM_CRYPTO_BACKEND STREQUAL "wolfssl" AND EHEM_CRYPTO_LINK STREQUAL "static")
   message(WARNING "wolfSSL resolves to a STATIC archive in this configuration: "
     "every binary built from it carries wolfSSL, which is licensed GPLv2-or-later "
     "(or commercially by wolfSSL Inc.) - distributing such a binary means "
@@ -268,8 +302,10 @@ endif()
 # (the SDK DLL, the tests) keeps the ordinary import.
 set(EHEM_WOLFSSL_DELAYLOAD_LIB "" CACHE FILEPATH
   "Windows release build: delay-load import library of libwolfssl.dll for hem-tool")
-set(EHEM_WOLFSSL_LINK PkgConfig::WOLFSSL)
 if(EHEM_WOLFSSL_DELAYLOAD_LIB)
+  if(NOT EHEM_CRYPTO_BACKEND STREQUAL "wolfssl")
+    message(FATAL_ERROR "EHEM_WOLFSSL_DELAYLOAD_LIB needs EHEM_CRYPTO_BACKEND=wolfssl")
+  endif()
   if(NOT WIN32)
     message(FATAL_ERROR "EHEM_WOLFSSL_DELAYLOAD_LIB applies to Windows builds only")
   endif()
@@ -285,7 +321,7 @@ if(EHEM_WOLFSSL_DELAYLOAD_LIB)
   # property (hem-tool) gets the delay-load library + the helper library,
   # every other one the ordinary import library.
   set(_ehem_delay "$<BOOL:$<TARGET_PROPERTY:EHEM_WOLFSSL_DELAYLOAD>>")
-  set(EHEM_WOLFSSL_LINK
+  set(EHEM_CRYPTO_LINK_LIBS
     "$<${_ehem_delay}:${EHEM_WOLFSSL_DELAYLOAD_LIB}>"
     "$<${_ehem_delay}:delayimp>"
     "$<$<NOT:${_ehem_delay}>:PkgConfig::WOLFSSL>")
@@ -300,7 +336,7 @@ if(EHEM_WOLFSSL_DELAYLOAD_LIB)
     set(_ehem_curl_new "")
     foreach(_l IN LISTS _ehem_curl_libs)
       if(_l MATCHES "(^|[/\\])libwolfssl(\\.dll)?\\.a$" OR _l MATCHES "^(-l)?wolfssl$")
-        list(APPEND _ehem_curl_new ${EHEM_WOLFSSL_LINK})
+        list(APPEND _ehem_curl_new ${EHEM_CRYPTO_LINK_LIBS})
       else()
         list(APPEND _ehem_curl_new "${_l}")
       endif()
@@ -347,7 +383,8 @@ set(EHEM_SOURCES
   src/proto_notify.c
   src/proto_storage.c
   src/keytype.c
-  src/crypto_shim.c
+  src/crypto_shim_common.c
+  src/crypto_shim_${EHEM_CRYPTO_BACKEND}.c
   src/ejwt.c
   src/bip39.c
   src/vendor/bip39/wordlist_english.c)
@@ -406,7 +443,7 @@ if(EHEM_BUILD_SHARED)
     SOVERSION ${PROJECT_VERSION_MAJOR})
   # libcurl and wolfSSL link into the shared lib privately (baked in, not
   # re-exported).
-  target_link_libraries(encedo-hem PRIVATE CURL::libcurl ${EHEM_WOLFSSL_LINK})
+  target_link_libraries(encedo-hem PRIVATE CURL::libcurl ${EHEM_CRYPTO_LINK_LIBS})
   # Only the shared build gets the export-enabling macro; its consumers get the
   # import side (dllimport on Windows; nothing elsewhere) from the target.
   target_compile_definitions(encedo-hem
@@ -433,7 +470,7 @@ if(EHEM_STATIC_TARGET)
   # mode never defines. Inside $<1:…> the name is written as it stands.
   target_link_libraries(${EHEM_STATIC_TARGET} PUBLIC
     $<BUILD_INTERFACE:CURL::libcurl> $<INSTALL_INTERFACE:$<1:CURL::libcurl>>
-    ${EHEM_WOLFSSL_LINK})
+    ${EHEM_CRYPTO_LINK_LIBS})
   if(EHEM_BUILD_STATIC)
     add_library(encedo-hem::encedo-hem-static ALIAS encedo-hem-static)
     set_target_properties(encedo-hem-static PROPERTIES OUTPUT_NAME encedo-hem)
@@ -468,7 +505,7 @@ install(EXPORT encedo-hem-targets
 # config resolves what the static library's link interface names (libcurl and
 # the crypto library) before importing the targets; the shared library carries
 # both privately, so a shared-only install has nothing to resolve.
-if(EHEM_BUILD_STATIC)
+if(EHEM_BUILD_STATIC AND EHEM_CRYPTO_BACKEND STREQUAL "wolfssl")
   set(EHEM_CONFIG_DEPENDENCIES [=[
 # The static library's link interface names libcurl and wolfSSL: resolve both
 # before importing the targets (the shared library carries them privately).
@@ -482,9 +519,16 @@ if(NOT TARGET PkgConfig::WOLFSSL)
   set(encedo-hem_NOT_FOUND_MESSAGE "encedo-hem: the static library needs wolfSSL, and pkg-config finds no wolfssl.pc - point PKG_CONFIG_PATH at it")
   return()
 endif()]=])
+elseif(EHEM_BUILD_STATIC)
+  set(EHEM_CONFIG_DEPENDENCIES [=[
+# The static library's link interface names libcurl and OpenSSL's libcrypto:
+# resolve both before importing the targets (the shared library carries them
+# privately). For OpenSSL's static archives set OPENSSL_USE_STATIC_LIBS first.
+find_dependency(CURL)
+find_dependency(OpenSSL 3)]=])
 else()
   set(EHEM_CONFIG_DEPENDENCIES
-    "# Shared library only: libcurl and wolfSSL are linked into it privately.")
+    "# Shared library only: libcurl and ${EHEM_CRYPTO_NAME} are linked into it privately.")
 endif()
 
 configure_package_config_file(
@@ -504,7 +548,11 @@ install(FILES
 # directory (${pcfiledir}) unless an install directory is absolute.
 # Requires.private names the packages `pkg-config --static` adds for the static
 # library; `-lencedo-hem` alone is the shared one wherever it is installed.
-set(EHEM_PC_REQUIRES_PRIVATE "libcurl wolfssl")
+if(EHEM_CRYPTO_BACKEND STREQUAL "wolfssl")
+  set(EHEM_PC_REQUIRES_PRIVATE "libcurl wolfssl")
+else()
+  set(EHEM_PC_REQUIRES_PRIVATE "libcurl libcrypto")
+endif()
 if(IS_ABSOLUTE "${CMAKE_INSTALL_LIBDIR}" OR IS_ABSOLUTE "${CMAKE_INSTALL_INCLUDEDIR}")
   set(EHEM_PC_PREFIX "${CMAKE_INSTALL_PREFIX}")
   set(EHEM_PC_LIBDIR "${CMAKE_INSTALL_FULL_LIBDIR}")

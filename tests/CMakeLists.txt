@@ -119,6 +119,7 @@ if(NOT CMAKE_CROSSCOMPILING)
       "-DEHEM_BUILD_TYPE=${CMAKE_BUILD_TYPE}"
       "-DEHEM_PREFIX_PATH=${_ehem_prefix_path}"
       -DEHEM_SANITIZE=${EHEM_SANITIZE}
+      -DEHEM_CRYPTO_BACKEND=${EHEM_CRYPTO_BACKEND}
       -P ${CMAKE_CURRENT_SOURCE_DIR}/consumer/check_consumer.cmake)
   set_tests_properties(consumer_interface PROPERTIES LABELS unit)
 endif()

@@ -443,9 +443,12 @@ src/                   library sources
   transport.c          vtable + helpers
   transport_curl.c     libcurl implementation
   crypto_shim.h        crypto backend contract (backend-free)
-  crypto_shim.c        wolfCrypt wrappers — M12 splits it into
-                       crypto_shim_{wolfssl,openssl,common}.c, one
-                       backend compiled per configure (REQ-BUILD-007)
+  crypto_shim_wolfssl.c / crypto_shim_openssl.c
+                       the two backends — EHEM_CRYPTO_BACKEND compiles
+                       one per configure (REQ-BUILD-007)
+  crypto_shim_common.{h,c}
+                       what both share (scrub, serial / date formatting,
+                       the compatibility-check test seam)
   jwt.c                eJWT encode/decode
   vendor/cjson/        vendored cJSON
   tools/hem-tool/      CLI (inside src/ so implements-tags are greppable)
