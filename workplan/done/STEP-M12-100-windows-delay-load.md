@@ -7,22 +7,20 @@ traces:
   architecture: ["ARCHITECTURE.md#8-hem-tool-cli", "ARCHITECTURE.md#11-milestones"]
 depends_on: ["STEP-M12-020"]
 evidence:
-  commits: ["57dce33", "48494dc"]   # start; implementation — the release-job run and the done commit follow
+  commits: ["57dce33", "48494dc", "f52b02c", "50ca2a7"]   # start; implementation; evidence; CI-pause evidence — the done commit follows
   tests:
     - "Local Windows CROSS build (Debian x86_64-w64-mingw32 GCC 13, msvcrt; scratch toolchain = the repo's + the deps prefix as a find root): pinned wolfSSL 5.7.2 DLL with --output-def (2378 exports) → dlltool --output-delaylib libwolfssl.delay.a; pinned libcurl 8.10.1 static (its CMake package records libwolfssl.dll.a by path); the project Release + -static + EHEM_WOLFSSL_DELAYLOAD_LIB, tests off"
     - "hem-tool.exe: ordinary imports bcrypt, KERNEL32, msvcrt, WS2_32 — NO libwolfssl.dll; __DELAY_IMPORT_DESCRIPTOR_…libwolfssl_delay_a, __delayLoadHelper2 and hem-tool's __pfnDliFailureHook2 (D, not libmingwex's B default) linked; link line = …libcurl.a, libwolfssl.delay.a, -ldelayimp, no libwolfssl.dll.a. libencedo-hem.dll keeps its ORDINARY libwolfssl.dll import (the switch is per consuming target)"
     - "package.sh's Windows delay-import assertion (objdump DLL Name list + nm descriptor + strings DLL name) run against the cross-built binaries: PASS on hem-tool.exe, FAIL on libencedo-hem.dll (ordinary import) — both directions"
     - "./dev ci 54/54 gcc + clang (native Linux unaffected); shellcheck build-deps.sh / package.sh clean; MinGW -Wall -Wextra -Werror compile of delayload_win.c and main.c (HEM_TOOL_DELAYLOAD) inside the cross build"
+    - "Release run 38407235207 (workflow_dispatch on development, 50ca2a7, 2026-10-13), job 'Windows x86_64 (dynamic wolfSSL, MinGW UCRT64)' GREEN: build-deps.sh rebuilt the prefix with the r2 recipe on MSYS2's GCC 16.2 (cache key changed; wolfSSL 5.7.2 with its own -Werror built clean); package.sh (set -euo pipefail, every check a hard failure) passed the delay-import assertion on the UCRT64 binary, the negative smoke without the DLL (status → exit 12 + 'libwolfssl.dll was not found'; help and keys types exit 0; --version 'not found (loaded)') and the positive smoke (DLL beside the exe → '5.7.2 (loaded)'). The run's Linux job failed on an unrelated STEP-M12-050 test under GCC 11 + cmocka 1.1.5 (fixed 4f697cd) — the next dispatch re-proves both jobs"
   notes: |
-    PENDING for done: the Windows release job (workflow_dispatch of
-    release.yml on development — REQ-BUILD-005 allows any ref into
-    artifacts): build-deps with the new recipe (stamp +r2, cache key changes →
-    full deps rebuild), package.sh's delay-import assertion on the UCRT64
-    binary, and the negative smoke — hem-tool.exe WITHOUT the DLL: `status` →
-    "libwolfssl.dll was not found" + exit 12, `help` / `keys types` exit 0,
-    `--version` reads "not found (loaded)"; then the positive smoke with the
-    DLL beside it reports 5.7.2 loaded. Run id → here and REQ-TOOL-026.
-    The job compiles with MSYS2's GCC 16.2 like ci.yml's Windows legs, so
+    DONE 2026-10-13 with release run 38407235207's Windows job (the
+    negative and positive smoke and the delay-import assertion, on the UCRT64
+    runner). The OPEN criterion closed there: the `-static` + UCRT build
+    loads the DLL lazily and reaches the hook without it; the wrong-version
+    DLL stays reasoned (REQ-TOOL-026 rev 3). Before that run:
+    the job compiles with MSYS2's GCC 16.2 like ci.yml's Windows legs, so
     it needs b00620d (on f52b02c the SDK build fails — STEP-M12-010's probe
     message array; CI run 38400370544). The rebuilt deps cache is not a new
     GCC exposure: build-deps.sh was unchanged from 10-10 11:49Z to this
@@ -110,12 +108,13 @@ removed/restored) is the gate's.
       message (DLL name, companion asset, placement) and exits 12.
 - [x] `package.sh` asserts: `libwolfssl.dll` only as a delay import; the
       static import table lists system DLLs only (as REQ-BUILD-005).
-- [ ] Release Windows job (`workflow_dispatch` on the branch, run id
+- [x] Release Windows job (`workflow_dispatch` on the branch, run id
       recorded): negative smoke → message + exit 12; positive smoke
       unchanged; `help`/`--version`/`keys types` run without the DLL.
+      (Release run 38407235207, Windows job.)
 - [x] Archive README.txt updated (0xC0000135 paragraph replaced; exit 12
       documented).
-- [ ] REQ-TOOL-026 OPEN criterion (`-static`/UCRT interplay, wrong-version
+- [x] REQ-TOOL-026 OPEN criterion (`-static`/UCRT interplay, wrong-version
       DLL on PATH) resolved and recorded (rev bump); the attended criterion
       stays open for the gate; `implements: REQ-TOOL-026` tags in
-      delayload_win.c / package.sh.
+      delayload_win.c / package.sh. (REQ-TOOL-026 rev 3.)

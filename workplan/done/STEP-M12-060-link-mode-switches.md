@@ -7,7 +7,7 @@ traces:
   architecture: ["ARCHITECTURE.md#1-decisions-fixed", "ARCHITECTURE.md#11-milestones", "ARCHITECTURE.md#12-risks--open-questions"]
 depends_on: []
 evidence:
-  commits: ["20dd93c", "fca7425"]   # start; implementation — the CI run and the done commit follow
+  commits: ["20dd93c", "fca7425", "d2d219d", "50ca2a7"]   # start; implementation; evidence; CI-run evidence — the done commit follows
   tests:
     - "Default configure before vs after (scratch dirs, dev host): install listing (16 files), hem-tool NEEDED, hem-tool link line, libencedo-hem.so link line — all identical; exported shared target gains INTERFACE_COMPILE_DEFINITIONS EHEM_USING_SHARED (intended)"
     - "Switch builds, Linux gcc: shared-only + EHEM_TOOL_LINK=shared → hem-tool NEEDED libencedo-hem.so.1, install = .so only, unit 54/54; static-only → install = libencedo-hem.a only, unit 53/53 (no export gate without a shared lib); shared-only (tool static) → private libencedo-hem-internal.a, not installed, unit 54/54"
@@ -17,10 +17,12 @@ evidence:
     - "./dev ci 54/54 gcc + clang; ./dev test asan 54/54; shellcheck dev clean; ./dev build --static-only builds in build-static-only"
     - "CI run 38400370544 (push f52b02c, 2026-10-13): Linux 4/4 green — gcc, clang, 'gcc, shared-only, hem-tool on the shared SDK' and 'gcc, static-only', each Build + Unit tests + (switch legs) 'Assert the link result' success. Windows 3/3 failed at Build (3 s in): STEP-M12-010's probe message array, rejected by MSYS2's GCC 16.2 — fixed b00620d (see STEP-M12-010 evidence), not a switch defect"
     - "Before the re-run, locally: MinGW cross-builds (posix-thread GCC 13 against MSYS2 wolfSSL 5.9.4 / curl 8.22.0 / cmocka 1.1.8) of the three Windows legs compile and link; the ci.yml assertions hold on them — shared-only: hem-tool.exe imports libencedo-hem.dll, no libencedo-hem.a installed; static-only: no libencedo-hem.dll* built or installed, libencedo-hem.a installed"
+    - "CI run 38403218107 (push 50ca2a7, 2026-10-13): ALL 7 legs green — Linux gcc, clang, 'gcc, shared-only, hem-tool on the shared SDK', 'gcc, static-only'; Windows (MinGW), '(MinGW, shared-only, hem-tool on the shared SDK)', '(MinGW, static-only)'. On the four switch legs Build + Unit tests + 'Assert the link result' success; on the three default legs the assertion step is skipped by design. The last DoD box closes here"
   notes: |
-    PENDING for done: the Windows legs' first green run (MSYS2 default,
-    shared-only/tool-shared, static-only) — the Linux legs are green
-    (38400370544); needs a push of b00620d.
+    DONE 2026-10-13 with CI run 38403218107 (all 7 legs green, both
+    platforms' switch legs asserted). The first run (38400370544) had the
+    Linux legs green and the Windows build broken by STEP-M12-010's probe
+    message under MSYS2's GCC 16.2 (fixed b00620d) — no switch defect.
     Settled at start (REQ-BUILD-006 rev 2): Ubuntu ships libwolfssl.a and
     libcurl.a but libcurl's static closure lacks 10 archives; MSYS2 UCRT64
     ships both (+ closure ssh2/idn2/OpenSSL/zlib/brotli/zstd/nghttp*/psl).
@@ -113,10 +115,11 @@ hem-tool`.
 - [x] Negative configures recorded: both variants OFF; tool shared without
       the shared variant; `EHEM_DEPS_LINK=static` with a dependency lacking
       an archive — each fails naming the option.
-- [ ] `EHEM_TOOL_LINK=shared`: hem-tool links `libencedo-hem` (ldd/import
+- [x] `EHEM_TOOL_LINK=shared`: hem-tool links `libencedo-hem` (ldd/import
       table), suite green; `EHEM_BUILD_SHARED=OFF` and `EHEM_BUILD_STATIC=OFF`
       each build + pass the suite (private test archive) — ci.yml legs
       green on both platforms where the distro packages allow.
+      (CI run 38403218107.)
 - [x] Static-wolfSSL WARNING fires against the REQ-BUILD-005 release prefix
       with `EHEM_DEPS_LINK=static` and is absent otherwise (recorded).
 - [x] `./dev build` exposes the switches (REQ-BUILD-004 doc updated);

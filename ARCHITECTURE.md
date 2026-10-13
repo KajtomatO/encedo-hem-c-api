@@ -730,9 +730,15 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   and the `keys gen -h` type list from one table. **STEP-M12-050 done
   2026-10-13** — REQ-TOOL-028 verified (attended run at the gate):
   `init-wizard` + the no-echo prompt helper; only `--url` pre-fills it.
-  **STEP-M12-060 and 100 implemented 2026-10-13, in `doing/`** — the build
-  switches and the Windows delay-load are committed; each waits for one CI
-  run (060: the ci.yml switch legs; 100: a release.yml dispatch run).
+  **STEP-M12-060 done 2026-10-13** — REQ-BUILD-006: the four build
+  switches and the static-wolfSSL warning; ci.yml's switch legs green on
+  Linux and Windows (run 38403218107). **STEP-M12-100 done 2026-10-13** —
+  REQ-TOOL-026: the Windows release hem-tool delay-loads libwolfssl.dll and
+  reports a missing DLL itself (exit 12), proven by the release job's
+  no-DLL smoke on the UCRT64 runner (run 38407235207); the attended check
+  stays the gate's. The first runs found two latent compile failures
+  outside the newest steps — MSYS2's GCC 16 (STEP-M12-010 code) and the
+  release job's GCC 11 + cmocka 1.1.5 (a STEP-M12-050 test) — both fixed.
   Names settled: error code `EHEM_ERR_BACKEND_MISMATCH`; API
   `ehem_build_info_get`; options `EHEM_BUILD_SHARED` / `EHEM_BUILD_STATIC`
   / `EHEM_TOOL_LINK` / `EHEM_DEPS_LINK` / `EHEM_CRYPTO_BACKEND`; asset

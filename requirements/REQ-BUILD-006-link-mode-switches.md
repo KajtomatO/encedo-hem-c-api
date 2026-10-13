@@ -1,9 +1,9 @@
 ---
 id: REQ-BUILD-006
 title: Build configuration switches — library variants, hem-tool link mode, dependency link mode, static-wolfSSL warning
-status: approved
+status: implemented
 priority: must
-revision: 2   # 2026-10-13 (STEP-M12-060): OPEN criterion (distro static archives) resolved; local evidence recorded. No meaning change — approved status kept
+revision: 3   # 2026-10-13 (STEP-M12-060 done): the CI-legs criterion ticked (run 38403218107, both platforms green); rev 2 = OPEN criterion (distro static archives) resolved, local evidence. No meaning change — status set by the §4.3 regeneration
 source: ARCHITECTURE.md §11 M12 part B (early draft 2026-10-09, planned 2026-10-12: "link-mode switches — none exist today"; candidate names settled here); §1 (wolfSSL is never statically bundled into a published package — user decision 2026-10-09); §12 risk 1; REQ-BUILD-001 (both variants, one configure); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-BUILD-001", "REQ-BUILD-002", "REQ-API-006"]
 supersedes: null
@@ -87,11 +87,22 @@ packaging time only.
       pkg-config libdir: the first static attempt against the release
       prefix silently picked up the SYSTEM libwolfssl.a (5.6.6) under the
       prefix's 5.7.2 headers — caught and fixed before the commit.)*
-- [ ] `EHEM_TOOL_LINK=shared`: hem-tool's `ldd`/import table lists
+- [x] `EHEM_TOOL_LINK=shared`: hem-tool's `ldd`/import table lists
       `libencedo-hem` and the unit suite passes; `EHEM_BUILD_SHARED=OFF`:
       no shared library built or installed, suite passes;
       `EHEM_BUILD_STATIC=OFF`: no static library installed, suite passes
       (CI legs, both platforms where the distro packages allow).
+      *(CI run 38403218107 (push 50ca2a7, 2026-10-13): all 7 legs green —
+      "Linux (gcc, shared-only, hem-tool on the shared SDK)", "Linux (gcc,
+      static-only)", "Windows (MinGW, shared-only, hem-tool on the shared
+      SDK)" and "Windows (MinGW, static-only)" each Build + Unit tests +
+      "Assert the link result" success (hem-tool links / imports
+      libencedo-hem and no static SDK is installed; static-only builds and
+      installs no shared library and does install libencedo-hem.a); the
+      default gcc / clang / MinGW legs unchanged and green. The first run
+      (38400370544, f52b02c) had the Linux legs green and the Windows build
+      broken by an unrelated STEP-M12-010 line under MSYS2's GCC 16.2 —
+      fixed b00620d.)*
       *(Local proof 2026-10-13, Linux gcc: shared-only + `EHEM_TOOL_LINK=shared`
       → hem-tool NEEDED libencedo-hem.so.1 (no libcurl/libwolfssl of its
       own), install = the .so set only, unit 54/54 (hem-tool-core-shared for
@@ -102,7 +113,8 @@ packaging time only.
       the SDK from the private, never-installed libencedo-hem-internal.a,
       unit 54/54. The ci.yml legs (Linux gcc + Windows MSYS2, each asserting
       the link result; the assertion script proven to pass and to fail
-      locally) are written — this box closes with their first green run.)*
+      locally) are written — this box closes with their first green run:
+      the CI run above.)*
 - [x] Static-wolfSSL warning fires when wolfSSL resolves to an archive and
       is absent otherwise (configure against the release prefix of
       REQ-BUILD-005 with and without `EHEM_DEPS_LINK=static`).

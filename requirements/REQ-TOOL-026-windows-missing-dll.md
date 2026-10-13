@@ -1,9 +1,9 @@
 ---
 id: REQ-TOOL-026
 title: hem-tool on Windows reports a missing libwolfssl.dll itself (delay-load import) instead of failing before main
-status: approved
+status: implemented
 priority: should
-revision: 2   # 2026-10-13 (STEP-M12-100): --version without the DLL settled (tolerant hook, 'not found'); OPEN criterion reasoned + cross-build evidence; release-job proof pending. No meaning change — approved status kept
+revision: 3   # 2026-10-13 (STEP-M12-100 done): the release-job criteria ticked and the OPEN criterion closed by release run 38407235207 (Windows job); rev 2 = --version without the DLL settled (tolerant hook, 'not found'), cross-build evidence. No meaning change — status set by the §4.3 regeneration
 source: user decision 2026-10-10 (BACKLOG item 5, from the first Windows test of the release binary — Windows refuses to start hem-tool.exe without libwolfssl.dll, exit -1073741515 / 0xC0000135, often with no message); moved into M12 by user decision 2026-10-12 (ARCHITECTURE.md §11 M12 part A: "the MinGW mechanism is proven at decomposition"); mechanism proven to link 2026-10-12 with the Debian x86_64-w64-mingw32 toolchain (GCC 13): `dlltool --output-delaylib` + mingw-w64 `libdelayimp.a` / `delayimp.h` (`__pfnDliFailureHook2`, `dliFailLoadLib`) — the PoC exe's static import table lists system DLLs only; run-time proof pending the Windows release job (no wine on the dev host); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-BUILD-005", "REQ-TOOL-024"]
 supersedes: null
@@ -65,17 +65,32 @@ executable or launcher is needed.
       link with `libfoo_delay.a -ldelayimp`, `objdump -p` of the exe →
       KERNEL32.dll + msvcrt.dll only. Run-time proof = the Windows release
       job.)*
-- [ ] Release Windows job: the drop-in smoke test gains a negative case —
+- [x] Release Windows job: the drop-in smoke test gains a negative case —
       the hem-tool archive unpacked WITHOUT the companion DLL,
       `hem-tool status` → the message on stderr, exit 12 (not
       0xC0000135); the positive case (DLL beside the exe) unchanged;
       `objdump -p hem-tool.exe` shows `libwolfssl.dll` only as a delay
       import (asserted in `package.sh`).
-- [ ] `hem-tool help` / `--version` / `keys types` run without the DLL
+      *(Release run 38407235207 (workflow_dispatch on development, 50ca2a7,
+      2026-10-13), job "Windows x86_64 (dynamic wolfSSL, MinGW UCRT64)"
+      green: build-deps.sh rebuilt the prefix with the r2 recipe (the
+      delay-load import library) on MSYS2's GCC 16.2, and package.sh — every
+      check a hard failure under `set -euo pipefail` — passed the delay-import
+      assertion (libwolfssl.dll absent from the ordinary imports, the
+      `__DELAY_IMPORT_DESCRIPTOR_…libwolfssl` symbol and the DLL-name string
+      present, UCRT imports, no msvcrt.dll), the negative smoke (`status`
+      without the DLL → exit 12 with "libwolfssl.dll was not found") and the
+      positive smoke (the DLL beside the exe → `--version` reports 5.7.2
+      loaded). The same run's Linux job failed on an unrelated STEP-M12-050
+      test (cmocka 1.1.5 under GCC 11) — fixed 4f697cd.)*
+- [x] `hem-tool help` / `--version` / `keys types` run without the DLL
       present (same negative smoke).
+      *(Same job: `help` and `keys types` exit 0 without the DLL, and
+      `--version` reads "not found (loaded)".)*
 - [ ] Attended on Windows at the M12 gate: the published zip, DLL
       removed → the message; DLL restored → `status` works (recorded).
-- [ ] OPEN (needs verification at the step): interplay of the delay-load
+- [x] RESOLVED at STEP-M12-100 (2026-10-13) — was OPEN (needs
+      verification at the step): interplay of the delay-load
       helper with the `-static` (libgcc/winpthread) release link and the
       UCRT; whether a DLL found on `PATH` but of a wrong version still
       reaches REQ-API-010's refusal (expected: yes — the delay load
@@ -100,3 +115,11 @@ executable or launcher is needed.
       imports → the hook's dliFailGetProc message, exit 12 (reasoned; no
       second DLL build at hand). UCRT and the run itself: the Windows
       release job's negative smoke — this box closes with that run.)*
+      *(Closed by release run 38407235207: on the UCRT64 runner the
+      `-static` release exe with the delay-load import library starts, loads
+      the DLL at the first wolfSSL call when it is present (positive smoke)
+      and reaches the hook when it is absent (negative smoke) — the
+      `-static`/UCRT interplay works. The wrong-version DLL stays reasoned,
+      not run: the load succeeds exactly as in the positive smoke and the
+      refusal that follows is REQ-API-010's, unit-tested and proven on the
+      real main.c by tool_startup_cli.)*
