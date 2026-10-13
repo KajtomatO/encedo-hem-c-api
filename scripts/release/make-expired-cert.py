@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-"""Mint a VALID self-signed CA and an EXPIRED leaf certificate it signed, for
-localhost (REQ-BUILD-005 / REQ-NET-005 check in the release workflow): the
-release binary must classify "certificate has expired" under the wolfSSL-backed
-libcurl, so a local HTTPS endpoint serving the expired leaf is probed by
-`hem-tool recovery` with the CA as its trust anchor; it prints "diagnosis: the
-device certificate has EXPIRED" only when the classifier fired.
+"""Mint a VALID self-signed CA plus two leaf certificates it signed for
+localhost — one EXPIRED, one NOT YET VALID (REQ-BUILD-005 / REQ-NET-005 check in
+the release workflow): the release binary must classify "certificate has
+expired" under the wolfSSL-backed libcurl, and must NOT classify a certificate
+that is not yet valid (REQ-NET-005 rev 2: wolfSSL -150 is ASN_BEFORE_DATE_E).
+Local HTTPS endpoints serving each leaf are probed by `hem-tool recovery` with
+the CA as its trust anchor; it prints "diagnosis: the device certificate has
+EXPIRED" only when the classifier fired.
 
 The CA must be valid: wolfSSL (unlike a lax backend) refuses to even LOAD an
 expired certificate as a trust anchor, so a self-signed expired cert cannot be
-its own CA in this check. Writes ca.pem, expired-cert.pem, expired-key.pem into
-the given directory. Needs the `cryptography` package — 3.4 or later (the
+its own CA in this check. Writes ca.pem, expired-cert.pem, expired-key.pem,
+future-cert.pem and future-key.pem into the given directory. Needs the `cryptography` package — 3.4 or later (the
 release job uses ubuntu-22.04's python3-cryptography, 3.4.8).
 """
 import datetime
@@ -53,27 +55,43 @@ ca = (
     .sign(ca_key, hashes.SHA256())
 )
 
-leaf_key = ec.generate_private_key(ec.SECP256R1())
 leaf_name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "localhost")])
-leaf = (
-    x509.CertificateBuilder()
-    .subject_name(leaf_name).issuer_name(ca_name)
-    .public_key(leaf_key.public_key())
-    .serial_number(x509.random_serial_number())
-    .not_valid_before(now - datetime.timedelta(days=400))
-    .not_valid_after(now - datetime.timedelta(days=30))      # expired a month ago
-    .add_extension(x509.SubjectAlternativeName([x509.DNSName("localhost")]), critical=False)
-    .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
-    .sign(ca_key, hashes.SHA256())
-)
+
+
+def make_leaf(not_before, not_after):
+    key = ec.generate_private_key(ec.SECP256R1())
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(leaf_name).issuer_name(ca_name)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(not_before)
+        .not_valid_after(not_after)
+        .add_extension(x509.SubjectAlternativeName([x509.DNSName("localhost")]), critical=False)
+        .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+        .sign(ca_key, hashes.SHA256())
+    )
+    return key, cert
+
+
+def write_leaf(stem, key, cert):
+    with open(os.path.join(out, stem + "-cert.pem"), "wb") as f:
+        f.write(cert.public_bytes(serialization.Encoding.PEM))
+    with open(os.path.join(out, stem + "-key.pem"), "wb") as f:
+        f.write(key.private_bytes(serialization.Encoding.PEM,
+                                  serialization.PrivateFormat.PKCS8,
+                                  serialization.NoEncryption()))
+
+
+# expired a month ago / valid only from a month from now
+leaf_key, leaf = make_leaf(now - datetime.timedelta(days=400), now - datetime.timedelta(days=30))
+future_key, future = make_leaf(now + datetime.timedelta(days=30), now + datetime.timedelta(days=400))
 
 with open(os.path.join(out, "ca.pem"), "wb") as f:
     f.write(ca.public_bytes(serialization.Encoding.PEM))
-with open(os.path.join(out, "expired-cert.pem"), "wb") as f:
-    f.write(leaf.public_bytes(serialization.Encoding.PEM))
-with open(os.path.join(out, "expired-key.pem"), "wb") as f:
-    f.write(leaf_key.private_bytes(serialization.Encoding.PEM,
-                                   serialization.PrivateFormat.PKCS8,
-                                   serialization.NoEncryption()))
+write_leaf("expired", leaf_key, leaf)
+write_leaf("future", future_key, future)
 leaf_from, leaf_until = validity(leaf)
-print("CA valid until", validity(ca)[1], "; leaf expired:", leaf_from, "..", leaf_until)
+future_from, future_until = validity(future)
+print("CA valid until", validity(ca)[1], "; leaf expired:", leaf_from, "..", leaf_until,
+      "; leaf not yet valid:", future_from, "..", future_until)

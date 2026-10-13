@@ -27,4 +27,14 @@
  */
 ehem_rc ehem_curl_map_error(CURLcode code, double connect_time);
 
+/*
+ * The REQ-NET-005 trigger: 1 when a failed transfer is a TLS verification
+ * failure because the peer certificate has EXPIRED — the one check-in-
+ * recoverable case — else 0. `verify_result` is CURLINFO_SSL_VERIFYRESULT;
+ * `detail` is the transfer's error text (may be NULL). Pure, so the verdict is
+ * unit-tested directly (STEP-M12-030); a certificate that is NOT YET valid is
+ * never "expired".
+ */
+int ehem_curl_tls_expired(CURLcode code, long verify_result, const char *detail);
+
 #endif /* EHEM_TRANSPORT_CURL_H */

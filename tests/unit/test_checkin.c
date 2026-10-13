@@ -6,7 +6,8 @@
  *           verified, device legs relaxed only in-flow, typed result),
  *           REQ-NET-005 (auto-recovery: expired-only trigger, opt-out,
  *           single fresh-connection retry, recursion guard, original error
- *           preserved on recovery failure, ehem_cert_refreshed),
+ *           preserved on recovery failure, ehem_cert_refreshed; rev 2: a
+ *           not-yet-valid certificate is returned unchanged, no check-in),
  *           REQ-SYS-006 (harvest: newcrt_chain + current_serial from the
  *           leg-2/leg-1 JWT payloads; present, absent, unparseable)
  */
@@ -297,6 +298,34 @@ static void test_non_expired_failure_no_recovery(void **state)
     fake_transport_free(fake);
 }
 
+/* REQ-NET-005 rev 2: a certificate that is NOT YET valid (wolfSSL -150 /
+ * OpenSSL 9 — the transport's verdict is "not expired", pinned in
+ * test_transport_curl.c) is returned unchanged: the original TLS error and
+ * its text, no check-in leg, tls_expired 0. */
+static void test_not_yet_valid_no_recovery(void **state)
+{
+    (void)state;
+    ehem_transport *fake = fake_transport_new();
+    assert_non_null(fake);
+    fake_transport_set_detail(fake,
+        "SSL certificate problem: certificate is not yet valid");
+    assert_int_equal(
+        fake_transport_push_response(fake, EHEM_ERR_NETWORK, 0, NULL), 0);
+
+    ehem_ctx *ctx = ctx_with(fake, NULL);
+    ehem_status_info *st = NULL;
+    assert_int_equal(ehem_system_status(ctx, &st), EHEM_ERR_NETWORK);
+    assert_null(st);
+    assert_int_equal((int)fake_transport_request_count(fake), 1);  /* no legs */
+    assert_false(ehem_cert_refreshed(ctx));
+    assert_int_equal(ehem_last_error(ctx)->tls_expired, 0);
+    assert_non_null(strstr(ehem_last_error(ctx)->message, "not yet valid"));
+    assert_null(strstr(ehem_last_error(ctx)->message, "check-in"));
+
+    ehem_ctx_destroy(ctx);
+    fake_transport_free(fake);
+}
+
 /* Recovery fails → the ORIGINAL error comes back, detail says why. */
 static void test_recovery_failure_reports_original(void **state)
 {
@@ -388,6 +417,7 @@ int main(void)
         cmocka_unit_test(test_auto_recovery),
         cmocka_unit_test(test_auto_recovery_optout),
         cmocka_unit_test(test_non_expired_failure_no_recovery),
+        cmocka_unit_test(test_not_yet_valid_no_recovery),
         cmocka_unit_test(test_recovery_failure_reports_original),
         cmocka_unit_test(test_device_still_serves_old_cert),
         cmocka_unit_test(test_recursion_guard),
