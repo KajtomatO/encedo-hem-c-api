@@ -1,7 +1,7 @@
 ---
 id: REQ-TOOL-028
 title: hem-tool init-wizard — attended, prompt-driven device initialisation over the init-device flow
-status: approved
+status: verified
 priority: should
 revision: 2   # 2026-10-13 (STEP-M12-050): OPEN criterion (environment pre-fill) settled — only --url / EHEM_URL; unit criteria recorded. No meaning change — approved status kept
 source: user note 2026-10-10 ("initialisation creator" — hand-hold the user through init; NOT designed then); shape decided by the user 2026-10-12 (M12 planning: a SEPARATE wizard command, `init-device` stays purely scripted; explains and prompts for every field with its default, passphrase hidden and twice, generates the 24 words and confirms the backup by re-typing a few, summary behind a typed confirmation, then the existing init flow incl. the reboot; needs a shared no-echo prompt helper); ARCHITECTURE.md §11 M12 part E (command name settled at decomposition: `init-wizard`); REQ-TOOL-021 (the flow it drives), REQ-AUTH-012 (the words), REQ-TEST-007 (attended-only); approved 2026-10-12 (M12 decomposition, user: "approve")
