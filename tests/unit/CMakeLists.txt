@@ -12,6 +12,17 @@ ehem_add_unit_test(test_context SOURCES test_context.c)
 # seam-forced refusals, implicit-init propagation, idempotency across a refusal.
 ehem_add_unit_test(test_backend_compat SOURCES test_backend_compat.c)
 
+# REQ-API-011: build information. The expected values come from the build's
+# own dependency discovery (pkg-config, FindCURL, the link-mode detection in
+# the top-level CMakeLists.txt) — no test includes a backend header.
+ehem_add_unit_test(test_build_info SOURCES test_build_info.c)
+target_compile_definitions(test_build_info PRIVATE
+  EHEM_TEST_CRYPTO_BACKEND="wolfSSL"
+  EHEM_TEST_CRYPTO_VERSION="${WOLFSSL_VERSION}"
+  EHEM_TEST_CRYPTO_LINK="${EHEM_CRYPTO_LINK}"
+  EHEM_TEST_TRANSPORT_VERSION="${EHEM_CURL_VERSION}"
+  EHEM_TEST_TRANSPORT_LINK="${EHEM_TRANSPORT_LINK}")
+
 # REQ-NET-001, REQ-TEST-001: transport vtable seam via the injected fake.
 ehem_add_unit_test(test_transport SOURCES test_transport.c)
 
@@ -101,6 +112,26 @@ if(TARGET hem-tool-core)
   # REQ-TOOL-017/019/020: command registry, help rendering, URL resolution.
   ehem_add_unit_test(test_registry SOURCES test_registry.c)
   target_link_libraries(test_registry PRIVATE hem-tool-core)
+
+  # REQ-TOOL-024/025: the start of run — explicit SDK init with its refusal
+  # message + exit 12, and the --version report (hem-tool-core).
+  ehem_add_unit_test(test_tool_startup SOURCES test_tool_startup.c)
+  target_link_libraries(test_tool_startup PRIVATE hem-tool-core)
+
+  # REQ-TOOL-024/025 on the REAL main.c: a test build of hem-tool whose
+  # constructor forces the REQ-API-010 refusal named by
+  # EHEM_TEST_FORCE_MISMATCH; the script drives the command line.
+  add_executable(hem-tool-forced-mismatch
+    ${PROJECT_SOURCE_DIR}/src/tools/hem-tool/main.c tool_force_mismatch.c)
+  target_link_libraries(hem-tool-forced-mismatch PRIVATE
+    hem-tool-core ehem_test_support)
+  target_compile_options(hem-tool-forced-mismatch PRIVATE ${EHEM_WARNING_FLAGS})
+  add_test(NAME tool_startup_cli
+    COMMAND ${CMAKE_COMMAND}
+      -DEHEM_TOOL=$<TARGET_FILE:hem-tool-forced-mismatch>
+      -DEHEM_VERSION=${PROJECT_VERSION}
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/check_tool_startup.cmake)
+  set_tests_properties(tool_startup_cli PROPERTIES LABELS unit)
 endif()
 
 # REQ-SYS-004, REQ-SYS-005: config GET / cert install / reboot bindings.

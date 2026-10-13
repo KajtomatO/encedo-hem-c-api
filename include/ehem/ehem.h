@@ -57,7 +57,9 @@ extern "C" {
  *   - ehem_rc values are append-only, never renumbered;
  *   - library-allocated output structs (ehem_*_info et al.) may grow in
  *     minors — callers never size them, and each is released by its own
- *     ehem_*_free().
+ *     ehem_*_free();
+ *   - ehem_build_info (1.2), the one caller-allocated output struct, keeps
+ *     its size for the whole 1.x line — a new fact takes a reserved slot.
  * Anything breaking these rules is a MAJOR version.
  */
 EHEM_API const char *ehem_version(void);
@@ -320,6 +322,42 @@ EHEM_API int ehem_cert_refreshed(const ehem_ctx *ctx);
  * ========================================================================== */
 EHEM_API ehem_rc ehem_global_init(void);
 EHEM_API void ehem_global_cleanup(void);
+
+/* ==========================================================================
+ * Build information (1.2)
+ * implements: REQ-API-011
+ *
+ * Which libraries this SDK runs on: the crypto and transport backends, the
+ * version of each it was compiled against, the version the process actually
+ * loaded (the library's own run-time report) and how the build links it.
+ * Meant for diagnostics — hem-tool --version, a consumer's log, the message
+ * that explains an EHEM_ERR_BACKEND_MISMATCH refusal.
+ *
+ * Every string is static, owned by the library (never free it) and never
+ * NULL. The struct itself is the CALLER's (a local is fine) and keeps its size
+ * for the whole 1.x line: a future fact takes one of the `reserved` slots,
+ * which read NULL until then.
+ * ========================================================================== */
+typedef struct ehem_build_info {
+    const char *crypto_backend;              /* "wolfSSL" or "OpenSSL" */
+    const char *crypto_version_compiled;     /* from its headers, e.g. "5.7.2" */
+    const char *crypto_version_loaded;       /* reported by the loaded library */
+    const char *crypto_link;                 /* "dynamic" or "static" */
+    const char *transport_backend;           /* "libcurl" */
+    const char *transport_version_compiled;
+    const char *transport_version_loaded;
+    const char *transport_link;              /* "dynamic" or "static" */
+    const char *reserved[8];                 /* future facts; NULL today */
+} ehem_build_info;
+
+/*
+ * Fill *out. Cannot fail and needs no ehem_global_init(): the values are the
+ * same before init, after it and after a refused one (REQ-API-010) — when they
+ * matter most. A NULL `out` is a no-op. Call it from one thread at a time,
+ * like ehem_global_init() (libcurl's version query fills static data of its
+ * own).
+ */
+EHEM_API void ehem_build_info_get(ehem_build_info *out);
 
 #ifdef __cplusplus
 } /* extern "C" */

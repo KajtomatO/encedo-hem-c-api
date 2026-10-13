@@ -131,7 +131,10 @@ matching `ehem_*_free()` — all NULL-safe. Byte buffers are
 `(uint8_t *ptr, size_t len)` pairs; strings are NUL-terminated UTF-8.
 Secret material (passphrase-derived keys, shared secrets, plaintexts,
 tokens) is zeroized on free. Strings returned by `ehem_version()` and
-`ehem_rc_str()` are static — never free them.
+`ehem_rc_str()` are static — never free them. The one caller-owned output
+is `ehem_build_info` (1.2): `ehem_build_info_get()` fills your struct with
+static strings and cannot fail; its size is fixed for all of 1.x (new facts
+take its `reserved` slots), so any 1.x binary can call any 1.x library.
 
 ### Options and the ABI
 
@@ -221,6 +224,7 @@ rate-sensitive devices).
 | `ehem_error`, `ehem_last_error` | last-call detail (http status, device payload, message) |
 | `ehem_cert_refreshed` | sticky flag: automatic cert recovery took effect |
 | `ehem_global_init`, `ehem_global_cleanup` | idempotent process-global backend setup; init refuses a foreign crypto library with `EHEM_ERR_BACKEND_MISMATCH` (1.2) |
+| `ehem_build_info`, `ehem_build_info_get` | crypto + transport backend names, compiled-against vs loaded versions, link modes (1.2); caller-owned struct of fixed size, static strings, works before/without a successful init |
 | `ehem_transport` | opaque transport-override slot in the options (testing seam) |
 | `EHEM_DEFAULT_CONNECT_TIMEOUT_MS`, `EHEM_DEFAULT_TOTAL_TIMEOUT_MS`, `EHEM_DEFAULT_CONFIRM_TIMEOUT_MS` | documented option defaults |
 | `EHEM_DEFAULT_CHECKIN_URL` | the Encedo cloud check-in endpoint |

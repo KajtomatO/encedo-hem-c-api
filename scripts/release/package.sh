@@ -126,6 +126,7 @@ else
   fi
 fi
 "$BIN" help > /dev/null
+"$BIN" --version      # REQ-TOOL-025: the job log records built-against vs loaded
 
 # --- package hem-tool (MIT/permissive notices only: wolfSSL is NOT inside) ---
 STAGE="$DIST/$NAME"
@@ -153,8 +154,14 @@ asset's BUILD-CONFIG.txt) works too. Verify downloads against SHA256SUMS:
   sha256sum -c SHA256SUMS      (Linux)
   CertUtil -hashfile <file> SHA256   (Windows)
 
+hem-tool checks the wolfSSL it loaded before doing anything else: another
+version, or the same version built with other options, is refused with one
+message naming both versions and exit code 12 (instead of a crash).
+"hem-tool --version" prints the versions it was built against and loaded.
+
 Usage: hem-tool help            (commands grouped by what they need)
        hem-tool help <command>  (per-command options)
+       hem-tool --version       (versions built against and loaded)
 Device URL via --url or EHEM_URL (default https://my.ence.do); passphrase via
 --passphrase or EHEM_PASSPHRASE.
 

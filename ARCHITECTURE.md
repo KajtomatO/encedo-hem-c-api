@@ -243,7 +243,9 @@ graph TD
   callers serialize. Internals keep all mutable state inside the context
   struct so a per-context lock can be added without redesign.
 - **Memory:** output structs are heap-allocated by the library and
-  released with matching `ehem_*_free()` functions; byte buffers are
+  released with matching `ehem_*_free()` functions (the one exception,
+  1.2's `ehem_build_info`, is a fixed-size caller struct filled with
+  static strings — REQ-API-011); byte buffers are
   `(uint8_t *ptr, size_t len)` pairs; strings are NUL-terminated UTF-8.
   Secret material (passphrase-derived keys, shared secrets, tokens) is
   zeroized on free.

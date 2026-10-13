@@ -906,3 +906,20 @@ void ehem_crypto_backend_global_cleanup(void)
 {
     (void)wolfCrypt_Cleanup();
 }
+
+/* implements: REQ-API-011 — compiled = the headers this file was built with,
+ * loaded = the library's own report (a plain string accessor, like the
+ * version-hex check above, so it is safe to ask a foreign library). */
+void ehem_crypto_backend_describe(ehem_build_info *out)
+{
+    const char *loaded = wolfSSL_lib_version();
+
+    out->crypto_backend          = "wolfSSL";
+    out->crypto_version_compiled = LIBWOLFSSL_VERSION_STRING;
+    out->crypto_version_loaded   = (loaded != NULL) ? loaded : "unknown";
+#ifdef EHEM_CRYPTO_LINK_STATIC
+    out->crypto_link             = "static";
+#else
+    out->crypto_link             = "dynamic";
+#endif
+}

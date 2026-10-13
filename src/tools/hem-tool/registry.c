@@ -385,9 +385,12 @@ static void print_group(FILE *f, int cls, hem_cmd_section sec, const char *heade
 
 void hem_help_top(FILE *f, const char *version)
 {
+    /* REQ-TOOL-025: --version folded into the usage lines (the page has no
+     * line to spare, REQ-TOOL-020). */
     fprintf(f, "hem-tool %s - Encedo HEM device CLI\n"
                "usage: hem-tool [options] <command> [command options]\n"
-               "       hem-tool help <command>   (or: <command> --help)\n\n",
+               "       hem-tool help <command>   (or: <command> --help)"
+               "   |   hem-tool --version\n\n",
             version != NULL ? version : "");
     fprintf(f, "connection/auth options (every command):\n");
     print_options(f, SHARED_OPTIONS, SHARED_OPTION_COUNT);
@@ -406,8 +409,10 @@ void hem_help_top(FILE *f, const char *version)
      * write the device config). */
     print_group(f, -1, HEM_SECTION_MANUAL_RECOVERY,
                 "manual recovery (building blocks of `recovery`; passphrase):");
-    fprintf(f, "\ncommand options: `hem-tool help <command>`, e.g. "
-               "`hem-tool help keys rm`\n");
+    /* REQ-TOOL-024: the exit-code note — 12 is the one code every command
+     * shares (the SDK could not start). */
+    fprintf(f, "\ncommand options: `hem-tool help <command>`; exit 12 = "
+               "crypto library missing or wrong\n");
 }
 
 static void print_command_help(FILE *f, const hem_command *c)

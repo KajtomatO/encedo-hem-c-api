@@ -329,10 +329,12 @@ Discovered while building and attending the M8 mobile-auth milestone
 `ehem_global_init()` refuses the foreign library with
 `EHEM_ERR_BACKEND_MISMATCH` — exact wolfSSL version plus a guard-banded
 self-test of the six structs the SDK allocates; the implicit init paths
-return the same code instead of `EHEM_ERR_NOMEM`); the hem-tool message and
-exit code follow in STEP-M12-020, and the demo against the host's 5.6.6 is
-the M12 gate's (STEP-M12-140). Ships in 1.2.0 — the 1.1.0 binaries still
-crash. **Affected:** the REQ-BUILD-005 release binaries (1.1.0), and any
+return the same code instead of `EHEM_ERR_NOMEM`); since STEP-M12-020
+(2026-10-13, REQ-TOOL-024/025) hem-tool runs that check first and answers a
+refusal with one message — both versions and the remedy — and exit 12, and
+`hem-tool --version` prints the version built against and the one loaded.
+The demo against the host's 5.6.6 is the M12 gate's (STEP-M12-140). Ships
+in 1.2.0 — the 1.1.0 binaries still crash. **Affected:** the REQ-BUILD-005 release binaries (1.1.0), and any
 consumer of the SDK built against one wolfSSL and run with another.
 
 ### Symptom

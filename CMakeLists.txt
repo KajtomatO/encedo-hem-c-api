@@ -46,6 +46,13 @@ include(CMakePackageConfigHelpers)
 # HTTPS transport dependency (REQ-NET-002). The FindCURL module provides the
 # imported target CURL::libcurl; no cURL type appears in public headers.
 find_package(CURL REQUIRED)
+# The version found (FindCURL: CURL_VERSION_STRING; curl's own package config
+# and newer CMake: CURL_VERSION) — the unit test's oracle for REQ-API-011.
+if(CURL_VERSION_STRING)
+  set(EHEM_CURL_VERSION "${CURL_VERSION_STRING}")
+else()
+  set(EHEM_CURL_VERSION "${CURL_VERSION}")
+endif()
 
 # Crypto primitives for the auth flow (REQ-AUTH-001): wolfCrypt via wolfSSL,
 # used from M2 on (PBKDF2-HMAC-SHA256 / HMAC-SHA256 / X25519). The dev distros
@@ -55,6 +62,54 @@ find_package(CURL REQUIRED)
 # it), so it links privately into the shared library.
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(WOLFSSL REQUIRED IMPORTED_TARGET wolfssl)
+
+# How the resolved dependencies link — a build fact ehem_build_info_get()
+# reports (REQ-API-011) and `hem-tool --version` prints (REQ-TOOL-025): a static
+# archive (.a / .lib — but not a MinGW .dll.a import library) or a shared
+# library. `lib` is a library path or an imported target.
+function(ehem_link_mode lib out)
+  set(_mode dynamic)
+  if(TARGET "${lib}")
+    get_target_property(_aliased "${lib}" ALIASED_TARGET)
+    if(_aliased)
+      set(lib "${_aliased}")
+    endif()
+    get_target_property(_type "${lib}" TYPE)
+    if(_type STREQUAL "STATIC_LIBRARY")
+      set(_mode static)
+    elseif(_type STREQUAL "UNKNOWN_LIBRARY")
+      foreach(_prop IMPORTED_LOCATION IMPORTED_LOCATION_RELEASE
+                    IMPORTED_LOCATION_RELWITHDEBINFO IMPORTED_LOCATION_DEBUG)
+        get_target_property(_loc "${lib}" ${_prop})
+        if(_loc)
+          ehem_link_mode("${_loc}" _mode)
+          break()
+        endif()
+      endforeach()
+    endif()
+  elseif(lib MATCHES "\\.(a|lib)$" AND NOT lib MATCHES "\\.dll\\.a$")
+    set(_mode static)
+  endif()
+  set(${out} ${_mode} PARENT_SCOPE)
+endfunction()
+
+set(EHEM_CRYPTO_LINK dynamic)
+foreach(_lib IN LISTS WOLFSSL_LINK_LIBRARIES)
+  if(_lib MATCHES "wolfssl")
+    ehem_link_mode("${_lib}" EHEM_CRYPTO_LINK)
+    break()
+  endif()
+endforeach()
+ehem_link_mode(CURL::libcurl EHEM_TRANSPORT_LINK)
+message(STATUS "encedo-hem: crypto wolfSSL ${WOLFSSL_VERSION} (${EHEM_CRYPTO_LINK}), "
+               "transport libcurl ${EHEM_CURL_VERSION} (${EHEM_TRANSPORT_LINK})")
+set(EHEM_LINK_DEFINITIONS "")
+if(EHEM_CRYPTO_LINK STREQUAL "static")
+  list(APPEND EHEM_LINK_DEFINITIONS EHEM_CRYPTO_LINK_STATIC)
+endif()
+if(EHEM_TRANSPORT_LINK STREQUAL "static")
+  list(APPEND EHEM_LINK_DEFINITIONS EHEM_TRANSPORT_LINK_STATIC)
+endif()
 
 # --- vendored third-party (cJSON) -----------------------------------------
 # Compiled into an OBJECT library so the vendored sources are held to their
@@ -115,6 +170,7 @@ foreach(_t encedo-hem encedo-hem-static)
       ${CMAKE_CURRENT_SOURCE_DIR}/src)      # internal headers (json.h, ...)
   target_compile_definitions(${_t} PRIVATE
     EHEM_VERSION_STRING="${PROJECT_VERSION}"
+    ${EHEM_LINK_DEFINITIONS}                # ehem_build_info link modes
     CJSON_HIDE_SYMBOLS)                     # json.c includes cJSON.h; match it
   target_compile_options(${_t} PRIVATE ${EHEM_WARNING_FLAGS})
   set_target_properties(${_t} PROPERTIES OUTPUT_NAME encedo-hem)
@@ -193,6 +249,7 @@ if(EHEM_BUILD_TOOL)
     src/tools/hem-tool/registry.c
     src/tools/hem-tool/selftest.c
     src/tools/hem-tool/sign.c
+    src/tools/hem-tool/startup.c
     src/tools/hem-tool/tool_auth.c
     src/tools/hem-tool/wipe.c
     # Vendored qrcodegen (REQ-TOOL-016): TOOL-ONLY — never part of the SDK

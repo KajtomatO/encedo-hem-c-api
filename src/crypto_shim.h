@@ -250,6 +250,16 @@ ehem_rc ehem_crypto_backend_global_init(void);
 void ehem_crypto_backend_global_cleanup(void);
 
 /*
+ * The crypto half of ehem_build_info_get() (REQ-API-011): fills the four
+ * crypto_* fields of *out with static strings — the backend name, the version
+ * from its headers, the version the loaded library reports, and the link mode
+ * the build resolved ("static" when configured with EHEM_CRYPTO_LINK_STATIC).
+ * Asks the library only for a version string, so it is safe on any library,
+ * before ehem_crypto_backend_global_init() and after a refused one.
+ */
+void ehem_crypto_backend_describe(ehem_build_info *out);
+
+/*
  * Test-only seam for the compatibility check (never exported; hidden
  * visibility). EHEM_CRYPTO_FORCE_VERSION makes the version comparison see a
  * foreign library (the refusal happens before wolfCrypt_Init — no wolfCrypt

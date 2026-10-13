@@ -10,7 +10,9 @@
  *           summary/details fails here),
  *           REQ-TOOL-020 (per-command help at both family depths shows
  *           only that command's options; the top page shows none of
- *           them and stays one screen; unknown names are refused)
+ *           them and stays one screen; unknown names are refused),
+ *           REQ-TOOL-024 / REQ-TOOL-025 (the top page's exit-12 note and
+ *           the --version usage line, within the 45-line cap)
  */
 #include <stdarg.h>
 #include <stddef.h>
@@ -178,6 +180,8 @@ static void test_top_page_shape(void **state)
     assert_non_null(strstr(top, "--mobile"));  /* shared options ARE here */
     assert_non_null(strstr(top, HEM_TOOL_DEFAULT_URL));
     assert_non_null(strstr(top, "help <command>"));
+    assert_non_null(strstr(top, "hem-tool --version"));  /* REQ-TOOL-025 */
+    assert_non_null(strstr(top, "exit 12"));             /* REQ-TOOL-024 */
     for (p = top; *p != '\0'; p++) {
         lines += (*p == '\n');
     }

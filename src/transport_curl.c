@@ -487,3 +487,21 @@ void ehem_transport_backend_global_cleanup(void)
 {
     curl_global_cleanup();
 }
+
+/* implements: REQ-API-011 — LIBCURL_VERSION is the header this file was built
+ * with; curl_version_info() is the loaded library's report (no
+ * curl_global_init needed). */
+void ehem_transport_backend_describe(ehem_build_info *out)
+{
+    const curl_version_info_data *vi = curl_version_info(CURLVERSION_NOW);
+
+    out->transport_backend          = "libcurl";
+    out->transport_version_compiled = LIBCURL_VERSION;
+    out->transport_version_loaded   = (vi != NULL && vi->version != NULL)
+                                      ? vi->version : "unknown";
+#ifdef EHEM_TRANSPORT_LINK_STATIC
+    out->transport_link             = "static";
+#else
+    out->transport_link             = "dynamic";
+#endif
+}
