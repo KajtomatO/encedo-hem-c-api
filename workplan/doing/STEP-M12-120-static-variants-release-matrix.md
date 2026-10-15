@@ -7,8 +7,15 @@ traces:
   architecture: ["ARCHITECTURE.md#1-decisions-fixed", "ARCHITECTURE.md#11-milestones", "ARCHITECTURE.md#12-risks--open-questions"]
 depends_on: ["STEP-M12-090", "STEP-M12-100", "STEP-M12-110"]
 evidence:
-  commits: ["f90e7a9"]   # start
-  tests: []
+  commits: ["f90e7a9", "9548860", "54ae1bf"]   # start; the approved §6.2 decisions; the implementation — the dispatch run and the done commit follow
+  tests:
+    - "tests/unit/test_tool_startup.c (verifies: REQ-TOOL-024 rev 5): test_static_refusal_message — hem_tool_print_refusal() fed the build information of other builds: OpenSSL linked in → the remedy names the OpenSSL configuration (OPENSSL_CONF, openssl.cnf), neither the companion asset nor the -static hem-tool; wolfSSL linked in → 'this hem-tool build is broken'; the same facts linked dynamically → the replace-the-library remedies. test_version_refusal_message now takes the remedy by this build's link (the release -static build runs this suite). Local 2026-10-15: ./dev ci 56/56 gcc + clang, ./dev ci --openssl 56/56 gcc + clang, ASan 56/56; GCC 16.2 replay of every compile command (142, both backends; -fsyntax-only and -O2): 0 diagnostics"
+    - "build-deps.sh openssl, local Linux 2026-10-15 (recipe r2): 79 s; the script's own check — openssl version -d -e -m = /etc/ssl, /usr/lib/engines-3, /usr/lib/ossl-modules (make variables; before: the prefix's own lib/engines-3 and lib/ossl-modules); no engines-3/ossl-modules directory in the prefix"
+    - "package.sh <deps-openssl> linux dist static, local 2026-10-15 (package-static.sh + package-lib.sh static), all green: unit 55/55 on the Release build (OpenSSL, EHEM_DEPS_LINK=static, static SDK only) — its consumer_interface gate linked consumer_pc_static from the all-static `pkg-config --static` closure of the scratch install (REQ-BUILD-008 criterion 4, locally); hem-tool: ldd = linux-vdso, libc.so.6, ld-linux-x86-64.so.2, no RUNPATH, no wolfSSL_/wolfCrypt_/wc_ symbol or string; --version 'crypto: OpenSSL 3.5.9 (compiled) / 3.5.9 (loaded), static', 'transport: libcurl 8.10.1 (compiled) / 8.10.1 (loaded), static'; the archive alone, unpacked: help and keys types run, status against a closed port exits 1 (initialised, then unreachable), and with OPENSSL_CONF = a file activating only the null provider exits 12 with 'remedy: OpenSSL is linked into hem-tool, so the OpenSSL configuration it read ... ' (the Linux control). encedo-hem-...-static: libencedo-hem.a, libcurl.a, libssl.a, libcrypto.a (no wolfSSL symbol), include/{ehem,curl,openssl}, lib/cmake/{encedo-hem,CURL}, five .pc files rewritten to ${pcfiledir} (no build-prefix path left — checked), notices incl. LICENSE.openssl; the gate in package mode: consumer_cmake_static and consumer_pc_static built ('pkg-config --static closure') and run, ldd libc only. check-expired-classifier.sh on build-release-static/hem-tool: the expired leaf recognised ('certificate has expired'), the not-yet-valid one refused and not classified"
+    - "package.sh dynamic against the M10 wolfSSL prefix, then static into the same dist (as the job runs them), local 2026-10-15: dynamic 56/56, drop-in OK, library package smoke OK (the restructured package-lib.sh); SHA256SUMS over all six Linux archives, sha256sum -c OK"
+    - "Cross replay 2026-10-15, Windows (Debian x86_64-w64-mingw32 GCC 13, msvcrt; uname shim): build-deps.sh openssl — './Configure mingw64 no-autoload-config ...', configuration.h defines OPENSSL_NO_AUTOLOAD_CONFIG, curl_config.h '#define CURL_DISABLE_OPENSSL_AUTO_LOAD_CONFIG 1', libcrypto.a carries 'C:/Program Files/Common Files/SSL' (+ /engines-3, /ossl-modules, ct_log_list.cnf) and no build-prefix path; the make variables with spaces reach the compiler intact (and MSYS2's converter leaves a -D...=\"C:/...\" value alone: SIMPLE_WINDOWS_PATH, msys2_path_conv.cc); only running bin/openssl is impossible here"
+    - "Cross replay 2026-10-15, Windows package-static.sh (shims: objdump/nm/strings → MinGW binutils, cygpath, zip/unzip via Python; CMAKE_TOOLCHAIN_FILE in the environment, BUILD_TESTING off): FOUND — hem-tool.exe failed to link (libcrypto.a: WspiapiGetAddrInfo, CertOpenStore ... unresolved): curl's package config looks up OpenSSL inside find_package(CURL), before CMakeLists.txt set OPENSSL_USE_STATIC_LIBS, so FindOpenSSL's targets lacked ws2_32 + crypt32 (Linux unaffected: FindOpenSSL adds threads + dl for any .a). FIXED in 54ae1bf (the switch set with EHEM_DEPS_LINK=static, before the curl lookup). Then: hem-tool.exe imports advapi32, bcrypt, crypt32, kernel32, user32, ws2_32 + msvcrt.dll (the cross CRT — the script's allowlist rightly rejects it; UCRT64 links the Universal CRT); no wolfSSL symbol or string; compiled-in directories the admin-only ones. package-lib.sh static: staged, .pc rewritten, archives without wolfSSL, zipped; its gate configured and built both static consumers ('pkg-config --static closure'), importing system DLLs only (+ msvcrt). Not provable here: running anything — the dispatch run is the proof"
+    - "curl's configure-time OpenSSL checks on MinGW (the 'Open at start' note): of curl 8.10.1's seven openssl_check_symbol_exists results only HAVE_SSL_SET0_WBIO and HAVE_OPENSSL_SRP differ from Linux (cross replay, both caches compared). Accepted: without SSL_set0_wbio curl calls SSL_set_bio(ssl, bio, bio) — the same single BIO for both directions; TLS-SRP is never used by the SDK"
   notes: |
     Settled at start, 2026-10-15 (the step's "Open at start" item). Today's
     Windows build compiles in OPENSSLDIR = <prefix>/ssl, the runner's
@@ -30,6 +37,17 @@ evidence:
     chat: REQ-TOOL-024 rev 5 (needs-reverify) — with the crypto library
     linked in, the remedy names the OpenSSL configuration. This step
     reworks it, and REQ-TOOL-024 joins its implements.
+    Shape (2026-10-15): package.sh's `static` variant hands over to the new
+    package-static.sh (the hem-tool) and package-lib.sh `static` (the
+    library package), so the dynamic path — REQ-BUILD-005's scripts and
+    assertions — stays as it was (package-lib.sh's shared branch is the 110
+    code, re-proven locally). Jobs: each job builds both prefixes and both
+    variants, one after the other (a 2×2 matrix would rebuild the shared
+    caches per leg; the static steps add one Release build each). Linux keeps
+    its distribution configuration, but its compiled-in engines and modules
+    directories also leave <prefix> (root-owned /usr/lib/...): a provider
+    named in a root-owned openssl.cnf could otherwise be looked up under
+    the runner's /home/runner/work/... tree.
 reopened: []
 cancelled: null
 ---
@@ -125,9 +143,14 @@ targets only. Effect: `HAVE_SSL_SET0_WBIO` off (curl uses the equivalent
 - [ ] `release.yml` builds every asset of the REQ-BUILD-009 table on a
       `workflow_dispatch` run; `SHA256SUMS` covers all; publishing job
       unchanged in shape and within the runner budget (times recorded).
-- [ ] README "Download" asset table + guidance; `docs/RELEASING.md`
+- [x] README "Download" asset table + guidance; `docs/RELEASING.md`
       variants, prefixes and attended per-variant smoke; `implements:
       REQ-BUILD-009` tags; `./dev ci` green.
+      (54ae1bf: README "Download" with seven asset rows and "Which one do I
+      want?"; RELEASING "Variants", the rc check of twelve assets, the
+      per-variant attended smoke, and the OpenSSL build choices to keep
+      on a bump; package-static.sh carries the tag; ./dev ci 56/56 on both
+      backends, 2026-10-15.)
 - [ ] OpenSSL configuration (REQ-BUILD-009 rev 4): the Windows OpenSSL is
       built with `no-autoload-config` and curl with
       `CURL_DISABLE_OPENSSL_AUTO_LOAD_CONFIG` (asserted in `build-deps.sh`);
