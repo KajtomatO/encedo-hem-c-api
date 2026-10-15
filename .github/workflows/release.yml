@@ -1,7 +1,9 @@
 # Release — hem-tool binaries for Linux and Windows that link libcurl STATICALLY
 # and wolfSSL DYNAMICALLY, plus the shared wolfSSL as its own asset
-# (REQ-BUILD-005), and the SDK library package — the shared library, wolfSSL
-# flavour (REQ-BUILD-009). implements: REQ-BUILD-005, REQ-BUILD-009
+# (REQ-BUILD-005), the SDK library package — the shared library, wolfSSL
+# flavour — and the -static variants on OpenSSL: a one-file hem-tool and the
+# static SDK library package (REQ-BUILD-009).
+# implements: REQ-BUILD-005, REQ-BUILD-009
 #
 # Every push to `main` (and a manual run on any ref) builds the archives and
 # uploads them as workflow artifacts; a version tag `v*` additionally publishes
@@ -24,10 +26,15 @@
 # package-lib.sh builds the shared library alone, packages it and builds + runs
 # the REQ-BUILD-008 sample consumer against the unpacked package and the
 # companion asset (find_package + pkg-config). Each job also builds the second,
-# all-static prefix deps-openssl (pinned OpenSSL 3.5 LTS + libcurl on OpenSSL)
-# for the -static variants, cached on its own key.
-# The Linux job also proves the REQ-NET-005 expired-certificate classifier under
-# the wolfSSL backend against local expired and not-yet-valid endpoints
+# all-static prefix deps-openssl (pinned OpenSSL 3.5 LTS + libcurl on OpenSSL),
+# cached on its own key, and from it the -static variants (package.sh … static
+# → package-static.sh): hem-tool with every third-party library linked in — the
+# unit suite on that build, glibc / Windows system DLLs only, no wolfSSL symbol
+# or name, --version reporting the pinned OpenSSL, the OpenSSL configuration
+# check (Windows reads none, Linux /etc/ssl) — and the static SDK package, whose
+# consumer links the all-static pkg-config closure (package-lib.sh static).
+# The Linux job also proves the REQ-NET-005 expired-certificate classifier
+# against local expired and not-yet-valid endpoints under both TLS backends
 # (scripts/release/check-expired-classifier.sh).
 # ci.yml (REQ-BUILD-002) is untouched by this workflow.
 
@@ -81,6 +88,14 @@ jobs:
 
       - name: Prove the expired-certificate classifier (wolfSSL backend)
         run: scripts/release/check-expired-classifier.sh build-release/hem-tool 8443
+
+      - name: Build, test, package the -static variants (hem-tool, SDK library; OpenSSL), smoke-test
+        env:
+          RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+        run: scripts/release/package.sh deps-openssl linux dist static
+
+      - name: Prove the expired-certificate classifier (-static, OpenSSL backend)
+        run: scripts/release/check-expired-classifier.sh build-release-static/hem-tool 8445
 
       - uses: actions/upload-artifact@v6
         with:
@@ -142,6 +157,11 @@ jobs:
         env:
           RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
         run: scripts/release/package.sh deps windows dist
+
+      - name: Build, test, package the -static variants (hem-tool, SDK library; OpenSSL), smoke-test
+        env:
+          RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+        run: scripts/release/package.sh deps-openssl windows dist static
 
       - uses: actions/upload-artifact@v6
         with:

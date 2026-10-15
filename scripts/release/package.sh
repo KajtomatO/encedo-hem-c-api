@@ -9,21 +9,26 @@
 #
 # implements: REQ-BUILD-005, REQ-TOOL-026 (Windows: hem-tool delay-loads
 #             libwolfssl.dll — asserted here and smoke-tested without the DLL),
-#             REQ-BUILD-009 (the library package, through package-lib.sh)
+#             REQ-BUILD-009 (the library package, through package-lib.sh; the
+#             -static variants, through package-static.sh)
 #
-#   scripts/release/package.sh <prefix> <linux|windows> [dist-dir]
+#   scripts/release/package.sh <prefix> <linux|windows> [dist-dir] [dynamic|static]
 #
-# Output in <dist>: hem-tool-<version>[+g<sha>]-<os>-x86_64.{tar.gz|zip},
+# Output in <dist>, `dynamic` (the default; <prefix> from build-deps.sh
+# wolfssl): hem-tool-<version>[+g<sha>]-<os>-x86_64.{tar.gz|zip},
 # wolfssl-<wv>-<os>-x86_64.{tar.gz|zip} (+ wolfssl-<wv>-stable-src.tar.gz on
-# Linux), encedo-hem-<version>[+g<sha>]-<os>-x86_64.{tar.gz|zip} and SHA256SUMS
-# over all of them. On a tag build (RELEASE_TAG=v…) the
+# Linux) and encedo-hem-<version>[+g<sha>]-<os>-x86_64.{tar.gz|zip}; `static`
+# (<prefix> from build-deps.sh openssl): the same two names with a -static
+# suffix (package-static.sh). Either run then writes SHA256SUMS over every
+# archive in <dist>. On a tag build (RELEASE_TAG=v…) the
 # tag must be v<project version> or v<project version>-rc<N> (a pre-release) —
 # anything else fails here, before publishing.
 set -euo pipefail
 
-PREFIX="$(cd "${1:?usage: package.sh <prefix> <linux|windows> [dist]}" && pwd)"
+PREFIX="$(cd "${1:?usage: package.sh <prefix> <linux|windows> [dist] [dynamic|static]}" && pwd)"
 OS="${2:?linux|windows}"
 DIST="${3:-dist}"
+VARIANT="${4:-dynamic}"
 BUILD="${BUILD_DIR:-build-release}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
@@ -46,6 +51,24 @@ else
   SRC_REF="commit ${SHA}"
 fi
 NAME="hem-tool-${LABEL}-${OS}-x86_64"
+
+write_sums() {
+  ( cd "$DIST" && find . -maxdepth 1 \( -name '*.tar.gz' -o -name '*.zip' \) -printf '%f\n' \
+      | sort | xargs -r sha256sum > SHA256SUMS )
+  echo "SHA256SUMS:"; sed 's/^/  /' "$DIST/SHA256SUMS"
+}
+
+case "$VARIANT" in
+  dynamic) ;;
+  static)
+    # The -static variants (REQ-BUILD-009): OpenSSL and libcurl from the
+    # deps-openssl prefix, linked in — hem-tool and the SDK library package.
+    "$ROOT/scripts/release/package-static.sh" "$PREFIX" "$OS" "$DIST" "$LABEL" "$SRC_REF"
+    write_sums
+    exit 0
+    ;;
+  *) echo "package.sh: unknown variant '$VARIANT' (dynamic|static)"; exit 1 ;;
+esac
 
 # --- the prefix: shared wolfSSL + static libcurl from build-deps.sh ----------
 export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
@@ -269,6 +292,4 @@ echo "drop-in OK: $ARCHIVE + $WNAME.$EXT"
 # --- the SDK library package: the shared library, wolfSSL flavour ------------
 "$ROOT/scripts/release/package-lib.sh" "$PREFIX" "$OS" "$DIST" "$LABEL" "$SRC_REF"
 
-( cd "$DIST" && find . -maxdepth 1 \( -name '*.tar.gz' -o -name '*.zip' \) -printf '%f\n' \
-    | sort | xargs -r sha256sum > SHA256SUMS )
-echo "SHA256SUMS:"; sed 's/^/  /' "$DIST/SHA256SUMS"
+write_sums

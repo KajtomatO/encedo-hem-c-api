@@ -1,10 +1,28 @@
 # Releasing hem-tool
 
-How to cut a release of `hem-tool` and its wolfSSL companion asset. The
-rules behind it are REQ-BUILD-005 (`requirements/`); the machinery is
-`.github/workflows/release.yml` and `scripts/release/`. What a release
-contains and how users install it is in the README, section "Download
-hem-tool".
+How to cut a release of `hem-tool`, its wolfSSL companion asset and the SDK
+library packages. The rules behind it are REQ-BUILD-005 and REQ-BUILD-009
+(`requirements/`); the machinery is `.github/workflows/release.yml` and
+`scripts/release/`. What a release contains and how users install it is in
+the README, section "Download".
+
+## Variants
+
+Each release job (Linux, Windows) builds two dependency prefixes (see
+"Changing the pinned dependencies") and from them two variants:
+
+| Variant | Script | Prefix | Assets |
+|---|---|---|---|
+| dynamic | `package.sh <deps> <os> dist` | `deps` (wolfSSL shared, libcurl static) | `hem-tool-<label>-<os>-x86_64`, `wolfssl-<wv>-<os>-x86_64` (+ the wolfSSL source on Linux), `encedo-hem-<label>-<os>-x86_64` (`package-wolfssl.sh`, `package-lib.sh`) |
+| static | `package.sh <deps-openssl> <os> dist static` | `deps-openssl` (OpenSSL + libcurl, both static) | `hem-tool-<label>-<os>-x86_64-static`, `encedo-hem-<label>-<os>-x86_64-static` (`package-static.sh`, `package-lib.sh static`) |
+
+Both write into the same `dist/`, and each run rewrites `SHA256SUMS` over
+every archive there. `-static` means OpenSSL backend and every third-party
+library linked in; no `-static` asset contains wolfSSL, and `package-static.sh`
+checks that by symbol and by string. The `-static` hem-tool on Windows reads
+no OpenSSL configuration, and the job proves it with an `OPENSSL_CONF` that
+would leave OpenSSL without algorithms; on Linux it reads
+`/etc/ssl/openssl.cnf`, and the same file there is the control (exit 12).
 
 ## What triggers what
 
@@ -67,22 +85,32 @@ git push origin v1.1.0-rc5
 ```
 
 Then on GitHub (Actions → Release): wait for the run to finish green, and
-check the pre-release under Releases. It should have six assets: two
-hem-tool archives, two wolfSSL archives, the wolfSSL source tarball and
-`SHA256SUMS`.
+check the pre-release under Releases. From 1.2 it should have twelve assets
+(1.1: six): per platform the hem-tool archive and its `-static` one, the
+SDK library package and its `-static` one, and the wolfSSL archive; the
+wolfSSL source tarball; `SHA256SUMS`.
 
-Test the candidate on both platforms, as a user would:
+Test the candidate on both platforms, as a user would, for every hem-tool
+variant (REQ-BUILD-009 records these runs):
 
-1. Download the hem-tool archive and the matching wolfSSL asset, plus
-   `SHA256SUMS`.
+1. Download the archives, plus `SHA256SUMS`.
 2. Verify them: `sha256sum -c SHA256SUMS --ignore-missing` (Linux), or
    `CertUtil -hashfile <file> SHA256` compared by hand (Windows).
-3. Unpack both and **put the wolfSSL library next to the binary**
-   (`libwolfssl.so.42` / `libwolfssl.dll`). On Linux, hem-tool otherwise
-   falls back to the system's `libwolfssl.so.42`, which crashes it unless
-   that library was built from the same version and configuration.
-4. Run `hem-tool status` against the device with system trust (no
-   `--cacert` / `--insecure`), then whatever the milestone needs.
+3. **Dynamic hem-tool:** unpack it and the matching wolfSSL asset and
+   **put the wolfSSL library next to the binary** (`libwolfssl.so.42` /
+   `libwolfssl.dll`). Without it, Windows hem-tool reports the missing DLL
+   and exits 12. On Linux the loader reports the missing library, or
+   hem-tool refuses a different system `libwolfssl.so.42` with exit 12.
+   1.1.0 crashed on that Linux library and stopped silently on Windows.
+4. **`-static` hem-tool:** unpack it alone into an empty directory, with
+   no wolfSSL library anywhere near it; `hem-tool --version` must report
+   OpenSSL compiled and loaded, `static`.
+5. Run `hem-tool status` against the device with system trust (no
+   `--cacert` / `--insecure`) with each variant, then whatever the
+   milestone needs.
+
+The library packages are proven by the job itself (the sample consumer is
+built against the unpacked package and run); there is nothing to attend.
 
 A broken candidate is fixed on `development` and replaced with the next rc
 number. Delete the bad pre-release in the GitHub UI (Releases → the
@@ -162,7 +190,16 @@ To bump one:
    `LICENSE.txt` (Apache-2.0 for 3.5.9 — the prefix keeps it as
    `LICENSE.openssl` for the notices); curl's `COPYING`. OpenSSL stays on
    the 3.5 LTS line (REQ-BUILD-009): 3.0 LTS ended on 2026-09-07.
-3. Push. Each prefix's cache is keyed on the script's hash, so the next run
+3. Keep OpenSSL's build choices across a bump (REQ-BUILD-009 rev 4):
+   `no-shared no-module no-tests`; on Windows `no-autoload-config` and
+   libcurl's `CURL_DISABLE_OPENSSL_AUTO_LOAD_CONFIG` (no configuration is
+   read); and the compiled-in directories passed as make variables. On
+   Linux these are `/etc/ssl` plus `/usr/lib/{engines-3,ossl-modules}`; on
+   Windows, under the administrator-only `C:/Program Files/Common
+   Files/SSL`. They never name the build prefix, which on the runner is a
+   path that a user could create on another machine. `build-deps.sh` checks
+   all of them.
+4. Push. Each prefix's cache is keyed on the script's hash, so the next run
    rebuilds both from scratch. The companion asset's name follows the
    wolfSSL version (`wolfssl-<version>-...`). If the SONAME changes, the
    hem-tool README text follows it automatically.

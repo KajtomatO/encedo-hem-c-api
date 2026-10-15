@@ -134,6 +134,11 @@ set(_ehem_saved_suffixes "${CMAKE_FIND_LIBRARY_SUFFIXES}")
 if(EHEM_DEPS_LINK STREQUAL "static")
   set(CMAKE_FIND_LIBRARY_SUFFIXES "${CMAKE_STATIC_LIBRARY_SUFFIX}")
   set(CURL_USE_STATIC_LIBS ON)           # FindCURL module mode (CMake >= 3.28)
+  # Before the libcurl lookup: curl's own package config looks up OpenSSL
+  # first, and FindOpenSSL gives its targets the archives' system libraries
+  # (Windows: ws2_32, crypt32) only when this is set at that lookup — later
+  # lookups reuse those targets.
+  set(OPENSSL_USE_STATIC_LIBS TRUE)
 elseif(EHEM_DEPS_LINK STREQUAL "shared")
   if(WIN32)
     set(CMAKE_FIND_LIBRARY_SUFFIXES "${CMAKE_IMPORT_LIBRARY_SUFFIX}")
@@ -169,10 +174,7 @@ if(EHEM_CRYPTO_BACKEND STREQUAL "wolfssl")
   set(EHEM_CRYPTO_LINK_LIBS PkgConfig::WOLFSSL)
 else()
   # OpenSSL 3: libcrypto only (libssl is libcurl's business) — FindOpenSSL's
-  # imported target OpenSSL::Crypto; static archives on request.
-  if(EHEM_DEPS_LINK STREQUAL "static")
-    set(OPENSSL_USE_STATIC_LIBS TRUE)
-  endif()
+  # imported target OpenSSL::Crypto; static archives on request (set above).
   find_package(OpenSSL 3 REQUIRED COMPONENTS Crypto)
   set(EHEM_CRYPTO_NAME "OpenSSL")
   set(EHEM_CRYPTO_VERSION "${OPENSSL_VERSION}")
@@ -519,6 +521,20 @@ if(NOT TARGET PkgConfig::WOLFSSL)
   set(encedo-hem_NOT_FOUND_MESSAGE "encedo-hem: the static library needs wolfSSL, and pkg-config finds no wolfssl.pc - point PKG_CONFIG_PATH at it")
   return()
 endif()]=])
+elseif(EHEM_BUILD_STATIC AND EHEM_DEPS_LINK STREQUAL "static")
+  # The -static library package (REQ-BUILD-009) bundles libcurl.a, libssl.a and
+  # libcrypto.a: its consumers must find those archives, never a shared copy.
+  set(EHEM_CONFIG_DEPENDENCIES [=[
+# The static library's link interface names libcurl and OpenSSL's libcrypto,
+# both static archives in this build: resolve both, as archives, before
+# importing the targets. OPENSSL_USE_STATIC_LIBS is set for the two lookups
+# (curl's own package config looks up OpenSSL too) and restored afterwards.
+set(_ehem_saved_openssl_static "${OPENSSL_USE_STATIC_LIBS}")
+set(OPENSSL_USE_STATIC_LIBS TRUE)
+find_dependency(CURL)
+find_dependency(OpenSSL 3)
+set(OPENSSL_USE_STATIC_LIBS "${_ehem_saved_openssl_static}")
+unset(_ehem_saved_openssl_static)]=])
 elseif(EHEM_BUILD_STATIC)
   set(EHEM_CONFIG_DEPENDENCIES [=[
 # The static library's link interface names libcurl and OpenSSL's libcrypto:

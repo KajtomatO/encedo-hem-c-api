@@ -8,8 +8,6 @@
 
 #include <string.h>
 
-#include "ehem/ehem.h"
-
 /* The <os> part of the release's companion asset name
  * (wolfssl-<version>-<os>-x86_64, REQ-BUILD-005). */
 #ifdef _WIN32
@@ -37,31 +35,53 @@ int hem_tool_global_init(FILE *err)
 
     /* The refusal carries no context detail (there is no context yet); the
      * versions come from the build information, which works after a refused
-     * init (REQ-API-011). Equal versions = the struct self-test refused a
-     * same-version library built with other options. */
+     * init (REQ-API-011). */
     ehem_build_info_get(&bi);
+    hem_tool_print_refusal(err, &bi);
+    return HEM_TOOL_EXIT_INIT;
+}
+
+void hem_tool_print_refusal(FILE *err, const ehem_build_info *bi)
+{
+    /* Equal versions = the struct self-test refused a same-version library
+     * built with other options. */
     fprintf(err, "error: hem-tool cannot use the %s library it loaded (%s)\n",
-            bi.crypto_backend, ehem_rc_str(rc));
+            bi->crypto_backend, ehem_rc_str(EHEM_ERR_BACKEND_MISMATCH));
     fprintf(err, "  %s: built against %s, loaded %s%s\n",
-            bi.crypto_backend, bi.crypto_version_compiled,
-            bi.crypto_version_loaded,
-            strcmp(bi.crypto_version_compiled, bi.crypto_version_loaded) == 0
+            bi->crypto_backend, bi->crypto_version_compiled,
+            bi->crypto_version_loaded,
+            strcmp(bi->crypto_version_compiled, bi->crypto_version_loaded) == 0
                 ? " - same version, incompatible build" : "");
-    if (strcmp(bi.crypto_backend, "wolfSSL") == 0) {
+    if (strcmp(bi->crypto_link, "static") == 0) {
+        /* Linked in, so no other library is involved: OpenSSL's configuration
+         * (read on Linux) can leave it without the algorithms the self-test
+         * needs; another backend linked in is a broken build. */
+        if (strcmp(bi->crypto_backend, "OpenSSL") == 0) {
+            fputs("  remedy: OpenSSL is linked into hem-tool, so the OpenSSL "
+                  "configuration it\n"
+                  "          read (OPENSSL_CONF or openssl.cnf) left it without "
+                  "the algorithms\n"
+                  "          it needs - fix or unset it\n", err);
+        } else {
+            fprintf(err, "  remedy: %s is linked into hem-tool, so no other "
+                         "library is involved -\n"
+                         "          this hem-tool build is broken\n",
+                    bi->crypto_backend);
+        }
+    } else if (strcmp(bi->crypto_backend, "wolfSSL") == 0) {
         fprintf(err, "  remedy: put the wolfSSL library from the release asset "
                      "wolfssl-%s-%s-x86_64\n"
                      "          next to hem-tool, or use the -static hem-tool "
                      "(1.2.0 and later),\n"
                      "          which needs no separate crypto library\n",
-                bi.crypto_version_compiled, HEM_RELEASE_OS);
+                bi->crypto_version_compiled, HEM_RELEASE_OS);
     } else {
         fprintf(err, "  remedy: install the %s %s library hem-tool was built "
                      "against, or use the\n"
                      "          -static hem-tool (1.2.0 and later), which needs "
                      "no separate crypto library\n",
-                bi.crypto_backend, bi.crypto_version_compiled);
+                bi->crypto_backend, bi->crypto_version_compiled);
     }
-    return HEM_TOOL_EXIT_INIT;
 }
 
 void hem_tool_print_version(FILE *out)

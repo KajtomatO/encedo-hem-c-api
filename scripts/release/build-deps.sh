@@ -54,10 +54,11 @@ OPENSSL_VERSION="${OPENSSL_VERSION:-3.5.9}"     # pinned — bump deliberately, 
 OPENSSL_SHA256="${OPENSSL_SHA256:-603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a}"
 WORK="${WORK:-$PREFIX-src}"
 # The recipe number changes whenever a cached prefix must not survive a recipe
-# change (wolfssl r2: the Windows delay-load import library, REQ-TOOL-026).
+# change (wolfssl r2: the Windows delay-load import library, REQ-TOOL-026;
+# openssl r2: no OpenSSL configuration on Windows, REQ-BUILD-009 rev 4).
 case "$FLAVOUR" in
   wolfssl) STAMP="wolfssl-${WOLFSSL_VERSION}-shared+curl-${CURL_VERSION}-static+r2" ;;
-  openssl) STAMP="openssl-${OPENSSL_VERSION}-static+curl-${CURL_VERSION}-static+r1" ;;
+  openssl) STAMP="openssl-${OPENSSL_VERSION}-static+curl-${CURL_VERSION}-static+r2" ;;
   *) echo "build-deps.sh: unknown flavour '$FLAVOUR' (wolfssl|openssl)"; exit 1 ;;
 esac
 
@@ -167,9 +168,20 @@ else
   # libdir=lib everywhere (OpenSSL would pick lib64 on x86_64 Linux). The
   # OpenSSL directory is where the library looks for its configuration and
   # default certificates: /etc/ssl on Linux (Debian's certs/, other distros'
-  # cert.pem); on Windows the transport loads the native store
-  # (CURLSSLOPT_NATIVE_CA) and OpenSSL's default stays. Built with the
-  # official Configure + make (perl): OpenSSL has no CMake build.
+  # cert.pem; the distribution's openssl.cnf, root-owned). Windows (REQ-BUILD-009
+  # rev 4, user decision 2026-10-15): NO configuration — no-autoload-config here
+  # and CURL_DISABLE_OPENSSL_AUTO_LOAD_CONFIG in libcurl below, so neither
+  # openssl.cnf nor OPENSSL_CONF is read; the transport loads the native
+  # certificate store (CURLSSLOPT_NATIVE_CA). The compiled-in directories still
+  # move off <prefix> — the runner's D:/a/... path, which a standard user could
+  # create on another machine — to the administrator-only Common Files\SSL
+  # (where OpenSSL's own Windows builds look), for whatever still asks for them
+  # explicitly; given as make variables, which the compiler flags expand, as
+  # the Windows form of the path is no path to MSYS2's perl. On Linux the
+  # engines and modules directories (named by a configuration that loads a
+  # provider by name) likewise leave <prefix> for root-owned ones. install_dev
+  # + install_runtime = install_sw without creating those (empty) directories.
+  # Built with the official Configure + make (perl): OpenSSL has no CMake build.
   cd "$WORK"
   OPENSSL_SRC="openssl-${OPENSSL_VERSION}.tar.gz"
   fetch "https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/${OPENSSL_SRC}" \
@@ -177,9 +189,17 @@ else
   rm -rf "openssl-${OPENSSL_VERSION}"
   tar xzf "$OPENSSL_SRC"
   case "$(uname -s)" in
-    Linux*) OPENSSL_ARGS=(linux-x86_64 --openssldir=/etc/ssl) ;;
-    *)      OPENSSL_ARGS=(mingw64) ;;
+    Linux*)
+      OPENSSL_ARGS=(linux-x86_64 --openssldir=/etc/ssl)
+      SSL_DIRS=(/etc/ssl /usr/lib/engines-3 /usr/lib/ossl-modules)
+      ;;
+    *)
+      OPENSSL_ARGS=(mingw64 no-autoload-config)
+      WIN_SSLDIR="C:/Program Files/Common Files/SSL"
+      SSL_DIRS=("$WIN_SSLDIR" "$WIN_SSLDIR/engines-3" "$WIN_SSLDIR/ossl-modules")
+      ;;
   esac
+  OPENSSL_DIRS=("OPENSSLDIR=${SSL_DIRS[0]}" "ENGINESDIR=${SSL_DIRS[1]}" "MODULESDIR=${SSL_DIRS[2]}")
   OPENSSL_ARGS+=(no-shared no-module no-tests --prefix="$PREFIX" --libdir=lib)
   {
     echo "# OpenSSL ${OPENSSL_VERSION} built by scripts/release/build-deps.sh on $(uname -sm)"
@@ -187,10 +207,13 @@ else
     [ -z "${MSYSTEM:-}" ] || echo "# MSYS2 environment: ${MSYSTEM}"
     printf '%q ' ./Configure "${OPENSSL_ARGS[@]}"
     echo
+    printf '%q ' make "${OPENSSL_DIRS[@]}"
+    echo
   } > "$PREFIX/openssl-build-config.txt"
   ( cd "openssl-${OPENSSL_VERSION}" && ./Configure "${OPENSSL_ARGS[@]}" ) \
     > configure-openssl.log 2>&1 || { tail -40 configure-openssl.log; exit 1; }
-  ( cd "openssl-${OPENSSL_VERSION}" && make -j"$(nproc)" && make install_sw ) \
+  ( cd "openssl-${OPENSSL_VERSION}" && make -j"$(nproc)" "${OPENSSL_DIRS[@]}" \
+      && make "${OPENSSL_DIRS[@]}" install_dev install_runtime ) \
     > make-openssl.log 2>&1 || { tail -40 make-openssl.log; exit 1; }
   cp "openssl-${OPENSSL_VERSION}/LICENSE.txt" "$PREFIX/LICENSE.openssl"
 fi
@@ -224,6 +247,12 @@ else
   # OpenSSL's archives from this prefix — never a system OpenSSL.
   TLS_OPTS=(-DCURL_USE_OPENSSL=ON -DCURL_USE_WOLFSSL=OFF -DOPENSSL_ROOT_DIR="$PREFIX"
             -DOPENSSL_USE_STATIC_LIBS=ON)
+  case "$(uname -s)" in
+    Linux*) ;;
+    # libcurl asks OpenSSL for its configuration explicitly unless told not
+    # to — no-autoload-config alone leaves that request (REQ-BUILD-009 rev 4).
+    *) TLS_OPTS+=(-DCURL_DISABLE_OPENSSL_AUTO_LOAD_CONFIG=ON) ;;
+  esac
 fi
 cmake -S "curl-${CURL_VERSION}" -B curl-build "${GEN[@]}" \
   -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PREFIX" \
@@ -277,5 +306,21 @@ else
   fi
   grep -q -E -- '-lssl|-lcrypto|openssl|libssl' "$PREFIX/lib/pkgconfig/libcurl.pc" \
     || { echo "libcurl is not built on OpenSSL"; exit 1; }
-  "$PREFIX/bin/openssl" version
+  # The directories the library carries, from its own report: the chosen ones,
+  # never <prefix> (REQ-BUILD-009 rev 4).
+  "$PREFIX/bin/openssl" version -v -d -e -m
+  DIRS_SEEN="$("$PREFIX/bin/openssl" version -d -e -m | tr -d '\r')"
+  DIRS_WANT="$(printf 'OPENSSLDIR: "%s"\nENGINESDIR: "%s"\nMODULESDIR: "%s"' "${SSL_DIRS[@]}")"
+  [ "$DIRS_SEEN" = "$DIRS_WANT" ] \
+    || { printf 'OpenSSL carries other directories than chosen:\n%s\n' "$DIRS_SEEN"; exit 1; }
+  case "$(uname -s)" in
+    Linux*) ;;
+    *)
+      # No configuration on Windows: neither OpenSSL nor libcurl loads one.
+      grep -q '^# *define OPENSSL_NO_AUTOLOAD_CONFIG' "$PREFIX/include/openssl/configuration.h" \
+        || { echo "OpenSSL is not built with no-autoload-config"; exit 1; }
+      grep -q '^#define CURL_DISABLE_OPENSSL_AUTO_LOAD_CONFIG 1' "$WORK/curl-build/lib/curl_config.h" \
+        || { echo "libcurl is not built with CURL_DISABLE_OPENSSL_AUTO_LOAD_CONFIG"; exit 1; }
+      ;;
+  esac
 fi
