@@ -3,7 +3,7 @@ id: REQ-BUILD-009
 title: Release matrix — static hem-tool and SDK library packages (wolfSSL and OpenSSL flavours) beside the M10 hem-tool release
 status: approved
 priority: should
-revision: 2   # 2026-10-14 (STEP-M12-110, §6.2 approved in chat): the wolfSSL library package is shared-only (user decision); its smoke criterion follows; the OPEN criterion resolved (the Windows import library moot; the OpenSSL 3.5.9 pin)
+revision: 3   # 2026-10-15 (STEP-M12-110 done): the wolfSSL-flavour evidence recorded under the library-package and REQ-BUILD-005 criteria (both stay open for STEP-M12-120 / 130). No meaning change. Rev 2 = 2026-10-14 (STEP-M12-110, §6.2 approved in chat): the wolfSSL library package is shared-only (user decision); its smoke criterion follows; the OPEN criterion resolved (the Windows import library moot; the OpenSSL 3.5.9 pin)
 source: user decisions 2026-10-12 (M12 planning: one milestone, one release 1.2.0; static variants ship on OpenSSL, never wolfSSL; today's hem-tool asset name stays and new variants get a suffix; the full-dynamic hem-tool is dropped; `release.yml` builds the published variants, `ci.yml` exercises the switches and both backends; macOS and MSVC out); user decision 2026-10-14 (STEP-M12-110: "I dont want any distribution with static wolfssl, static distribution should only openssl" — the wolfSSL library package carries no static library; §6.2 report approved the same day); ARCHITECTURE.md §1, §11 M12 part C, §12 risk 1; REQ-BUILD-005 (the hem-tool release this extends — unchanged); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-BUILD-005", "REQ-BUILD-006", "REQ-BUILD-007", "REQ-BUILD-008", "REQ-API-010", "REQ-TOOL-026"]
 supersedes: null
@@ -84,6 +84,23 @@ GPL-licensed library stays a separately obtained download.
       its shared library, run with the companion asset's library and
       nothing else non-system; the OpenSSL flavour against its static
       library (job log).
+      *(wolfSSL flavour, 2026-10-15, STEP-M12-110 — release run
+      38719457329 (workflow_dispatch on `development`, 46be9d3), both jobs
+      green: `scripts/release/package-lib.sh` builds the shared library
+      alone, packages `encedo-hem-<label>-<os>-x86_64` and runs the
+      REQ-BUILD-008 gate in package mode against the unpacked package with
+      the companion asset's library put into it (Linux `lib/`, Windows
+      `bin/`), `PKG_CONFIG_LIBDIR` = the package, no `LD_LIBRARY_PATH`; it
+      fails the job unless the package holds no static library and no
+      hem-tool, the library imports the companion wolfSSL and no libcurl /
+      OpenSSL / MinGW runtime (Linux: RUNPATH `$ORIGIN`; Windows: the
+      Universal CRT, no msvcrt), and each consumer resolves libencedo-hem
+      and wolfSSL from the package and nothing else outside the system
+      (Linux `ldd`; Windows: the import table, the package's `bin/` first
+      on PATH). The job logs need a signed-in reader — the run's
+      conclusions are the record. The artifacts grew by the package:
+      Linux 24,720,005 → 25,129,032 bytes, Windows 1,274,926 → 1,706,552
+      (against run 38483282667). The OpenSSL flavour: STEP-M12-120.)*
 - [ ] Tag path: an annotated `v1.2.0-rc<N>` publishes a pre-release
       carrying every asset (count recorded) with the annotation +
       checksums as text; `SHA256SUMS` re-verified in the job.
@@ -94,6 +111,13 @@ GPL-licensed library stays a separately obtained download.
 - [ ] REQ-BUILD-005 unchanged in behaviour: the dynamic hem-tool archive,
       the companion assets and the source tarball are byte-for-byte the
       same kind of output as 1.1.0 (same scripts, same assertions).
+      *(Through STEP-M12-110, 2026-10-15: `package.sh` gained only the
+      `package-lib.sh` call before SHA256SUMS, `package-wolfssl.sh` is
+      unchanged, and `build-deps.sh`'s wolfSSL and libcurl options are the
+      1.1.0 ones — the Windows link only now writes the delay-load `.def`
+      at a path the linker can open (46be9d3). Release run 38719457329 ran
+      every REQ-BUILD-005 assertion green on both platforms, the Windows
+      no-DLL smoke (exit 12) included. Rechecked after STEP-M12-120.)*
 - [x] RESOLVED at STEP-M12-110 (2026-10-14) — was OPEN: whether the
       wolfSSL companion asset on Windows must gain `libwolfssl.dll.a` so
       the wolfSSL-flavour static SDK can be linked by a consumer, or

@@ -755,6 +755,17 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   a crypto library header), the header gate covers OpenSSL, `./dev test it`
   is 23/23 on OpenSSL, and ci.yml's OpenSSL legs are green on Linux and
   Windows (run 38482938701), the consumer gate included.
+  **STEP-M12-110 done 2026-10-15** — REQ-BUILD-009's wolfSSL library
+  package: `encedo-hem-<label>-<os>-x86_64` is the shared library only (user
+  decision 2026-10-14: no static library ships with wolfSSL). Both release
+  jobs build and package it and run the consumer gate against it plus the
+  companion asset (run 38719457329). `encedo-hem.pc` names
+  `Requires.private` only with the static library (REQ-BUILD-008 rev 5,
+  re-verified on every CI leg). `build-deps.sh` builds the all-static
+  `deps-openssl` prefix (OpenSSL 3.5.9 + libcurl) on both platforms for
+  STEP-M12-120. The first dispatch found that the Windows wolfSSL `.def`
+  had never been written by the link: MSYS2 left its path unconverted, and
+  a `gendef` fallback hid that until MSYS2 dropped `gendef`. Fixed.
   Names settled: error code `EHEM_ERR_BACKEND_MISMATCH`; API
   `ehem_build_info_get`; options `EHEM_BUILD_SHARED` / `EHEM_BUILD_STATIC`
   / `EHEM_TOOL_LINK` / `EHEM_DEPS_LINK` / `EHEM_CRYPTO_BACKEND`; asset

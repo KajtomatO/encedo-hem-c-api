@@ -3,7 +3,7 @@ id: REQ-TOOL-026
 title: hem-tool on Windows reports a missing libwolfssl.dll itself (delay-load import) instead of failing before main
 status: implemented
 priority: should
-revision: 3   # 2026-10-13 (STEP-M12-100 done): the release-job criteria ticked and the OPEN criterion closed by release run 38407235207 (Windows job); rev 2 = --version without the DLL settled (tolerant hook, 'not found'), cross-build evidence. No meaning change — status set by the §4.3 regeneration
+revision: 4   # 2026-10-15 (STEP-M12-110 done): record only — the release .def came from gendef until 46be9d3, now from the link alone; re-proven by release run 38719457329. No meaning change. Rev 3 = 2026-10-13 (STEP-M12-100 done): the release-job criteria ticked and the OPEN criterion closed by release run 38407235207 (Windows job); rev 2 = --version without the DLL settled (tolerant hook, 'not found'), cross-build evidence. No meaning change — status set by the §4.3 regeneration
 source: user decision 2026-10-10 (BACKLOG item 5, from the first Windows test of the release binary — Windows refuses to start hem-tool.exe without libwolfssl.dll, exit -1073741515 / 0xC0000135, often with no message); moved into M12 by user decision 2026-10-12 (ARCHITECTURE.md §11 M12 part A: "the MinGW mechanism is proven at decomposition"); mechanism proven to link 2026-10-12 with the Debian x86_64-w64-mingw32 toolchain (GCC 13): `dlltool --output-delaylib` + mingw-w64 `libdelayimp.a` / `delayimp.h` (`__pfnDliFailureHook2`, `dliFailLoadLib`) — the PoC exe's static import table lists system DLLs only; run-time proof pending the Windows release job (no wine on the dev host); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-BUILD-005", "REQ-TOOL-024"]
 supersedes: null
@@ -83,6 +83,16 @@ executable or launcher is needed.
       positive smoke (the DLL beside the exe → `--version` reports 5.7.2
       loaded). The same run's Linux job failed on an unrelated STEP-M12-050
       test (cmocka 1.1.5 under GCC 11) — fixed 4f697cd.)*
+      *(Record, 2026-10-15 (STEP-M12-110): release run 38705623978 showed
+      that the `-Wl,--output-def` path had never reached the native linker
+      in Windows form (MSYS2 converts no argument with a space before its
+      first slash), so every Windows build until then — run 38407235207's
+      included — took its `.def` from `gendef`, the mechanism's other
+      route, until MSYS2 dropped `gendef` from its toolchain group
+      (2026-10-14) and the rebuild failed. Since 46be9d3 the link alone
+      writes the `.def`, and build-deps.sh fails without it. Release run
+      38719457329 rebuilt the prefix that way, and the delay-import
+      assertion and both smokes passed again.)*
 - [x] `hem-tool help` / `--version` / `keys types` run without the DLL
       present (same negative smoke).
       *(Same job: `help` and `keys types` exit 0 without the DLL, and

@@ -1,9 +1,9 @@
 ---
 id: REQ-BUILD-008
 title: Installed consumer interface — CMake package config and pkg-config file that resolve the selected backend's dependencies
-status: needs-reverify
+status: verified
 priority: must
-revision: 5   # 2026-10-14 (§6.2 approved in chat, STEP-M12-110): a shared-only install's encedo-hem.pc lists no Requires.private — reworked in STEP-M12-110, needs-reverify until its CI runs. Rev 4 = 2026-10-14 (STEP-M12-090 done): criteria 1 and 2 ticked — the OpenSSL install contents and the OpenSSL CI legs recorded. No meaning change. Rev 3 = 2026-10-14 (STEP-M12-070 done): the wolfSSL CI evidence recorded under criteria 2 and 3; criterion 3 ticked (backend-independent). Rev 2 = 2026-10-13 (STEP-M12-070): wolfSSL-backend evidence recorded under each criterion; the REQ-API-008 / ARCHITECTURE criterion ticked (applied at the decomposition)
+revision: 6   # 2026-10-15 (STEP-M12-110 done): re-verified — the rev 5 rework green on every CI leg (runs 38705546185, 38719294563) and in both release jobs' package smoke (run 38719457329); evidence recorded under criteria 1 and 2. No meaning change. Rev 5 = 2026-10-14 (§6.2 approved in chat, STEP-M12-110): a shared-only install's encedo-hem.pc lists no Requires.private — reworked in STEP-M12-110, needs-reverify until its CI runs. Rev 4 = 2026-10-14 (STEP-M12-090 done): criteria 1 and 2 ticked — the OpenSSL install contents and the OpenSSL CI legs recorded. No meaning change. Rev 3 = 2026-10-14 (STEP-M12-070 done): the wolfSSL CI evidence recorded under criteria 2 and 3; criterion 3 ticked (backend-independent). Rev 2 = 2026-10-13 (STEP-M12-070): wolfSSL-backend evidence recorded under each criterion; the REQ-API-008 / ARCHITECTURE criterion ticked (applied at the decomposition)
 source: user decision 2026-10-12 (M12 planning: ship `encedo-hem.pc`); ARCHITECTURE.md §1 (artifact name — "pkg-config `encedo-hem`"), §11 M12 part B ("CMake package config fix": cmake/encedo-hem-config.cmake.in declares only find_dependency(CURL); the static target's crypto link interface cannot resolve in a consumer); REQ-API-008 criterion record "No separate pkg-config .pc file is shipped" (reversed here, §6.2 at the M12 decomposition); finding at the M12 decomposition 2026-10-12: ehem.h already gives static consumers plain declarations — the real gap is that the shared target does not advertise EHEM_USING_SHARED to its consumers (MinGW auto-import hides it); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-BUILD-001", "REQ-BUILD-006", "REQ-BUILD-007", "REQ-API-006"]
 supersedes: null
@@ -86,7 +86,12 @@ autotools-style builds expect a `.pc`.
       gains `find_dependency(CURL)` and `find_dependency(OpenSSL 3)` (its
       comment: set `OPENSSL_USE_STATIC_LIBS` first for OpenSSL's static
       archives); `encedo-hem.pc` says `Requires.private: libcurl
-      libcrypto`, every other line as on wolfSSL.)*
+      libcrypto`, every other line as on wolfSSL. Rev 5 (2026-10-15,
+      STEP-M12-110): a shared-only install's `encedo-hem.pc` carries `# No
+      private requirements: only the shared library is installed, and it
+      links libcurl wolfssl itself.` (`libcurl libcrypto` on OpenSSL) in
+      place of the `Requires.private` line; the gate asserts that line
+      present with the static library and absent without.)*
 - [x] The consumer gate passes on Linux (gcc, clang) and Windows (MSYS2)
       for shared and static targets via find_package AND pkg-config, on
       both backends (CI legs).
@@ -107,7 +112,13 @@ autotools-style builds expect a `.pc`.
       38481505956's two jobs against the REQ-BUILD-005 prefix. OpenSSL,
       2026-10-13: CI run 38482938701 — 'Linux (gcc, OpenSSL)', 'Linux (clang,
       OpenSSL)', 'Windows (MinGW, OpenSSL)'; locally 2026-10-14 gcc, clang
-      and ASan.)*
+      and ASan. Rev 5, 2026-10-15 (STEP-M12-110): CI runs 38705546185
+      (fccf8b2) and 38719294563 (46be9d3) — all 10 legs green, the gate
+      asserting `Requires.private` present in the default and static-only
+      trees and absent in the shared-only ones; release run 38719457329 —
+      the gate's package mode against the unpacked wolfSSL library package
+      and the companion asset, find_package and pkg-config consumers built
+      and run in both jobs (scripts/release/package-lib.sh).)*
 - [x] The installed shared target's `INTERFACE_COMPILE_DEFINITIONS`
       carry `EHEM_USING_SHARED`; the Windows consumer built against the
       DLL shows no auto-import linker note (recorded from the CI log).
