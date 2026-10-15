@@ -60,6 +60,8 @@ build*/
 # release dependency prefix + its source work dir (scripts/release/build-deps.sh)
 deps/
 deps-src/
+deps-openssl/
+deps-openssl-src/
 
 # Local secrets (device credentials)
 hem.env

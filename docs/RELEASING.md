@@ -141,18 +141,34 @@ fix it and publish the next patch version.
 
 ## Changing the pinned dependencies
 
-wolfSSL and libcurl are built from pinned source tarballs. Their versions
-and SHA-256 hashes are at the top of `scripts/release/build-deps.sh`. To
-bump one:
+wolfSSL, OpenSSL and libcurl are built from pinned source tarballs. Their
+versions and SHA-256 hashes are at the top of `scripts/release/build-deps.sh`,
+which builds two prefixes in each release job:
+
+| Prefix | Command | Contents | Used by |
+|---|---|---|---|
+| `deps` | `build-deps.sh deps` | wolfSSL (shared) + libcurl on wolfSSL (static) | hem-tool, the wolfSSL companion asset, the SDK library package (REQ-BUILD-005, REQ-BUILD-009) |
+| `deps-openssl` | `build-deps.sh deps-openssl openssl` | OpenSSL 3.5 LTS + libcurl on OpenSSL, both static | the `-static` variants (REQ-BUILD-009) |
+
+To bump one:
 
 1. Update the version and its sha256. Compute the hash from the official
-   download and check it against the upstream announcement.
-2. For wolfSSL, read the new tarball's `COPYING` / `LICENSING` again. The
-   release states "GPLv2 or later" from the 5.7.2 files (REQ-BUILD-005).
-3. Push. The dependency cache is keyed on the script's hash, so the next
-   run rebuilds from scratch. The companion asset's name follows the
-   version (`wolfssl-<version>-...`). If the SONAME changes, the hem-tool
-   README text follows it automatically.
+   download and check it against the upstream announcement. OpenSSL's
+   release text carries no hash: verify the tarball's `.asc` signature
+   against the keys at openssl-library.org/source (`pubkeys.asc`), in a
+   throwaway keyring.
+2. Read the license again: wolfSSL's `COPYING` / `LICENSING` (the release
+   states "GPLv2 or later" from the 5.7.2 files, REQ-BUILD-005); OpenSSL's
+   `LICENSE.txt` (Apache-2.0 for 3.5.9 — the prefix keeps it as
+   `LICENSE.openssl` for the notices); curl's `COPYING`. OpenSSL stays on
+   the 3.5 LTS line (REQ-BUILD-009): 3.0 LTS ended on 2026-09-07.
+3. Push. Each prefix's cache is keyed on the script's hash, so the next run
+   rebuilds both from scratch. The companion asset's name follows the
+   wolfSSL version (`wolfssl-<version>-...`). If the SONAME changes, the
+   hem-tool README text follows it automatically.
 
 No published package may contain wolfSSL statically linked (ARCHITECTURE.md
-§1, user decision 2026-10-09). `package.sh` asserts that in every build.
+§1, user decision 2026-10-09); `package.sh` asserts that in every build. No
+static library ships with wolfSSL either: the SDK library package carries
+the shared library only (user decision 2026-10-14) — static linking is the
+OpenSSL `-static` package.

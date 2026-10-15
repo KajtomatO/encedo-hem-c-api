@@ -12,6 +12,6 @@ Name: encedo-hem
 Description: Encedo HEM C SDK - the Encedo HEM device REST API in C
 URL: https://github.com/KajtomatO/encedo-hem-c-api
 Version: @PROJECT_VERSION@
-Requires.private: @EHEM_PC_REQUIRES_PRIVATE@
+@EHEM_PC_REQUIRES_PRIVATE_LINE@
 Cflags: -I${includedir}
 Libs: -L${libdir} -lencedo-hem

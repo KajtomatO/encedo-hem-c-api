@@ -4,16 +4,19 @@
 # build-deps.sh (libcurl STATIC, wolfSSL DYNAMIC), run the unit suite on that
 # build, assert the link mode, package hem-tool's archive, package the wolfSSL
 # companion asset (package-wolfssl.sh) and smoke-test the two side by side —
-# exactly as a user unpacks them (REQ-BUILD-005).
+# exactly as a user unpacks them (REQ-BUILD-005); then the SDK library package
+# (package-lib.sh, REQ-BUILD-009).
 #
 # implements: REQ-BUILD-005, REQ-TOOL-026 (Windows: hem-tool delay-loads
-#             libwolfssl.dll — asserted here and smoke-tested without the DLL)
+#             libwolfssl.dll — asserted here and smoke-tested without the DLL),
+#             REQ-BUILD-009 (the library package, through package-lib.sh)
 #
 #   scripts/release/package.sh <prefix> <linux|windows> [dist-dir]
 #
 # Output in <dist>: hem-tool-<version>[+g<sha>]-<os>-x86_64.{tar.gz|zip},
 # wolfssl-<wv>-<os>-x86_64.{tar.gz|zip} (+ wolfssl-<wv>-stable-src.tar.gz on
-# Linux) and SHA256SUMS over all of them. On a tag build (RELEASE_TAG=v…) the
+# Linux), encedo-hem-<version>[+g<sha>]-<os>-x86_64.{tar.gz|zip} and SHA256SUMS
+# over all of them. On a tag build (RELEASE_TAG=v…) the
 # tag must be v<project version> or v<project version>-rc<N> (a pre-release) —
 # anything else fails here, before publishing.
 set -euo pipefail
@@ -262,6 +265,9 @@ else
   env -i "$T/$NAME/hem-tool" help > /dev/null      # $ORIGIN, nothing else
 fi
 echo "drop-in OK: $ARCHIVE + $WNAME.$EXT"
+
+# --- the SDK library package: the shared library, wolfSSL flavour ------------
+"$ROOT/scripts/release/package-lib.sh" "$PREFIX" "$OS" "$DIST" "$LABEL" "$SRC_REF"
 
 ( cd "$DIST" && find . -maxdepth 1 \( -name '*.tar.gz' -o -name '*.zip' \) -printf '%f\n' \
     | sort | xargs -r sha256sum > SHA256SUMS )

@@ -21,11 +21,18 @@
 # EHEM_PREFIX_PATH is the build's CMAKE_PREFIX_PATH with `|` for `;`: the
 # consumer resolves the SDK's dependencies where the build did (the release
 # prefix, for package.sh).
+# -DEHEM_PACKAGE=<dir> instead of -DEHEM_BUILD_DIR checks an UNPACKED package
+# as it is (scripts/release/package-lib.sh's smoke, REQ-BUILD-009): no install
+# step, the same checks, consumers and runs.
 
 cmake_minimum_required(VERSION 3.20)
 
-foreach(_v EHEM_BUILD_DIR EHEM_SCRATCH EHEM_CONSUMER_SRC EHEM_VERSION EHEM_LIBDIR
-           EHEM_GENERATOR EHEM_C_COMPILER)
+set(_required EHEM_SCRATCH EHEM_CONSUMER_SRC EHEM_VERSION EHEM_LIBDIR EHEM_GENERATOR
+              EHEM_C_COMPILER)
+if(NOT EHEM_PACKAGE)
+  list(APPEND _required EHEM_BUILD_DIR)
+endif()
+foreach(_v IN LISTS _required)
   if(NOT DEFINED ${_v} OR "${${_v}}" STREQUAL "")
     message(FATAL_ERROR "check_consumer.cmake: ${_v} not set")
   endif()
@@ -42,7 +49,11 @@ else()
   set(_crypto_pc "libcrypto")
 endif()
 
-set(_prefix "${EHEM_SCRATCH}/prefix")
+if(EHEM_PACKAGE)
+  set(_prefix "${EHEM_PACKAGE}")
+else()
+  set(_prefix "${EHEM_SCRATCH}/prefix")
+endif()
 set(_build "${EHEM_SCRATCH}/build")
 if(CMAKE_HOST_WIN32)
   set(_sep ";")
@@ -90,7 +101,9 @@ endfunction()
 
 # --- install --------------------------------------------------------------
 file(REMOVE_RECURSE "${EHEM_SCRATCH}")
-step("cmake --install" ${CMAKE_COMMAND} --install "${EHEM_BUILD_DIR}" --prefix "${_prefix}")
+if(NOT EHEM_PACKAGE)
+  step("cmake --install" ${CMAKE_COMMAND} --install "${EHEM_BUILD_DIR}" --prefix "${_prefix}")
+endif()
 
 # --- the installed interface files ----------------------------------------
 set(_cmakedir "${_prefix}/${EHEM_LIBDIR}/cmake/encedo-hem")
@@ -130,7 +143,12 @@ endif()
 file(READ "${_pcdir}/encedo-hem.pc" _text)
 expect_in("encedo-hem.pc" "prefix=\${pcfiledir}/")       # relocatable
 expect_in("encedo-hem.pc" "Version: ${EHEM_VERSION}\n")
-expect_in("encedo-hem.pc" "Requires.private: libcurl ${_crypto_pc}\n")
+if(EHEM_STATIC)
+  expect_in("encedo-hem.pc" "Requires.private: libcurl ${_crypto_pc}\n")
+else()
+  # Shared-only: pkg-config resolves Requires.private even for --cflags.
+  expect_not_in("encedo-hem.pc" "Requires.private")
+endif()
 expect_in("encedo-hem.pc" "Cflags: -I\${includedir}\n")
 expect_in("encedo-hem.pc" "Libs: -L\${libdir} -lencedo-hem\n")
 

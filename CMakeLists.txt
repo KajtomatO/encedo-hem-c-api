@@ -547,11 +547,19 @@ install(FILES
 # encedo-hem.pc (REQ-BUILD-008): relocatable — its paths are relative to its own
 # directory (${pcfiledir}) unless an install directory is absolute.
 # Requires.private names the packages `pkg-config --static` adds for the static
-# library; `-lencedo-hem` alone is the shared one wherever it is installed.
+# library; `-lencedo-hem` alone is the shared one wherever it is installed. A
+# shared-only install names none: pkg-config resolves Requires.private even for
+# --cflags, and the shared library links both itself (REQ-BUILD-008 rev 5).
 if(EHEM_CRYPTO_BACKEND STREQUAL "wolfssl")
-  set(EHEM_PC_REQUIRES_PRIVATE "libcurl wolfssl")
+  set(_ehem_pc_private "libcurl wolfssl")
 else()
-  set(EHEM_PC_REQUIRES_PRIVATE "libcurl libcrypto")
+  set(_ehem_pc_private "libcurl libcrypto")
+endif()
+if(EHEM_BUILD_STATIC)
+  set(EHEM_PC_REQUIRES_PRIVATE_LINE "Requires.private: ${_ehem_pc_private}")
+else()
+  set(EHEM_PC_REQUIRES_PRIVATE_LINE
+    "# No private requirements: only the shared library is installed, and it links ${_ehem_pc_private} itself.")
 endif()
 if(IS_ABSOLUTE "${CMAKE_INSTALL_LIBDIR}" OR IS_ABSOLUTE "${CMAKE_INSTALL_INCLUDEDIR}")
   set(EHEM_PC_PREFIX "${CMAKE_INSTALL_PREFIX}")

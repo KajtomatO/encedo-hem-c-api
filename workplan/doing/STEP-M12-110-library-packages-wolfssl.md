@@ -7,8 +7,12 @@ traces:
   architecture: ["ARCHITECTURE.md#1-decisions-fixed", "ARCHITECTURE.md#11-milestones", "ARCHITECTURE.md#12-risks--open-questions"]
 depends_on: ["STEP-M12-070"]
 evidence:
-  commits: ["b604dda"]   # start — the implementation, the dispatch run and the done commit follow
-  tests: []
+  commits: ["b604dda", "c343a28"]   # start; the approved §6.2 decision — the implementation, the dispatch run and the done commit follow
+  tests:
+    - "encedo-hem.pc (REQ-BUILD-008 rev 5; check_consumer.cmake, verifies: REQ-BUILD-008): Requires.private only with the static library — the default and static-only installs keep 'Requires.private: libcurl wolfssl', a shared-only one carries a comment line instead; the gate asserts both ways. Local 2026-10-15: the gate green in the default, shared-only and static-only trees; ./dev ci 56/56 gcc + clang and ./dev ci --openssl 56/56 gcc + clang"
+    - "build-deps.sh openssl → deps-openssl, local Linux 2026-10-15: OpenSSL 3.5.9 (./Configure linux-x86_64 --openssldir=/etc/ssl no-shared no-module no-tests --libdir=lib) + libcurl 8.10.1 on OpenSSL, both static: libssl.a, libcrypto.a (the legacy provider built in), libcurl.a (its .pc requires openssl; it references SSL_CTX_new); no .so, .dll or wolfSSL file; LICENSE.openssl = Apache-2.0; 'openssl version' 3.5.9. The first build, without no-module, installed lib/ossl-modules/legacy.so — found on inspection; the prefix check now refuses any shared object"
+    - "package.sh end to end, local Linux 2026-10-15, against the M10 wolfSSL prefix (wolfSSL 5.7.2, curl 8.10.1): Release unit suite 56/56, hem-tool drop-in OK, then package-lib.sh: encedo-hem-1.1.0+gc343a28-linux-x86_64.tar.gz = include/ehem/*, lib/libencedo-hem.so{,.1,.1.1.0} (RUNPATH $ORIGIN, NEEDED libwolfssl.so.42, no libcurl), lib/cmake/encedo-hem (no find_dependency), lib/pkgconfig/encedo-hem.pc (no Requires.private), LICENSES (MIT, curl, cJSON, BIP39 — no wolfSSL text), README. Smoke against the unpacked package + companion alone (PKG_CONFIG_LIBDIR = the package, no LD_LIBRARY_PATH): check_consumer.cmake package mode green — the find_package and pkg-config shared consumers build and run; ldd: libencedo-hem.so.1 and libwolfssl.so.42 from the package's lib/, glibc otherwise — on a host whose system libwolfssl.so.42 (5.6.6) would mask a wrong lookup. SHA256SUMS lists the four archives and verifies"
+    - "Not provable locally: the Windows package (MinGW, the DLL folded with -static, its import table) and the deps-openssl build in MSYS2 — the release dispatch run is the proof"
   notes: |
     §6.2, approved in chat 2026-10-14: the user decided "I dont want any
     distribution with static wolfssl, static distribution should only
