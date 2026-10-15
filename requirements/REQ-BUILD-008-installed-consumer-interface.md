@@ -1,9 +1,9 @@
 ---
 id: REQ-BUILD-008
 title: Installed consumer interface — CMake package config and pkg-config file that resolve the selected backend's dependencies
-status: verified
+status: needs-reverify
 priority: must
-revision: 4   # 2026-10-14 (STEP-M12-090 done): criteria 1 and 2 ticked — the OpenSSL install contents and the OpenSSL CI legs recorded. No meaning change. Rev 3 = 2026-10-14 (STEP-M12-070 done): the wolfSSL CI evidence recorded under criteria 2 and 3; criterion 3 ticked (backend-independent). Rev 2 = 2026-10-13 (STEP-M12-070): wolfSSL-backend evidence recorded under each criterion; the REQ-API-008 / ARCHITECTURE criterion ticked (applied at the decomposition)
+revision: 5   # 2026-10-14 (§6.2 approved in chat, STEP-M12-110): a shared-only install's encedo-hem.pc lists no Requires.private — reworked in STEP-M12-110, needs-reverify until its CI runs. Rev 4 = 2026-10-14 (STEP-M12-090 done): criteria 1 and 2 ticked — the OpenSSL install contents and the OpenSSL CI legs recorded. No meaning change. Rev 3 = 2026-10-14 (STEP-M12-070 done): the wolfSSL CI evidence recorded under criteria 2 and 3; criterion 3 ticked (backend-independent). Rev 2 = 2026-10-13 (STEP-M12-070): wolfSSL-backend evidence recorded under each criterion; the REQ-API-008 / ARCHITECTURE criterion ticked (applied at the decomposition)
 source: user decision 2026-10-12 (M12 planning: ship `encedo-hem.pc`); ARCHITECTURE.md §1 (artifact name — "pkg-config `encedo-hem`"), §11 M12 part B ("CMake package config fix": cmake/encedo-hem-config.cmake.in declares only find_dependency(CURL); the static target's crypto link interface cannot resolve in a consumer); REQ-API-008 criterion record "No separate pkg-config .pc file is shipped" (reversed here, §6.2 at the M12 decomposition); finding at the M12 decomposition 2026-10-12: ehem.h already gives static consumers plain declarations — the real gap is that the shared target does not advertise EHEM_USING_SHARED to its consumers (MinGW auto-import hides it); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-BUILD-001", "REQ-BUILD-006", "REQ-BUILD-007", "REQ-API-006"]
 supersedes: null
@@ -39,9 +39,12 @@ package itself — a consumer links `encedo-hem::encedo-hem` or
 - **pkg-config:** `encedo-hem.pc` generated and installed to
   `${libdir}/pkgconfig`: `Name: encedo-hem`, `Version` = the project
   version, `Cflags: -I${includedir}`, `Libs: -L${libdir} -lencedo-hem`,
-  `Requires.private: libcurl` + `wolfssl` or `libcrypto` per backend, so
-  `--static` yields a complete static link line. Installed only when a
-  variant that it describes is built.
+  `Requires.private: libcurl` + `wolfssl` or `libcrypto` per backend when
+  the static library is installed, so `--static` yields a complete static
+  link line; a shared-only install lists none — the shared library carries
+  both privately, and pkg-config resolves `Requires.private` even for
+  `--cflags`, so naming them would fail every consumer without their
+  `.pc` files. Installed only when a variant that it describes is built.
 - **Consumer gate:** a CTest (label `unit`, both CI platforms) installs
   the build into a scratch prefix and configures, builds and runs a
   minimal consumer (`ehem_version()` + `ehem_options_init()` + a context
