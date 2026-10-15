@@ -60,6 +60,30 @@ per variant. Prove via `workflow_dispatch` on the branch; the
 results off the dev host (system wolfSSL masks); the MinGW printf rule
 for anything new in the tool.
 
+**Open at start (found at STEP-M12-110, 2026-10-15): OPENSSLDIR on
+Windows.** OpenSSL compiles its configuration directory in as
+`OPENSSLDIR` (unix-Makefile.tmpl: `<prefix>/ssl` without `--openssldir`),
+and `build-deps.sh` passes none on Windows — so the `-static` binary would
+look for `openssl.cnf` under the runner's `D:/a/…/deps-openssl/ssl`, a path
+an unprivileged local user may be able to create on another machine; an
+`openssl.cnf` can load provider DLLs (the CVE-2019-1552 class). Settle it
+here: an administrator-only `--openssldir` (the `CommonProgramFiles\SSL`
+the MSVC builds default to, or `-DOSSL_WINCTX` registry lookup) and/or no
+configuration loading at all, decided with the user if it shapes the
+asset; prove what the binary reads (`openssl version -d` from the same
+prefix, and the `-static` hem-tool behaviour with no such directory).
+Linux: `--openssldir=/etc/ssl` reads the distribution's `openssl.cnf`,
+written for its own OpenSSL — check the static binary when that file names
+modules it lacks.
+Also found (cross replay of the Windows `deps-openssl` build, 2026-10-15):
+curl 8.10.1's configure-time OpenSSL checks fail on MinGW against the
+static OpenSSL — its `openssl_check_symbol_exists` links
+`${OPENSSL_LIBRARIES}` + `ws2_32` + `bcrypt`, but `libcrypto.a` also needs
+`crypt32` (CAPI engine, `winstore`), which FindOpenSSL adds to its imported
+targets only. Effect: `HAVE_SSL_SET0_WBIO` off (curl uses the equivalent
+`SSL_set_bio`) and SRP off (unused); Linux finds both. Fix it in
+`build-deps.sh` or record it as accepted here.
+
 **Definition of done**
 - [ ] `package.sh static` + `package-lib.sh static` produce the two
       `-static` assets on both platforms from `deps-openssl`; notices

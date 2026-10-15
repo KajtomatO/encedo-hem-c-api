@@ -69,7 +69,7 @@ if [ -f "$PREFIX/.stamp" ] && [ "$(cat "$PREFIX/.stamp")" = "$STAMP" ]; then
   echo "deps already built: $STAMP ($PREFIX)"
   exit 0
 fi
-rm -rf "$PREFIX" "$WORK/wolfssl-build" "$WORK/curl-build"
+rm -rf "$PREFIX" "$WORK/wolfssl-build" "$WORK/curl-build" "$WORK/libwolfssl.def"
 mkdir -p "$PREFIX/src"
 
 fetch() {  # fetch <url> <out> <sha256> — downloads unless present; ALWAYS verifies
@@ -117,7 +117,10 @@ if [ "$FLAVOUR" = wolfssl ]; then
       # fold both INTO the DLL so the published asset depends on Windows system
       # DLLs only (both runtimes are permissively licensed). --output-def writes
       # the DLL's export list, the input of the delay-load import library below.
-      WOLFSSL_LDFLAGS=("-DCMAKE_SHARED_LINKER_FLAGS=-static -Wl,--output-def,$WORK/libwolfssl.def")
+      # Its path in the Windows form: MSYS2 converts no argument that has a space
+      # before its first slash, as this one, and the native linker cannot open
+      # /d/a/... — it only notes that and links on, without the .def.
+      WOLFSSL_LDFLAGS=("-DCMAKE_SHARED_LINKER_FLAGS=-static -Wl,--output-def,$(cygpath -m "$WORK/libwolfssl.def")")
       ;;
   esac
   WOLFSSL_ARGS=(-DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PREFIX"
@@ -147,13 +150,11 @@ if [ "$FLAVOUR" = wolfssl ]; then
       # REQ-TOOL-026: the delay-load import library — hem-tool links it instead of
       # libwolfssl.dll.a (CMake EHEM_WOLFSSL_DELAYLOAD_LIB), so the DLL is loaded
       # at the first wolfSSL call and a missing one reaches hem-tool's own
-      # failure hook. The .def comes from the link above; gendef (mingw-w64
-      # tools) recovers it from the DLL if a linker ever stops writing it.
-      if [ ! -s "$WORK/libwolfssl.def" ]; then
-        command -v gendef > /dev/null 2>&1 \
-          || { echo "no libwolfssl.def from the link and no gendef to recover it"; exit 1; }
-        ( cd "$WORK" && gendef - "$PREFIX/bin/libwolfssl.dll" > libwolfssl.def )
-      fi
+      # failure hook. The .def comes from the link above, and only from it: a
+      # gendef fallback hid an unwritten .def until MSYS2 dropped gendef
+      # (mingw-w64-tools) from its toolchain group, 2026-10-14.
+      grep -q '^ *wolfSSL_Init\b' "$WORK/libwolfssl.def" 2> /dev/null \
+        || { echo "the wolfSSL link wrote no export list to $WORK/libwolfssl.def"; exit 1; }
       dlltool --input-def "$WORK/libwolfssl.def" --dllname libwolfssl.dll \
               --output-delaylib "$PREFIX/lib/libwolfssl.delay.a"
       ;;
