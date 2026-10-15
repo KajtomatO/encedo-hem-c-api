@@ -3,8 +3,8 @@ id: REQ-BUILD-009
 title: Release matrix — static hem-tool and SDK library packages (wolfSSL and OpenSSL flavours) beside the M10 hem-tool release
 status: approved
 priority: should
-revision: 3   # 2026-10-15 (STEP-M12-110 done): the wolfSSL-flavour evidence recorded under the library-package and REQ-BUILD-005 criteria (both stay open for STEP-M12-120 / 130). No meaning change. Rev 2 = 2026-10-14 (STEP-M12-110, §6.2 approved in chat): the wolfSSL library package is shared-only (user decision); its smoke criterion follows; the OPEN criterion resolved (the Windows import library moot; the OpenSSL 3.5.9 pin)
-source: user decisions 2026-10-12 (M12 planning: one milestone, one release 1.2.0; static variants ship on OpenSSL, never wolfSSL; today's hem-tool asset name stays and new variants get a suffix; the full-dynamic hem-tool is dropped; `release.yml` builds the published variants, `ci.yml` exercises the switches and both backends; macOS and MSVC out); user decision 2026-10-14 (STEP-M12-110: "I dont want any distribution with static wolfssl, static distribution should only openssl" — the wolfSSL library package carries no static library; §6.2 report approved the same day); ARCHITECTURE.md §1, §11 M12 part C, §12 risk 1; REQ-BUILD-005 (the hem-tool release this extends — unchanged); approved 2026-10-12 (M12 decomposition, user: "approve")
+revision: 4   # 2026-10-15 (STEP-M12-120, §6.2 approved in chat): the -static assets' OpenSSL configuration — none on Windows (user decision), /etc/ssl on Linux — and its criterion. Rev 3 = 2026-10-15 (STEP-M12-110 done): the wolfSSL-flavour evidence recorded under the library-package and REQ-BUILD-005 criteria (both stay open for STEP-M12-120 / 130). No meaning change. Rev 2 = 2026-10-14 (STEP-M12-110, §6.2 approved in chat): the wolfSSL library package is shared-only (user decision); its smoke criterion follows; the OPEN criterion resolved (the Windows import library moot; the OpenSSL 3.5.9 pin)
+source: user decisions 2026-10-12 (M12 planning: one milestone, one release 1.2.0; static variants ship on OpenSSL, never wolfSSL; today's hem-tool asset name stays and new variants get a suffix; the full-dynamic hem-tool is dropped; `release.yml` builds the published variants, `ci.yml` exercises the switches and both backends; macOS and MSVC out); user decision 2026-10-14 (STEP-M12-110: "I dont want any distribution with static wolfssl, static distribution should only openssl" — the wolfSSL library package carries no static library; §6.2 report approved the same day); user decision 2026-10-15 (STEP-M12-120: the Windows -static assets load no OpenSSL configuration — "No config at all", chosen over an administrator-only directory and a registry lookup; §6.2 report approved the same day); ARCHITECTURE.md §1, §11 M12 part C, §12 risk 1; REQ-BUILD-005 (the hem-tool release this extends — unchanged); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-BUILD-005", "REQ-BUILD-006", "REQ-BUILD-007", "REQ-BUILD-008", "REQ-API-010", "REQ-TOOL-026"]
 supersedes: null
 superseded_by: null
@@ -49,6 +49,18 @@ library":
   CA-bundle fallbacks (as REQ-BUILD-005); Windows — `CURLSSLOPT_NATIVE_CA`
   (the SDK transport already sets it on `_WIN32`; libcurl supports it
   with the OpenSSL backend).
+- **OpenSSL configuration** of the `-static` assets (user decision
+  2026-10-15): on Windows none is loaded — OpenSSL is built with
+  `no-autoload-config` and libcurl with
+  `CURL_DISABLE_OPENSSL_AUTO_LOAD_CONFIG`, so neither `openssl.cnf` nor
+  `OPENSSL_CONF` is read. OpenSSL's compiled-in directories
+  (`OPENSSLDIR`, `ENGINESDIR`, `MODULESDIR`) lie under the
+  administrator-only `C:\Program Files\Common Files\SSL`, never under the
+  build runner's path, which a standard user could create on another
+  machine (the CVE-2019-1552 class). An application linking the Windows
+  static library package loads a configuration itself if it wants one.
+  On Linux they read `/etc/ssl/openssl.cnf` (root-owned), as a
+  distribution's OpenSSL does.
 - **Pins** live where REQ-BUILD-005's do (`scripts/release/build-deps.sh`,
   version + sha256, a second prefix `deps-openssl`); the CI dependency
   caches are keyed per prefix. OpenSSL's `LICENSE.txt` is re-read on
@@ -79,6 +91,12 @@ GPL-licensed library stays a separately obtained download.
       Windows import table = system DLLs only; `strings`/`nm` show no
       wolfSSL; `hem-tool --version` reports `OpenSSL <pinned>` compiled
       and loaded (job log).
+- [ ] OpenSSL configuration (job log): the Windows static hem-tool
+      initialises and runs with an `OPENSSL_CONF` that activates only
+      OpenSSL's `null` provider (which would leave it no algorithms), and
+      the prefix's `openssl version -d -e -m` lists the
+      administrator-only directories; the Linux static binary refuses the
+      same file (exit 12) — the control that the file is read there.
 - [ ] Library packages: the consumer smoke (find_package + pkg-config)
       passes in the job on both platforms — the wolfSSL flavour against
       its shared library, run with the companion asset's library and

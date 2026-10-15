@@ -2,14 +2,34 @@
 id: STEP-M12-120
 title: "Release matrix: -static hem-tool and -static SDK library package on OpenSSL (both platforms), no-wolfSSL assertions, classifier under OpenSSL-libcurl, release.yml matrix, README download table, RELEASING.md"
 milestone: M12
-implements: ["REQ-BUILD-009"]
+implements: ["REQ-BUILD-009", "REQ-TOOL-024"]
 traces:
   architecture: ["ARCHITECTURE.md#1-decisions-fixed", "ARCHITECTURE.md#11-milestones", "ARCHITECTURE.md#12-risks--open-questions"]
 depends_on: ["STEP-M12-090", "STEP-M12-100", "STEP-M12-110"]
 evidence:
-  commits: []
+  commits: ["f90e7a9"]   # start
   tests: []
-  notes: null
+  notes: |
+    Settled at start, 2026-10-15 (the step's "Open at start" item). Today's
+    Windows build compiles in OPENSSLDIR = <prefix>/ssl, the runner's
+    D:/a/... path. curl initialises OpenSSL with OPENSSL_INIT_LOAD_CONFIG,
+    and libcrypto loads the configuration at its first provider use
+    (crypto/provider_core.c), so the -static binary would read
+    openssl.cnf from there. The user chose "No config at all" for
+    Windows, over an administrator-only directory and the OSSL_WINCTX
+    registry lookup. §6.2 approved in chat: REQ-BUILD-009 rev 4 (the
+    bullet plus a criterion: the Windows binary ignores a null-provider
+    OPENSSL_CONF, the Linux one refuses it as the control). The
+    compiled-in directories also move under the admin-only
+    C:/Program Files/Common Files/SSL, since an explicit config request
+    or curl's CA fallback would read them. Linux keeps
+    --openssldir=/etc/ssl.
+    Found while checking the control locally: a refused OpenSSL hem-tool
+    advises "install the OpenSSL <v> library ... or use the -static
+    hem-tool", which is wrong for the -static binary. §6.2 approved in
+    chat: REQ-TOOL-024 rev 5 (needs-reverify) — with the crypto library
+    linked in, the remedy names the OpenSSL configuration. This step
+    reworks it, and REQ-TOOL-024 joins its implements.
 reopened: []
 cancelled: null
 ---
@@ -75,6 +95,10 @@ prefix, and the `-static` hem-tool behaviour with no such directory).
 Linux: `--openssldir=/etc/ssl` reads the distribution's `openssl.cnf`,
 written for its own OpenSSL — check the static binary when that file names
 modules it lacks.
+*Settled 2026-10-15 (user decision; §6.2 approved — REQ-BUILD-009 rev 4):
+Windows loads no configuration at all, and the compiled-in directories lie
+under `C:\Program Files\Common Files\SSL`; Linux reads `/etc/ssl` — see
+the notes.*
 Also found (cross replay of the Windows `deps-openssl` build, 2026-10-15):
 curl 8.10.1's configure-time OpenSSL checks fail on MinGW against the
 static OpenSSL — its `openssl_check_symbol_exists` links
@@ -104,3 +128,11 @@ targets only. Effect: `HAVE_SSL_SET0_WBIO` off (curl uses the equivalent
 - [ ] README "Download" asset table + guidance; `docs/RELEASING.md`
       variants, prefixes and attended per-variant smoke; `implements:
       REQ-BUILD-009` tags; `./dev ci` green.
+- [ ] OpenSSL configuration (REQ-BUILD-009 rev 4): the Windows OpenSSL is
+      built with `no-autoload-config` and curl with
+      `CURL_DISABLE_OPENSSL_AUTO_LOAD_CONFIG` (asserted in `build-deps.sh`);
+      `openssl version -d -e -m` shows the admin-only directories; the
+      Windows static hem-tool runs under a null-provider `OPENSSL_CONF`, and
+      the Linux one refuses it with exit 12 (job log).
+- [ ] REQ-TOOL-024 rev 5: the static-link remedy in `startup.c` with its
+      unit test; REQ-TOOL-024 needs-reverify → verified.
