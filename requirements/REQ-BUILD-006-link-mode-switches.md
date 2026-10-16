@@ -3,7 +3,7 @@ id: REQ-BUILD-006
 title: Build configuration switches — library variants, hem-tool link mode, dependency link mode, static-wolfSSL warning
 status: implemented
 priority: must
-revision: 3   # 2026-10-13 (STEP-M12-060 done): the CI-legs criterion ticked (run 38403218107, both platforms green); rev 2 = OPEN criterion (distro static archives) resolved, local evidence. No meaning change — status set by the §4.3 regeneration
+revision: 4   # 2026-10-16 (STEP-M12-120 done): the EHEM_DEPS_LINK=static criterion checked (release run 38894733780). No meaning change. Rev 3 = 2026-10-13 (STEP-M12-060 done): the CI-legs criterion ticked (run 38403218107, both platforms green); rev 2 = OPEN criterion (distro static archives) resolved, local evidence. No meaning change — status set by the §4.3 regeneration
 source: ARCHITECTURE.md §11 M12 part B (early draft 2026-10-09, planned 2026-10-12: "link-mode switches — none exist today"; candidate names settled here); §1 (wolfSSL is never statically bundled into a published package — user decision 2026-10-09); §12 risk 1; REQ-BUILD-001 (both variants, one configure); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-BUILD-001", "REQ-BUILD-002", "REQ-API-006"]
 supersedes: null
@@ -129,8 +129,16 @@ packaging time only.
       and the release scripts refuse to package such a build
       (REQ-BUILD-005)." — and the status line reads "crypto wolfSSL 5.6.6
       (static)". The default configure on Ubuntu: no warning.)*
-- [ ] `EHEM_DEPS_LINK=static` is exercised by the OpenSSL release builds
+- [x] `EHEM_DEPS_LINK=static` is exercised by the OpenSSL release builds
       (REQ-BUILD-009) against the pinned prefix.
+      *(Release run 38894733780, 2026-10-16, both jobs green:
+      `package-static.sh` configures hem-tool with `EHEM_DEPS_LINK=static
+      EHEM_TOOL_LINK=static EHEM_BUILD_SHARED=OFF` and `package-lib.sh
+      static` the library with `EHEM_DEPS_LINK=static` against
+      `deps-openssl`. Found on the way (Windows cross replay, fixed in
+      54ae1bf): the switch must set `OPENSSL_USE_STATIC_LIBS` before
+      `find_package(CURL)`, whose package config looks up OpenSSL — else
+      FindOpenSSL's targets miss `ws2_32` and `crypt32` on MinGW.)*
 - [x] RESOLVED at STEP-M12-060 (2026-10-13): Ubuntu 24.04 (the dev host =
       ubuntu-latest) ships `libwolfssl.a` (libwolfssl-dev) and `libcurl.a`
       (libcurl4-openssl-dev), but libcurl's `pkg-config --static` closure

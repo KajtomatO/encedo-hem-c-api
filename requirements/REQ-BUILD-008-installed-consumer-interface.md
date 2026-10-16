@@ -3,7 +3,7 @@ id: REQ-BUILD-008
 title: Installed consumer interface — CMake package config and pkg-config file that resolve the selected backend's dependencies
 status: verified
 priority: must
-revision: 6   # 2026-10-15 (STEP-M12-110 done): re-verified — the rev 5 rework green on every CI leg (runs 38705546185, 38719294563) and in both release jobs' package smoke (run 38719457329); evidence recorded under criteria 1 and 2. No meaning change. Rev 5 = 2026-10-14 (§6.2 approved in chat, STEP-M12-110): a shared-only install's encedo-hem.pc lists no Requires.private — reworked in STEP-M12-110, needs-reverify until its CI runs. Rev 4 = 2026-10-14 (STEP-M12-090 done): criteria 1 and 2 ticked — the OpenSSL install contents and the OpenSSL CI legs recorded. No meaning change. Rev 3 = 2026-10-14 (STEP-M12-070 done): the wolfSSL CI evidence recorded under criteria 2 and 3; criterion 3 ticked (backend-independent). Rev 2 = 2026-10-13 (STEP-M12-070): wolfSSL-backend evidence recorded under each criterion; the REQ-API-008 / ARCHITECTURE criterion ticked (applied at the decomposition)
+revision: 7   # 2026-10-16 (STEP-M12-120 done): criterion 4 checked — the all-static pkg-config --static link in both release jobs (run 38894733780). No meaning change. Rev 6 = 2026-10-15 (STEP-M12-110 done): re-verified — the rev 5 rework green on every CI leg (runs 38705546185, 38719294563) and in both release jobs' package smoke (run 38719457329); evidence recorded under criteria 1 and 2. No meaning change. Rev 5 = 2026-10-14 (§6.2 approved in chat, STEP-M12-110): a shared-only install's encedo-hem.pc lists no Requires.private — reworked in STEP-M12-110, needs-reverify until its CI runs. Rev 4 = 2026-10-14 (STEP-M12-090 done): criteria 1 and 2 ticked — the OpenSSL install contents and the OpenSSL CI legs recorded. No meaning change. Rev 3 = 2026-10-14 (STEP-M12-070 done): the wolfSSL CI evidence recorded under criteria 2 and 3; criterion 3 ticked (backend-independent). Rev 2 = 2026-10-13 (STEP-M12-070): wolfSSL-backend evidence recorded under each criterion; the REQ-API-008 / ARCHITECTURE criterion ticked (applied at the decomposition)
 source: user decision 2026-10-12 (M12 planning: ship `encedo-hem.pc`); ARCHITECTURE.md §1 (artifact name — "pkg-config `encedo-hem`"), §11 M12 part B ("CMake package config fix": cmake/encedo-hem-config.cmake.in declares only find_dependency(CURL); the static target's crypto link interface cannot resolve in a consumer); REQ-API-008 criterion record "No separate pkg-config .pc file is shipped" (reversed here, §6.2 at the M12 decomposition); finding at the M12 decomposition 2026-10-12: ehem.h already gives static consumers plain declarations — the real gap is that the shared target does not advertise EHEM_USING_SHARED to its consumers (MinGW auto-import hides it); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-BUILD-001", "REQ-BUILD-006", "REQ-BUILD-007", "REQ-API-006"]
 supersedes: null
@@ -131,13 +131,19 @@ autotools-style builds expect a `.pc`.
       `-Wl,--disable-auto-import` — a reference that needs auto-import
       fails the link. The DLL exports no data symbol. Green on the three
       Windows legs of CI run 38481008774, 2026-10-13.)*
-- [ ] `pkg-config --libs --static encedo-hem` on an OpenSSL static-deps
+- [x] `pkg-config --libs --static encedo-hem` on an OpenSSL static-deps
       install links the consumer with no unresolved symbol (release
       prefix, REQ-BUILD-009).
       *(Partial 2026-10-13: against the REQ-BUILD-005 prefix — shared
       wolfSSL, static libcurl whose CMake-written libcurl.pc leaks
       `-lgcc -lgcc_s -lc` — the full `pkg-config --static` closure linked
-      and ran. The all-static OpenSSL install: STEP-M12-120.)*
+      and ran. The all-static OpenSSL install: STEP-M12-120 — locally on
+      Linux 2026-10-15, then release run 38894733780, 2026-10-16, both
+      jobs green: the gate in package mode against the unpacked
+      `encedo-hem-…-static` package (its own `libcurl.a`, `libssl.a`,
+      `libcrypto.a` and `.pc` files) built `consumer_pc_static` from the
+      `pkg-config --static` closure — the gate requires that path — and
+      ran it with no SDK, curl or crypto shared library.)*
 - [x] REQ-API-008's 1.0 record is annotated (rev bump, no status change —
       the ABI promise is untouched) and ARCHITECTURE §11 part B text
       corrected per the finding above.

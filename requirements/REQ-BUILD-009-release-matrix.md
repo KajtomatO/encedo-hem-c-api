@@ -1,9 +1,9 @@
 ---
 id: REQ-BUILD-009
 title: Release matrix — static hem-tool and SDK library packages (wolfSSL and OpenSSL flavours) beside the M10 hem-tool release
-status: approved
+status: implemented
 priority: should
-revision: 4   # 2026-10-15 (STEP-M12-120, §6.2 approved in chat): the -static assets' OpenSSL configuration — none on Windows (user decision), /etc/ssl on Linux — and its criterion. Rev 3 = 2026-10-15 (STEP-M12-110 done): the wolfSSL-flavour evidence recorded under the library-package and REQ-BUILD-005 criteria (both stay open for STEP-M12-120 / 130). No meaning change. Rev 2 = 2026-10-14 (STEP-M12-110, §6.2 approved in chat): the wolfSSL library package is shared-only (user decision); its smoke criterion follows; the OPEN criterion resolved (the Windows import library moot; the OpenSSL 3.5.9 pin)
+revision: 5   # 2026-10-16 (STEP-M12-120 done): release run 38894733780 recorded — the static hem-tool, OpenSSL-configuration, library-package and REQ-BUILD-005 criteria checked; the main-push, tag-path and attended criteria stay open (STEP-M12-130/140). No meaning change. Rev 4 = 2026-10-15 (STEP-M12-120, §6.2 approved in chat): the -static assets' OpenSSL configuration — none on Windows (user decision), /etc/ssl on Linux — and its criterion. Rev 3 = 2026-10-15 (STEP-M12-110 done): the wolfSSL-flavour evidence recorded under the library-package and REQ-BUILD-005 criteria (both stay open for STEP-M12-120 / 130). No meaning change. Rev 2 = 2026-10-14 (STEP-M12-110, §6.2 approved in chat): the wolfSSL library package is shared-only (user decision); its smoke criterion follows; the OPEN criterion resolved (the Windows import library moot; the OpenSSL 3.5.9 pin)
 source: user decisions 2026-10-12 (M12 planning: one milestone, one release 1.2.0; static variants ship on OpenSSL, never wolfSSL; today's hem-tool asset name stays and new variants get a suffix; the full-dynamic hem-tool is dropped; `release.yml` builds the published variants, `ci.yml` exercises the switches and both backends; macOS and MSVC out); user decision 2026-10-14 (STEP-M12-110: "I dont want any distribution with static wolfssl, static distribution should only openssl" — the wolfSSL library package carries no static library; §6.2 report approved the same day); user decision 2026-10-15 (STEP-M12-120: the Windows -static assets load no OpenSSL configuration — "No config at all", chosen over an administrator-only directory and a registry lookup; §6.2 report approved the same day); ARCHITECTURE.md §1, §11 M12 part C, §12 risk 1; REQ-BUILD-005 (the hem-tool release this extends — unchanged); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-BUILD-005", "REQ-BUILD-006", "REQ-BUILD-007", "REQ-BUILD-008", "REQ-API-010", "REQ-TOOL-026"]
 supersedes: null
@@ -87,17 +87,52 @@ GPL-licensed library stays a separately obtained download.
       produced on both platforms; all link-mode and no-wolfSSL-in-static
       assertions, unit suites, classifier checks and consumer smokes
       pass (run id recorded).
-- [ ] Static hem-tool: Linux `ldd` = glibc family only, no RUNPATH;
+      *(The same workflow on a `workflow_dispatch` on `development`,
+      2026-10-16 — release run 38894733780 (0483532), both jobs green:
+      every asset of the table built (Linux 6 archives, Windows 5, each
+      job's `SHA256SUMS` over all of them), every assertion, unit suite,
+      classifier check and consumer smoke below passed. The box waits for
+      the run of the push to `main` (STEP-M12-130/140).)*
+- [x] Static hem-tool: Linux `ldd` = glibc family only, no RUNPATH;
       Windows import table = system DLLs only; `strings`/`nm` show no
       wolfSSL; `hem-tool --version` reports `OpenSSL <pinned>` compiled
       and loaded (job log).
-- [ ] OpenSSL configuration (job log): the Windows static hem-tool
+      *(Release run 38894733780, 2026-10-16, both jobs green.
+      `scripts/release/package-static.sh` fails the job unless: the unit
+      suite passes on the static OpenSSL Release build; Linux — `ldd`
+      lists the glibc family only and `readelf -d` no RUNPATH/RPATH;
+      Windows — `objdump -p` imports only listed system DLLs, the
+      Universal CRT among them; `nm` shows no `wolfSSL_`/`wolfCrypt_`/`wc_`
+      symbol and `strings` no such name; `--version` prints exactly
+      `crypto:    OpenSSL 3.5.9 (compiled) / 3.5.9 (loaded), static` and
+      `transport: libcurl 8.10.1 (compiled) / 8.10.1 (loaded), static`;
+      the archive, unpacked alone, holds one hem-tool file that runs
+      `help`, `keys types` and `status` (initialised, exit 1 on a closed
+      port). The Linux job then ran `check-expired-classifier.sh` on the
+      static binary: the REQ-NET-005 classifier under the OpenSSL-backed
+      libcurl (REQ-BUILD-007's hand-over). Job logs need a signed-in
+      reader; the step conclusions are the record.)*
+- [x] OpenSSL configuration (job log): the Windows static hem-tool
       initialises and runs with an `OPENSSL_CONF` that activates only
       OpenSSL's `null` provider (which would leave it no algorithms), and
       the prefix's `openssl version -d -e -m` lists the
       administrator-only directories; the Linux static binary refuses the
       same file (exit 12) — the control that the file is read there.
-- [ ] Library packages: the consumer smoke (find_package + pkg-config)
+      *(Release run 38894733780, 2026-10-16, both jobs green, both
+      `deps-openssl` prefixes built cold. `build-deps.sh` fails unless the
+      prefix's `openssl version -d -e -m` names exactly the chosen
+      directories — Windows `C:/Program Files/Common Files/SSL`,
+      `…/engines-3`, `…/ossl-modules`; Linux `/etc/ssl`,
+      `/usr/lib/engines-3`, `/usr/lib/ossl-modules` — and, on Windows,
+      `configuration.h` defines `OPENSSL_NO_AUTOLOAD_CONFIG` and curl's
+      `curl_config.h` `CURL_DISABLE_OPENSSL_AUTO_LOAD_CONFIG`.
+      `package-static.sh` runs the unpacked hem-tool's `status` under an
+      `OPENSSL_CONF` naming a file that activates only the `null`
+      provider: Windows exit 1 (initialised, the file not read), Linux
+      exit 12 with "OpenSSL is linked into hem-tool, so the OpenSSL
+      configuration it read …" (REQ-TOOL-024 rev 5); any other result
+      fails the job.)*
+- [x] Library packages: the consumer smoke (find_package + pkg-config)
       passes in the job on both platforms — the wolfSSL flavour against
       its shared library, run with the companion asset's library and
       nothing else non-system; the OpenSSL flavour against its static
@@ -118,7 +153,18 @@ GPL-licensed library stays a separately obtained download.
       on PATH). The job logs need a signed-in reader — the run's
       conclusions are the record. The artifacts grew by the package:
       Linux 24,720,005 → 25,129,032 bytes, Windows 1,274,926 → 1,706,552
-      (against run 38483282667). The OpenSSL flavour: STEP-M12-120.)*
+      (against run 38483282667). The OpenSSL flavour, 2026-10-16 —
+      release run 38894733780 (0483532), both jobs green:
+      `package-lib.sh static` builds the static library alone (OpenSSL
+      backend, `EHEM_DEPS_LINK=static`) and packages
+      `encedo-hem-<label>-<os>-x86_64-static` with `libcurl.a`, `libssl.a`,
+      `libcrypto.a`, their headers, curl's CMake package and `.pc` files
+      rewritten to `${pcfiledir}`; it fails unless no shared library, no
+      wolfSSL file or symbol and no build-prefix path is in the package,
+      and its gate builds and runs `consumer_cmake_static` and
+      `consumer_pc_static` (the `pkg-config --static` closure) against the
+      unpacked package — each with no SDK, curl or crypto shared library
+      (Linux `ldd`; Windows the import table). REQ-BUILD-008 criterion 4.)*
 - [ ] Tag path: an annotated `v1.2.0-rc<N>` publishes a pre-release
       carrying every asset (count recorded) with the annotation +
       checksums as text; `SHA256SUMS` re-verified in the job.
@@ -126,7 +172,7 @@ GPL-licensed library stays a separately obtained download.
       published hem-tool variant runs `hem-tool status` against the dev
       device under system trust on Linux and Windows; the static
       binaries from a directory with NO companion library.
-- [ ] REQ-BUILD-005 unchanged in behaviour: the dynamic hem-tool archive,
+- [x] REQ-BUILD-005 unchanged in behaviour: the dynamic hem-tool archive,
       the companion assets and the source tarball are byte-for-byte the
       same kind of output as 1.1.0 (same scripts, same assertions).
       *(Through STEP-M12-110, 2026-10-15: `package.sh` gained only the
@@ -135,7 +181,15 @@ GPL-licensed library stays a separately obtained download.
       1.1.0 ones — the Windows link only now writes the delay-load `.def`
       at a path the linker can open (46be9d3). Release run 38719457329 ran
       every REQ-BUILD-005 assertion green on both platforms, the Windows
-      no-DLL smoke (exit 12) included. Rechecked after STEP-M12-120.)*
+      no-DLL smoke (exit 12) included. Rechecked after STEP-M12-120,
+      2026-10-16: the -static variant enters `package.sh` through a fourth
+      argument (`static`) that hands over to `package-static.sh` before any
+      dynamic step, and `SHA256SUMS` is written by the same code for both
+      variants; `package-lib.sh`'s shared branch is the 110 code;
+      `build-deps.sh`'s wolfSSL and libcurl-on-wolfSSL lines are unchanged
+      (the diff touches the OpenSSL branch only). Release run 38894733780:
+      the dynamic step and the wolfSSL classifier green on both platforms,
+      from a cold `deps` cache.)*
 - [x] RESOLVED at STEP-M12-110 (2026-10-14) — was OPEN: whether the
       wolfSSL companion asset on Windows must gain `libwolfssl.dll.a` so
       the wolfSSL-flavour static SDK can be linked by a consumer, or

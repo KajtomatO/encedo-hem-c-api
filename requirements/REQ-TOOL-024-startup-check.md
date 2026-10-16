@@ -1,9 +1,9 @@
 ---
 id: REQ-TOOL-024
 title: hem-tool initialises the SDK up front and refuses a foreign crypto library with a clear message and its own exit code
-status: needs-reverify
+status: verified
 priority: must
-revision: 5   # 2026-10-15 (STEP-M12-120, §6.2 approved in chat): when the crypto library is linked into hem-tool, the remedy names the OpenSSL configuration — needs-reverify until its unit test passes. Rev 4 = 2026-10-13: `keys types` criterion closed (STEP-M12-040). Rev 3: pre-gate preview recorded (STEP-M12-030). Rev 2 = 2026-10-13 (STEP-M12-020): message text and init placement settled; unit and documentation criteria recorded. No meaning change — approved status kept
+revision: 6   # 2026-10-16 (STEP-M12-120 done): re-verified — the static-link remedy's unit test green on every CI leg (run 38892261894) and the Linux release job's null-provider control (run 38894733780); its criterion checked. No meaning change. Rev 5 = 2026-10-15 (STEP-M12-120, §6.2 approved in chat): when the crypto library is linked into hem-tool, the remedy names the OpenSSL configuration — needs-reverify until its unit test passes. Rev 4 = 2026-10-13: `keys types` criterion closed (STEP-M12-040). Rev 3: pre-gate preview recorded (STEP-M12-030). Rev 2 = 2026-10-13 (STEP-M12-020): message text and init placement settled; unit and documentation criteria recorded. No meaning change — approved status kept
 source: ARCHITECTURE.md §11 M12 part A ("hem-tool refuses up front — hem-tool calls ehem_global_init explicitly at startup (today it calls only the cleanup) and exits with a clear message and an exit code of its own"; user decision 2026-10-10); KNOWN-ISSUES.md "Release hem-tool with a foreign libwolfssl crashes"; REQ-API-010 (the SDK check), REQ-API-011 (the versions for the message); approved 2026-10-12 (M12 decomposition, user: "approve"); the static-link remedy approved 2026-10-15 (STEP-M12-120, §6.2 in chat: the -static hem-tool's OpenSSL is linked in, so its refusal can only come from an OpenSSL configuration)
 depends_on: ["REQ-API-010", "REQ-API-011", "REQ-TOOL-001"]
 supersedes: null
@@ -106,13 +106,25 @@ package links wolfSSL statically) says that the build itself is broken.
       `--help`, `status --help`, `help keys rm`, `--version`, `version`
       → 0; zero I/O shown by the URL `http://127.0.0.1:1` — the same run
       without the seam reaches the transport and exits 1.)*
-- [ ] Unit: with the crypto library linked in, the refusal's remedy
+- [x] Unit: with the crypto library linked in, the refusal's remedy
       names the OpenSSL configuration (`OPENSSL_CONF`, `openssl.cnf`) and
       neither the companion asset nor the `-static` hem-tool; a statically
       linked non-OpenSSL backend is reported as a broken build. Release
       job: the Linux `-static` hem-tool under an `OPENSSL_CONF` that
       activates only the `null` provider prints that remedy and exits 12
       (REQ-BUILD-009's control).
+      *(`hem_tool_print_refusal()` in `startup.c`, split out of
+      `hem_tool_global_init` so the unit test can feed it other builds'
+      facts. `test_static_refusal_message` (tests/unit/test_tool_startup.c):
+      OpenSSL linked in → the remedy names `OPENSSL_CONF` and `openssl.cnf`,
+      and neither "-static hem-tool", "install the" nor "wolfssl-"; wolfSSL
+      linked in → "this hem-tool build is broken"; the dynamic builds keep
+      their remedies. `test_version_refusal_message` takes this build's
+      link mode, so the release static build runs it as well. Green on all
+      10 legs of CI run 38892261894 (2026-10-16) and in both release jobs'
+      static unit suite (run 38894733780). The Linux job ran the unpacked
+      `-static` hem-tool under a null-provider `OPENSSL_CONF`: exit 12 and
+      the remedy, else the job fails.)*
 - [x] Without a forced mismatch every command behaves as before
       (existing unit suite green; `ehem_global_init` is called exactly
       once per run — the SDK's idempotency makes a second implicit call

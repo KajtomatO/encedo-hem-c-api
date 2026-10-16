@@ -766,6 +766,18 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   STEP-M12-120. The first dispatch found that the Windows wolfSSL `.def`
   had never been written by the link: MSYS2 left its path unconverted, and
   a `gendef` fallback hid that until MSYS2 dropped `gendef`. Fixed.
+  **STEP-M12-120 done 2026-10-16** — the `-static` variants: both release
+  jobs build `hem-tool-<label>-<os>-x86_64-static` (OpenSSL 3.5.9 +
+  libcurl linked in; Linux needs glibc only, Windows system DLLs only) and
+  `encedo-hem-<label>-<os>-x86_64-static` (the static SDK + `libcurl.a`,
+  `libssl.a`, `libcrypto.a`), assert no wolfSSL in either, run the unit
+  suite, the classifier (Linux) and the static consumer gate (run
+  38894733780). The Windows `-static` OpenSSL reads no configuration
+  (user decision 2026-10-15, REQ-BUILD-009 rev 4); its compiled-in
+  directories lie under the admin-only `C:\Program Files\Common
+  Files\SSL`, the Linux ones are root-owned. A refused `-static` hem-tool
+  names the OpenSSL configuration as the cause (REQ-TOOL-024 rev 5). A
+  release now carries 11 archives + `SHA256SUMS`.
   Names settled: error code `EHEM_ERR_BACKEND_MISMATCH`; API
   `ehem_build_info_get`; options `EHEM_BUILD_SHARED` / `EHEM_BUILD_STATIC`
   / `EHEM_TOOL_LINK` / `EHEM_DEPS_LINK` / `EHEM_CRYPTO_BACKEND`; asset
