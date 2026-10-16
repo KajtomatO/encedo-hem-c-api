@@ -7,9 +7,25 @@ traces:
   architecture: ["ARCHITECTURE.md#11-milestones", "ARCHITECTURE.md#4-public-api--conventions"]
 depends_on: ["STEP-M12-020", "STEP-M12-030", "STEP-M12-040", "STEP-M12-050", "STEP-M12-060", "STEP-M12-070", "STEP-M12-080", "STEP-M12-090", "STEP-M12-100", "STEP-M12-110", "STEP-M12-120"]
 evidence:
-  commits: []
-  tests: []
-  notes: null
+  commits: ["333284c"]   # start — the version + docs commit, the rc run and the done commit follow
+  tests:
+    - "Local 2026-10-16 after the bump: ./dev ci 56/56 gcc + clang, ./dev ci --openssl 56/56 gcc + clang (the docs gate check_docs_coverage, the export baseline and the consumer gate among them). The build reads 1.2.0 everywhere: libencedo-hem.so.1.2.0 with SONAME libencedo-hem.so.1, the consumer gate's install has encedo-hem.pc 'Version: 1.2.0' and encedo-hem-config-version.cmake PACKAGE_VERSION 1.2.0, test_version asserts ehem_version() = the project version, hem-tool --version prints 'hem-tool 1.2.0'. Exports beyond the 1.0 baseline: the 1.1 additions + ehem_build_info_get (REQ-API-008 rev 2 already records the 1.2 additions)"
+  notes: |
+    The version lives in one place — project(VERSION) in CMakeLists.txt;
+    ehem_version(), the user agent, the .so version, the package version
+    file and encedo-hem.pc take it from there.
+    KNOWN-ISSUES had no entry of its own for 0xC0000135 (the Windows
+    missing DLL was a paragraph of the foreign-libwolfssl entry), so the
+    one entry became "FIXED in 1.2.0" covering both and moved below the
+    OPEN ones; the X25519 entry's residual notes now point at the
+    self-test they motivated.
+    README Status block reads "1.2.0 release candidate (2026-10-16)" with
+    1.1.0 as the latest release; STEP-M12-140 turns it into "released"
+    with the date of the tag (its docs-checklist box).
+    rc1 tag message drafted from the README Status block and ARCHITECTURE
+    §11 M12 (RELEASING "Final release"): scratchpad
+    release-notes-1.2.0-rc1.md, for `git tag -a v1.2.0-rc1
+    --cleanup=whitespace -F <file>`.
 reopened: []
 cancelled: null
 ---
@@ -49,17 +65,39 @@ criterion; delete the rc afterwards or keep it — user's call. CI must be
 green on `development` first.
 
 **Definition of done**
-- [ ] 1.2.0 everywhere observable: CMake project version, `ehem_version()`
+- [x] 1.2.0 everywhere observable: CMake project version, `ehem_version()`
       (test_version), SONAME 1 kept, package version file, `.pc` Version;
       `./dev ci` green.
-- [ ] docs/API-GUIDE.md: new API indexed and the error model / backend
+      (See tests: every one checked on the local build; ./dev ci both
+      backends green 2026-10-16.)
+- [x] docs/API-GUIDE.md: new API indexed and the error model / backend
       compatibility prose added (docs gate green).
-- [ ] README.md: Status block, hem-tool commands + exit codes, build
+      (The index rows and the error-model text came with STEP-M12-010/020;
+      now the title reads 1.2, a "Crypto backend" section says what each
+      backend's check does — wolfSSL exact version + struct self-test,
+      OpenSSL major version + known answers — and the hem-tool section
+      names exit 12 and `--version`. check_docs_coverage green.)
+- [x] README.md: Status block, hem-tool commands + exit codes, build
       options and backend switch, Download table, Documentation list,
       Layout — all at 1.2.0.
-- [ ] docs/COVERAGE.md re-checked (no new endpoints — stated);
+      (Status block: 1.2.0 rc and what is new; Dependencies: wolfSSL or
+      OpenSSL; Build: the five M12 options + the static-wolfSSL warning;
+      ./dev: --openssl and the switch flags; hem-tool: `init-wizard`,
+      `keys types`, `--version`, the exit-code paragraph (0/1/2, the
+      per-command codes, 12); Install: the crypto library, the .pc file;
+      Documentation: tests/README.md added; Layout: the two shims,
+      tests/consumer, crypto_ref; License: OpenSSL in the -static
+      packages. Download: STEP-M12-120's table.)
+- [x] docs/COVERAGE.md re-checked (no new endpoints — stated);
       KNOWN-ISSUES.md foreign-libwolfssl + 0xC0000135 entries closed as
       fixed in 1.2.0; docs/RELEASING.md and tests/README complete.
+      (COVERAGE: "Re-checked for 1.2.0" — `ehem_build_info_get` makes no
+      device call. KNOWN-ISSUES: see notes. RELEASING: STEP-M12-120 wrote
+      the variants, prefixes and per-variant smoke; the examples now say
+      1.2.0. tests/README: a "Build switches and the backend check"
+      section — the ten CI legs, the link assertions, the REQ-API-010 seam
+      tests and the release jobs' real cases; the package gate on both
+      library packages; the integration list brought up to date.)
 - [ ] CI green on `development` (all legs incl. openssl and the switch
       legs); `workflow_dispatch` release run green with every asset.
 - [ ] `v1.2.0-rc1` suggested to the user; the pre-release carries every

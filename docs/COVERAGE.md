@@ -5,7 +5,11 @@ every page of https://github.com/KajtomatO/encedo-hem-api-doc (local
 checkout, fw v1.2.2 era) against the SDK surface, field by field.
 **Updated for 1.1.0 (M10, 2026-10-10):** `auth/init` and the `wipeout`
 write of `POST /api/system/config` are BOUND; nothing is `DEFERRED-M10`
-any more.
+any more. **Re-checked for 1.2.0 (M12, 2026-10-16):** no change — M12
+binds no endpoint. Its one new public function, `ehem_build_info_get`,
+reports how the SDK was built and makes no device call; hem-tool's
+`init-wizard` drives the existing `auth/init` binding and `keys types`
+is local.
 
 **Dispositions:** `BOUND` (SDK binding exists), `UNBOUND-DELIBERATE`
 (never planned, with reason), `DEFERRED-M10` (post-1.0 milestone — none

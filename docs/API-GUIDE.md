@@ -1,4 +1,4 @@
-# Encedo HEM C SDK — API guide (1.0)
+# Encedo HEM C SDK — API guide (1.2)
 
 The public headers in `include/ehem/` are the **per-symbol reference**:
 every function, struct, enum, and macro carries its full contract there —
@@ -84,7 +84,7 @@ One `ehem_ctx` (opaque) = one HEM device, created from a URL + options,
 destroyed with `ehem_ctx_destroy()` (which zeroizes credential material).
 There is no global mutable state beyond `ehem_global_init()` /
 `ehem_global_cleanup()`, which wrap the backends' process-global setup
-(libcurl, wolfCrypt) and are idempotent. Since 1.2 init also checks that the
+(libcurl, the crypto library) and are idempotent. Since 1.2 init also checks that the
 crypto library loaded at run time is the one the SDK was built against
 (`EHEM_ERR_BACKEND_MISMATCH` otherwise — see the error model); a refused
 init leaves the global state untouched, so cleanup is a no-op and a later
@@ -103,8 +103,7 @@ distinguish every condition a PKCS#11 backend must map: `EHEM_ERR_NETWORK`,
 `EHEM_ERR_UNSUPPORTED`, `EHEM_ERR_BACKEND_MISMATCH`. The enum is append-only
 — values never renumber. `EHEM_ERR_BACKEND_MISMATCH` (added in 1.2) is
 `ehem_global_init()`'s refusal of a crypto library other than the one the
-SDK was built against — on wolfSSL the exact version plus a self-test of the
-structs the SDK allocates itself; the implicit init paths (`ehem_ctx_create()`
+SDK was built against (see "Crypto backend" below); the implicit init paths (`ehem_ctx_create()`
 with the default transport, the login flow's first token acquisition) return
 the same code, and nothing else works until the right library is installed.
 `ehem_rc_str()` names any value. Detail for the LAST call —
@@ -180,6 +179,32 @@ scopes; **every per-key crypto operation uses the exact scope
 `keymgmt:use:<kid>`** — firmware matches it with a plain strcmp, so one
 cached token per KID serves get + sign + verify + ECDH + cipher + PQC on
 that key. The cache handles all of this transparently.
+
+### Crypto backend
+
+The SDK is built against one crypto library, chosen at configure time with
+`EHEM_CRYPTO_BACKEND`: **wolfSSL** (the default, linked dynamically in
+every published package) or **OpenSSL 3** (the `-static` packages). The
+public headers name neither — no `ehem_*` type depends on the choice — and
+`ehem_build_info_get()` tells a program which one it got, the version it
+was compiled against, the version loaded and how each library is linked.
+`ehem_global_init()` checks the loaded library before anything else uses
+it, and refuses it with `EHEM_ERR_BACKEND_MISMATCH`:
+
+- **wolfSSL** — the loaded version must equal the compiled one exactly,
+  and a known-answer self-test runs every wolfCrypt struct the SDK
+  allocates itself inside guard-banded buffers. wolfSSL's struct layouts
+  depend on its build options, so a library with the same soname but a
+  different version or configuration would otherwise corrupt memory (the
+  1.1.0 hem-tool crashed that way on Ubuntu's `libwolfssl.so.42`).
+- **OpenSSL 3** — the loaded major version must equal the compiled one
+  (OpenSSL keeps its ABI within a major; its objects are opaque), and
+  known answers (HMAC-SHA256, SHA-256) must come out of the library. An
+  OpenSSL configuration that leaves the default provider unloaded fails
+  this check.
+
+The libcurl the SDK talks through is not checked; its version is reported
+the same way.
 
 ### TLS trust
 
@@ -328,4 +353,9 @@ The CLI is a thin consumer of exactly this public API and doubles as its
 living documentation: `hem-tool help <command>` documents each command
 (auth requirement included), the top-level page groups commands by
 credential need, and every command accepts `--mobile` where a bearer
-suffices. Default device URL: `https://my.ence.do`.
+suffices. Default device URL: `https://my.ence.do`. Since 1.2 it
+initialises the SDK before any command and turns a refusal into one
+message naming the library and the remedy, exit code 12; `hem-tool
+--version` prints the SDK version and the compiled/loaded versions and
+link modes of the crypto library and libcurl, and works even when the
+library is refused.

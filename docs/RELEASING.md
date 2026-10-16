@@ -1,4 +1,4 @@
-# Releasing hem-tool
+# Releasing hem-tool and the SDK packages
 
 How to cut a release of `hem-tool`, its wolfSSL companion asset and the SDK
 library packages. The rules behind it are REQ-BUILD-005 and REQ-BUILD-009
@@ -80,8 +80,8 @@ technically either works.
 ```sh
 git switch development && git pull
 git status                      # clean: nothing the workflow needs is untracked
-git tag -a v1.1.0-rc5 -m "1.1.0-rc5 - <what this candidate is for>"
-git push origin v1.1.0-rc5
+git tag -a v1.2.0-rc1 -m "1.2.0-rc1 - <what this candidate is for>"
+git push origin v1.2.0-rc1
 ```
 
 Then on GitHub (Actions → Release): wait for the run to finish green, and
@@ -117,8 +117,8 @@ number. Delete the bad pre-release in the GitHub UI (Releases → the
 release → Delete) and its tag if you want:
 
 ```sh
-git push --delete origin v1.1.0-rc5
-git tag -d v1.1.0-rc5
+git push --delete origin v1.2.0-rc1
+git tag -d v1.2.0-rc1
 ```
 
 ### 2. Final release
@@ -151,15 +151,15 @@ Then:
 
    ```sh
    git switch main && git pull
-   git tag -a v1.1.0 --cleanup=whitespace -F release-notes-1.1.0.md   # or: -m "..."
-   git push origin v1.1.0
+   git tag -a v1.2.0 --cleanup=whitespace -F release-notes-1.2.0.md   # or: -m "..."
+   git push origin v1.2.0
    ```
 
    The file is Markdown: GitHub renders it, and the workflow appends the
    checksums. Keep `--cleanup=whitespace`. Without it, git treats every
    line that starts with `#` as a comment and drops it, so Markdown
    headings silently disappear from the release text. The first line is
-   the tag's subject and opens the release text. `git cat-file -p v1.1.0`
+   the tag's subject and opens the release text. `git cat-file -p v1.2.0`
    shows exactly what was stored.
 3. Check the run and the release as in step 1, and smoke-test the
    published assets once more.

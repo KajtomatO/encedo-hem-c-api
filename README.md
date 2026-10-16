@@ -5,26 +5,32 @@ A portable **C99 client library** (the *Encedo HEM C SDK*, symbol prefix
 device over its REST/HTTPS API. Its first consumer is the `encedo-pkcs11`
 module.
 
-> **Status: 1.1.0 released (2026-10-10)** —
-> [latest release](https://github.com/KajtomatO/encedo-hem-c-api/releases/latest),
-> with prebuilt `hem-tool` binaries for Linux and Windows. The SDK covers
-> the device API end to end: the full eJWT auth flow (passphrase and
-> mobile push-confirmation), device initialisation and factory reset
-> (new in 1.1), key management
+> **Status: 1.2.0 release candidate (2026-10-16)** — the latest release is
+> [1.1.0](https://github.com/KajtomatO/encedo-hem-c-api/releases/latest)
+> (2026-10-10). The SDK covers the device API end to end: the full eJWT
+> auth flow (passphrase and mobile push-confirmation), device
+> initialisation and factory reset, key management
 > (list/search/get/create/delete/update/import/derive), every crypto
 > operation (ExDSA sign/verify, ECDH, HMAC, AES incl. wrap/unwrap,
 > ML-KEM, ML-DSA, hardware random), system/logger/storage bindings, and
 > the TLS-lifecycle tooling (check-in, cert-install, TLS re-provisioning,
 > and hem-tool's one-command `recovery`) — each binding verified against
 > a real HEM (init and wipe in attended runs only).
+> **New in 1.2** (M12): the SDK checks the crypto library it loads and
+> refuses a foreign one (`EHEM_ERR_BACKEND_MISMATCH` — 1.1.0's hem-tool
+> crashed on Ubuntu's wolfSSL), and reports how it was built
+> (`ehem_build_info_get`); an **OpenSSL 3 backend** beside wolfSSL; build
+> switches for the library variants and link modes; an installed
+> `encedo-hem.pc`; hem-tool `--version`, `keys types` and `init-wizard`,
+> and a message instead of a crash or a silent stop when its wolfSSL is
+> wrong or missing (exit 12). Releases add a one-file **`-static`
+> hem-tool** (OpenSSL, no companion library) and **SDK library
+> packages** — see [Download](#download).
 > [docs/COVERAGE.md](docs/COVERAGE.md) maps every documented endpoint to
 > its binding; what is still unbound (firmware/UI upgrade, factory
 > provisioning, diagnostics) is parked in [BACKLOG.md](BACKLOG.md). The
-> 1.0 ABI is unchanged in 1.1 (SONAME `.so.1`, additive only). Next
-> milestone: M12 (decomposed 2026-10-12 — ARCHITECTURE.md §11):
-> a fix for the 1.1.0 crash with a foreign wolfSSL, build variants, an
-> OpenSSL-based static hem-tool, SDK library packages, and hem-tool
-> key-type help and an initialisation wizard.
+> 1.0 ABI is unchanged in 1.2 (SONAME `.so.1`, additive only). Next
+> milestone: none planned yet — candidates are parked in BACKLOG.md.
 > See [ARCHITECTURE.md](ARCHITECTURE.md) for the design and
 > [REQUIREMENTS-MANAGEMENT.md](REQUIREMENTS-MANAGEMENT.md) for how the
 > work is tracked.
@@ -43,7 +49,11 @@ module.
   divergences the SDK works around (device behavior wins), plus the
   known issues of the released binaries.
 - **[docs/RELEASING.md](docs/RELEASING.md)** — how a release is cut:
-  rc pre-releases, the final tag, the release notes, the checks.
+  the variants and their dependency prefixes, rc pre-releases, the final
+  tag, the release notes, the checks.
+- **[tests/README.md](tests/README.md)** — the test labels, the CI legs
+  (both backends, the build switches), the backend-check seam and the
+  installed-package gate.
 - **[BACKLOG.md](BACKLOG.md)** — unscheduled items (firmware/UI upgrade,
   provisioning, diagnostics) parked outside any milestone.
 - **`hem-tool`** — the bundled CLI is the living usage documentation:
@@ -57,7 +67,7 @@ module.
 | A C99 compiler (GCC/Clang on Linux, MinGW-w64 on Windows) | — |
 | [libcurl](https://curl.se/libcurl/) dev | default HTTPS transport |
 | [CMocka](https://cmocka.org/) dev | unit tests |
-| wolfSSL dev | crypto primitives (X25519, HMAC, PBKDF2, cert parsing, local verify) |
+| wolfSSL dev — **or** OpenSSL ≥ 3.0 dev | crypto primitives (X25519, HMAC, PBKDF2, cert parsing, local verify); wolfSSL is the default, OpenSSL the alternative backend (`EHEM_CRYPTO_BACKEND=openssl`) |
 
 cJSON is **vendored into the source tree** (no system install), so it is
 not listed above; the CLI additionally vendors the single-file qrcodegen
@@ -74,6 +84,8 @@ powershell -ExecutionPolicy Bypass -File scripts\install-deps-windows.ps1
 ```
 
 Both scripts are idempotent and print a verification summary at the end.
+They install wolfSSL; for the OpenSSL backend add `libssl-dev` (apt) or
+`mingw-w64-ucrt-x86_64-openssl` (MSYS2 UCRT64).
 
 ## Build
 
@@ -82,7 +94,7 @@ cmake -B build            # configure (add -G Ninja for the Ninja generator)
 cmake --build build       # compile static + shared libs and the tests
 ```
 
-This produces both library variants:
+By default this produces both library variants:
 
 - `libencedo-hem.so` / `libencedo-hem.dll` — shared, exports only `ehem_*`
 - `libencedo-hem.a` — static (the safe path for embedding in a PKCS#11 module)
@@ -94,6 +106,16 @@ Useful configure options:
 | `-DCMAKE_BUILD_TYPE=Debug\|Release` | build type (defaults to `Debug`) |
 | `-DEHEM_SANITIZE=ON` | build the suite with ASan + UBSan (non-MSVC) |
 | `-DBUILD_TESTING=OFF` | build only the library, skip the tests |
+| `-DEHEM_CRYPTO_BACKEND=wolfssl\|openssl` | the crypto library behind the SDK (default `wolfssl`; `openssl` = OpenSSL 3) |
+| `-DEHEM_BUILD_SHARED=OFF` / `-DEHEM_BUILD_STATIC=OFF` | build and install only the other library variant (default: both) |
+| `-DEHEM_TOOL_LINK=static\|shared` | how hem-tool links the SDK (default `static`; `shared` needs the shared variant) |
+| `-DEHEM_DEPS_LINK=default\|static\|shared` | how libcurl and the crypto library link (default: as found) — use a fresh build directory when changing it |
+| `-DEHEM_BUILD_TOOL=OFF` | skip hem-tool (library only) |
+
+wolfSSL is GPL-licensed: configuring a build that would link it statically
+prints a CMake warning naming the licensing consequence, and the release
+scripts refuse to package such a build (ARCHITECTURE.md §1). The `-static`
+release assets use OpenSSL (Apache-2.0) instead.
 
 ### Windows (MSYS2 / MinGW-w64)
 
@@ -170,12 +192,15 @@ required: the plain commands keep working without it.
 
 ```bash
 ./dev build [--gcc|--clang|--both]   # configure + build (per-compiler build dirs)
+./dev build --openssl                # the same on the OpenSSL backend (build-openssl/);
+                                     # also --static-only, --shared-only,
+                                     # --tool-link static|shared, --deps default|static|shared
 ./dev test                           # unit suite (ctest -L unit)
 ./dev test it [-d|--disruptive]      # integration (device); -d adds the disruptive label
 ./dev test all [-d]                  # unit + integration (+ disruptive with -d)
 ./dev test asan                      # ASan/LSan unit run (gcc)
 ./dev check                          # export-symbol + public-header gates only
-./dev ci                             # mirror the CI matrix locally (gcc + clang)
+./dev ci [--openssl]                 # mirror the CI matrix locally (gcc + clang)
 ./dev tool status                    # run the built hem-tool with the device env loaded
 ./dev install-dependencies [--yes]   # apt (Linux) / pacman (MSYS2)
 source <(./dev completions)          # bash tab-completion for the above
@@ -240,7 +265,8 @@ CertUtil -hashfile <file> SHA256    # Windows
 ## hem-tool
 
 The bundled CLI drives every binding through the public API. Commands are
-grouped by what they need — none (`status`, `checkin`, `init-device`), any bearer
+grouped by what they need — none (`status`, `checkin`, `init-device`,
+`init-wizard`, `keys types`), any bearer
 (`keys`, `sign`, `random`, `logs`, `selftest`, `reboot`, `ext list/login`),
 or a passphrase only (`ext pair` — the device demands `sub="U"` for pairing
 changes; `wipe-device` and `recovery` — config writes, `sub="U"`/`"M"`) — followed by a
@@ -254,10 +280,12 @@ hem-tool keys list --mobile         # any bearer command can push to the paired
                                     # phone instead of taking a passphrase
 hem-tool help keys rm               # per-command help (== hem-tool keys rm --help)
 hem-tool recovery                   # diagnose + fix TLS / certificate / clock trouble
+hem-tool keys types                 # what each key type is for (no device needed)
+hem-tool --version                  # SDK version; crypto library and libcurl,
+                                    # compiled against vs loaded, and how linked
 ```
 
-Device lifecycle (new in 1.1, attended — both change the device's
-identity):
+Device lifecycle (attended — both change the device's identity):
 
 ```bash
 hem-tool wipe-device --wait         # factory reset; type the hostname to confirm
@@ -266,6 +294,9 @@ hem-tool --url http://<host> init-device --passphrase P \
                                     # personalise a wiped device: P becomes its
                                     # user password; the 24 master words are
                                     # printed ONCE - keep them
+hem-tool --url http://<host> init-wizard
+                                    # (1.2) the same, one explained question per
+                                    # setting, passphrase typed twice, words checked
 ```
 
 Connection comes from `--url`/`EHEM_URL` (default `https://my.ence.do` —
@@ -274,6 +305,17 @@ a one-line notice tells you when the default kicked in), credentials from
 `--timeout SEC` bounds the wait; exit 13 = no answer, 14 = rejected on
 the phone). `hem-tool --help` shows the grouped command summary.
 
+Exit codes: 0 success, 1 failure (the message says which), 2 usage error;
+command-specific codes are listed in each command's help (e.g.
+`init-device`: 3 already initialised, 4 clock unset, 5 configuration
+rejected; `init-wizard` adds 6 = cancelled). **12** (1.2) = the SDK could
+not be initialised — the wolfSSL library loaded is not the one hem-tool
+was built for, or (Windows) `libwolfssl.dll` is missing; for the `-static`
+hem-tool, an OpenSSL configuration (`OPENSSL_CONF` / `openssl.cnf`, Linux)
+left it without algorithms. The message names the versions and the fix.
+hem-tool checks this before any command, so it never crashes on a foreign
+library.
+
 ## Install
 
 ```bash
@@ -281,7 +323,8 @@ cmake --install build --prefix /your/prefix
 ```
 
 Downstream CMake projects then consume the SDK via its exported target — the
-package config finds libcurl and wolfSSL for the static target itself:
+package config finds libcurl and the crypto library (wolfSSL or OpenSSL, as
+built) for the static target itself:
 
 ```cmake
 find_package(encedo-hem CONFIG REQUIRED)
@@ -290,8 +333,9 @@ target_link_libraries(app PRIVATE encedo-hem::encedo-hem)         # shared
 target_link_libraries(app PRIVATE encedo-hem::encedo-hem-static)  # static
 ```
 
-Other build systems use pkg-config (`lib/pkgconfig/encedo-hem.pc`, relocatable
-with the install; `--static` adds libcurl and wolfSSL for the static library):
+Other build systems use pkg-config (`lib/pkgconfig/encedo-hem.pc`, 1.2+,
+relocatable with the install; `--static` adds libcurl and the crypto library
+for the static library):
 
 ```bash
 cc app.c $(pkg-config --cflags --libs encedo-hem)
@@ -302,10 +346,13 @@ cc app.c $(pkg-config --cflags --libs encedo-hem)
 ```
 include/ehem/   public headers (ehem_ prefix) — the per-symbol reference
 docs/           API-GUIDE.md · COVERAGE.md · RELEASING.md
-src/            library sources (+ vendored cjson and BIP39 wordlist, tools/hem-tool)
-tests/          unit/ · integration/ · disruptive/ · support/
-cmake/          MinGW toolchain, package config
-scripts/        dependency installers, Windows build helpers, release/ (CI release builds)
+src/            library sources (+ vendored cjson and BIP39 wordlist, tools/hem-tool);
+                crypto_shim_wolfssl.c / crypto_shim_openssl.c = the two backends
+tests/          unit/ · integration/ · disruptive/ · consumer/ (installed-package
+                gate) · support/ (incl. crypto_ref, the per-backend test oracle)
+cmake/          MinGW toolchain, package config, encedo-hem.pc
+scripts/        dependency installers, Windows build helpers, release/ (CI release
+                builds: pinned deps, packaging and checks per variant)
 .github/        workflows: ci.yml (unit CI), release.yml (release builds)
 requirements/   REQ-*.md + generated TRACE.md
 workplan/        todo/ · doing/ · done/ step files
@@ -318,4 +365,6 @@ PKCS#11 implementations). wolfSSL is GPLv2-or-later/commercial
 dual-licensed (per the pinned release's `COPYING`/`LICENSING`); binaries
 that link it must comply accordingly — the published hem-tool links it
 dynamically, and no published package bundles it statically
-(ARCHITECTURE.md §1, §12 risk 1).
+(ARCHITECTURE.md §1, §12 risk 1). The `-static` packages contain OpenSSL
+(Apache-2.0) and libcurl (curl license); their notices are in each
+archive's `LICENSES/`.
