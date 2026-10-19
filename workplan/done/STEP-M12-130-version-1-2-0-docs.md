@@ -7,8 +7,12 @@ traces:
   architecture: ["ARCHITECTURE.md#11-milestones", "ARCHITECTURE.md#4-public-api--conventions"]
 depends_on: ["STEP-M12-020", "STEP-M12-030", "STEP-M12-040", "STEP-M12-050", "STEP-M12-060", "STEP-M12-070", "STEP-M12-080", "STEP-M12-090", "STEP-M12-100", "STEP-M12-110", "STEP-M12-120"]
 evidence:
-  commits: ["333284c"]   # start — the version + docs commit, the rc run and the done commit follow
+  commits: ["333284c", "5954950"]   # start; the version + docs commit (the rc1 tag's commit); the done commit follows
   tests:
+    - "CI run 38903704626 (push of 5954950 to development, 2026-10-16): all 10 legs green — Linux gcc / clang / gcc OpenSSL / clang OpenSSL / gcc static-only / gcc shared-only (hem-tool on the shared SDK); Windows MinGW / OpenSSL / static-only / shared-only"
+    - "Release run 38903755451 (workflow_dispatch on development at 5954950, 2026-10-16): Linux and Windows jobs green with warm caches (1:16 / 2:14), every package and smoke step green; the publishing job skipped (no tag); artifacts release-linux-x86_64 32,964,076 bytes and release-windows-x86_64 9,390,666 bytes — the 11 archives + SHA256SUMS"
+    - "Release run 38904497654 (push of the annotated tag v1.2.0-rc1 = 5954950, 2026-10-16, tagged by the user): all three jobs green — Linux 3:46 and Windows 8:07 with BOTH prefixes built cold (a tag run cannot read the caches made on development), the publishing job's 'Assemble assets + one SHA256SUMS' (sha256sum -c, duplicate-name check), 'Release notes' and 'Publish' steps green. Release 414975403, prerelease true, 12 uploaded assets: hem-tool-1.2.0-rc1-{linux,windows}-x86_64{,-static}.{tar.gz,zip}, encedo-hem-1.2.0-rc1-{linux,windows}-x86_64{,-static}.{tar.gz,zip}, wolfssl-5.7.2-{linux-x86_64.tar.gz,windows-x86_64.zip}, wolfssl-5.7.2-stable-src.tar.gz, SHA256SUMS (+ GitHub's own zip and tar.gz source archives = 14 visible)"
+    - "Attended by the user (reported 2026-10-19), rc1 assets on Windows AND Linux: the dynamic hem-tool started without wolfSSL shows the refusal message; with the companion library copied beside it `status` works; the -static hem-tool ran `init-wizard` end to end, generated a key, signed a string, wiped the device, then listed the keys of the other (Manager-initialised) unit — all worked (recorded under REQ-BUILD-009's attended criterion; the gate repeats `status` under system trust on the rc2 binaries)"
     - "Local 2026-10-16 after the bump: ./dev ci 56/56 gcc + clang, ./dev ci --openssl 56/56 gcc + clang (the docs gate check_docs_coverage, the export baseline and the consumer gate among them). The build reads 1.2.0 everywhere: libencedo-hem.so.1.2.0 with SONAME libencedo-hem.so.1, the consumer gate's install has encedo-hem.pc 'Version: 1.2.0' and encedo-hem-config-version.cmake PACKAGE_VERSION 1.2.0, test_version asserts ehem_version() = the project version, hem-tool --version prints 'hem-tool 1.2.0'. Exports beyond the 1.0 baseline: the 1.1 additions + ehem_build_info_get (REQ-API-008 rev 2 already records the 1.2 additions)"
   notes: |
     The version lives in one place — project(VERSION) in CMakeLists.txt;
@@ -25,7 +29,18 @@ evidence:
     rc1 tag message drafted from the README Status block and ARCHITECTURE
     §11 M12 (RELEASING "Final release"): scratchpad
     release-notes-1.2.0-rc1.md, for `git tag -a v1.2.0-rc1
-    --cleanup=whitespace -F <file>`.
+    --cleanup=whitespace -F <file>`. The user tagged 5954950 on
+    development and pushed the tag on 2026-10-16.
+    The step body said "ten" published archives: the release has eleven
+    (the wolfSSL source tarball was missed) + SHA256SUMS = 12 assets,
+    matching REQ-BUILD-009's table.
+    The rc1 test (user, 2026-10-19) brought three fixes for M12 before
+    1.2.0 — the one-file hem-tool becomes the plain asset name and the
+    wolfSSL builds get a `-shared` suffix (the SDK packages follow),
+    init-wizard's hostname defaults to my.ence.do, --passphrase is
+    deprecated — plus six backlog notes: STEP-M12-135, then v1.2.0-rc2
+    replaces rc1. This step's scope (1.2.0 + the docs + a published rc)
+    is complete as is.
 reopened: []
 cancelled: null
 ---
@@ -98,8 +113,17 @@ green on `development` first.
       section — the ten CI legs, the link assertions, the REQ-API-010 seam
       tests and the release jobs' real cases; the package gate on both
       library packages; the integration list brought up to date.)
-- [ ] CI green on `development` (all legs incl. openssl and the switch
+- [x] CI green on `development` (all legs incl. openssl and the switch
       legs); `workflow_dispatch` release run green with every asset.
-- [ ] `v1.2.0-rc1` suggested to the user; the pre-release carries every
+      (CI 38903704626: 10/10 legs on 5954950. Release dispatch
+      38903755451: both jobs green, the 11 archives + SHA256SUMS in the
+      two artifacts — see tests.)
+- [x] `v1.2.0-rc1` suggested to the user; the pre-release carries every
       REQ-BUILD-009 asset with annotation + checksums (run id and count
       recorded in REQ-BUILD-009).
+      (Run 38904497654 on the user's annotated tag: release 414975403 is
+      a pre-release with the 12 assets of the table, the tag message as
+      text + the SHA256SUMS block; `sha256sum -c` re-verified in the
+      publishing job. Recorded in REQ-BUILD-009's tag-path criterion,
+      rev 6. The user tested both hem-tool variants on Linux and Windows
+      — see tests.)

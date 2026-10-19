@@ -778,6 +778,23 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   Files\SSL`, the Linux ones are root-owned. A refused `-static` hem-tool
   names the OpenSSL configuration as the cause (REQ-TOOL-024 rev 5). A
   release now carries 11 archives + `SHA256SUMS`.
+  **STEP-M12-130 done 2026-10-19** — 1.2.0 everywhere observable
+  (`project(VERSION 1.2.0)`, `ehem_version()`, `libencedo-hem.so.1.2.0`
+  with SONAME 1, the package version file, `encedo-hem.pc`) and the
+  user-facing docs describe 1.2.0 (README Status block, API-GUIDE "Crypto
+  backend", COVERAGE re-checked, KNOWN-ISSUES' foreign-libwolfssl entry
+  FIXED in 1.2.0, RELEASING, tests/README). CI 38903704626 (10 legs) and
+  the release dispatch 38903755451 green on 5954950; the user's annotated
+  `v1.2.0-rc1` (run 38904497654) published the pre-release with 12 assets,
+  and the user tested both hem-tool variants on Linux and Windows (the
+  dynamic one refuses to start without wolfSSL and runs `status` with the
+  companion library; the one-file one ran `init-wizard`, a key generation,
+  a signature, `wipe-device` and `keys list` on the Manager-initialised
+  unit). The rc1 test brought three fixes for M12 before 1.2.0 (user
+  decision 2026-10-19): the one-file hem-tool becomes the plain asset name
+  and the wolfSSL builds get `-shared` (the SDK packages follow),
+  `init-wizard` defaults `hostname` to `my.ence.do`, and `--passphrase` is
+  deprecated — STEP-M12-135, then `v1.2.0-rc2` replaces rc1.
   Names settled: error code `EHEM_ERR_BACKEND_MISMATCH`; API
   `ehem_build_info_get`; options `EHEM_BUILD_SHARED` / `EHEM_BUILD_STATIC`
   / `EHEM_TOOL_LINK` / `EHEM_DEPS_LINK` / `EHEM_CRYPTO_BACKEND`; asset
