@@ -43,9 +43,9 @@ a tag push and publishes.
 
 A tag run cannot restore the dependency caches made on `development`
 (GitHub scopes a cache to the branch that wrote it and to the default
-branch), so it builds both prefixes from source: about 8 minutes on Windows
-and 4 on Linux (`v1.2.0-rc1`: 8:07 and 3:46) against 2–3 and 1–2 with warm
-caches.
+branch), so it builds both prefixes from source: 8–13 minutes on Windows
+and 3–4 on Linux (`v1.2.0-rc1`: 8:07 and 3:46; `v1.2.0-rc2`: 12:39 and
+3:15) against 2–3 and 1–2 with warm caches.
 
 ## Rules the workflow enforces
 

@@ -800,6 +800,19 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   and the wolfSSL builds get `-shared` (the SDK packages follow),
   `init-wizard` defaults `hostname` to `my.ence.do`, and `--passphrase` is
   deprecated — STEP-M12-135, then `v1.2.0-rc2` replaces rc1.
+  **STEP-M12-135 done 2026-10-19** — the rc1 fixes: the published names
+  flipped (`package.sh`, `package-static.sh`, `package-lib.sh`,
+  `release.yml`'s texts, the archive READMEs, README "Download",
+  RELEASING; REQ-BUILD-009 rev 7–8, REQ-BUILD-005 rev 5–6), the refusal
+  remedy names the one-file asset from `ehem_version()` (REQ-TOOL-024 rev
+  7–8), `init-wizard` offers `hostname [my.ence.do]` from the definition
+  behind the default URL (REQ-TOOL-028 rev 3–4), `--passphrase` reads
+  DEPRECATED in the top help page — now exactly its 45-line budget — and
+  warns once on stderr (REQ-TOOL-020 rev 2–3); BACKLOG items 6–11 hold
+  the user's notes unanalysed. CI 39320511927 green on 8dd915f; the
+  user's annotated `v1.2.0-rc2` (run 39320626797, cold caches again —
+  Windows 12:39) published pre-release 417736562 with the 12 assets under
+  the final names. The five §6.2 REQs are back to implemented / verified.
   Names settled: error code `EHEM_ERR_BACKEND_MISMATCH`; API
   `ehem_build_info_get`; options `EHEM_BUILD_SHARED` / `EHEM_BUILD_STATIC`
   / `EHEM_TOOL_LINK` / `EHEM_DEPS_LINK` / `EHEM_CRYPTO_BACKEND`; asset

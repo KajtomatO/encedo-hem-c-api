@@ -1,9 +1,9 @@
 ---
 id: REQ-TOOL-024
 title: hem-tool initialises the SDK up front and refuses a foreign crypto library with a clear message and its own exit code
-status: needs-reverify
+status: verified
 priority: must
-revision: 7   # 2026-10-19 (STEP-M12-135, §6.2 approved in chat): the dynamic remedies name the one-file hem-tool by its release asset name `hem-tool-<version>-<os>-x86_64` — from 1.2.0 the plain asset (user decision 2026-10-19: the wolfSSL build is `-shared`; until v1.2.0-rc1 the one-file build was `-static`, which the remedy said); needs-reverify until test_tool_startup / tool_startup_cli are green again (STEP-M12-135). Rev 6 = 2026-10-16 (STEP-M12-120 done): re-verified — the static-link remedy's unit test green on every CI leg (run 38892261894) and the Linux release job's null-provider control (run 38894733780); its criterion checked. No meaning change. Rev 5 = 2026-10-15 (STEP-M12-120, §6.2 approved in chat): when the crypto library is linked into hem-tool, the remedy names the OpenSSL configuration — needs-reverify until its unit test passes. Rev 4 = 2026-10-13: `keys types` criterion closed (STEP-M12-040). Rev 3: pre-gate preview recorded (STEP-M12-030). Rev 2 = 2026-10-13 (STEP-M12-020): message text and init placement settled; unit and documentation criteria recorded. No meaning change — approved status kept
+revision: 8   # 2026-10-19 (STEP-M12-135 done): re-verified — the rev 7 remedies' unit test (test_tool_startup) and tool_startup_cli green on all 10 legs of CI run 39320511927 and in both release jobs' unit suites (run 39320626797 / `v1.2.0-rc2`); verified again. No meaning change. Rev 7 = 2026-10-19 (STEP-M12-135, §6.2 approved in chat): the dynamic remedies name the one-file hem-tool by its release asset name `hem-tool-<version>-<os>-x86_64` — from 1.2.0 the plain asset (user decision 2026-10-19: the wolfSSL build is `-shared`; until v1.2.0-rc1 the one-file build was `-static`, which the remedy said); needs-reverify until test_tool_startup / tool_startup_cli are green again (STEP-M12-135). Rev 6 = 2026-10-16 (STEP-M12-120 done): re-verified — the static-link remedy's unit test green on every CI leg (run 38892261894) and the Linux release job's null-provider control (run 38894733780); its criterion checked. No meaning change. Rev 5 = 2026-10-15 (STEP-M12-120, §6.2 approved in chat): when the crypto library is linked into hem-tool, the remedy names the OpenSSL configuration — needs-reverify until its unit test passes. Rev 4 = 2026-10-13: `keys types` criterion closed (STEP-M12-040). Rev 3: pre-gate preview recorded (STEP-M12-030). Rev 2 = 2026-10-13 (STEP-M12-020): message text and init placement settled; unit and documentation criteria recorded. No meaning change — approved status kept
 source: ARCHITECTURE.md §11 M12 part A ("hem-tool refuses up front — hem-tool calls ehem_global_init explicitly at startup (today it calls only the cleanup) and exits with a clear message and an exit code of its own"; user decision 2026-10-10); KNOWN-ISSUES.md "Release hem-tool with a foreign libwolfssl crashes"; REQ-API-010 (the SDK check), REQ-API-011 (the versions for the message); approved 2026-10-12 (M12 decomposition, user: "approve"); the static-link remedy approved 2026-10-15 (STEP-M12-120, §6.2 in chat: the -static hem-tool's OpenSSL is linked in, so its refusal can only come from an OpenSSL configuration)
 depends_on: ["REQ-API-010", "REQ-API-011", "REQ-TOOL-001"]
 supersedes: null
@@ -132,7 +132,13 @@ package links wolfSSL statically) says that the build itself is broken.
       the remedy, else the job fails. Rev 7, 2026-10-19: the marker the
       tests look for is now "one-file hem-tool", and the dynamic remedies
       must name `hem-tool-<ehem_version()>-` + "-x86_64 (1.2.0 and later)";
-      re-verification: STEP-M12-135.)*
+      re-verification: STEP-M12-135 — done 2026-10-19: `startup.c` prints
+      both dynamic remedies with `ehem_version()` + `HEM_RELEASE_OS`
+      (`%s` only, ASCII), test_tool_startup asserts every dynamic remedy
+      contains "one-file hem-tool", `hem-tool-<ehem_version()>-` and
+      "-x86_64 (1.2.0 and later)" and the linked-in remedies neither;
+      green on all 10 legs of CI run 39320511927 (8dd915f) and in both
+      release jobs' unit suites (run 39320626797, `v1.2.0-rc2`).)*
 - [x] Without a forced mismatch every command behaves as before
       (existing unit suite green; `ehem_global_init` is called exactly
       once per run — the SDK's idempotency makes a second implicit call

@@ -1,9 +1,9 @@
 ---
 id: REQ-TOOL-028
 title: hem-tool init-wizard — attended, prompt-driven device initialisation over the init-device flow
-status: needs-reverify
+status: verified
 priority: should
-revision: 3   # 2026-10-19 (STEP-M12-135, §6.2 approved in chat): `hostname` defaults to `my.ence.do` — REQ-TOOL-017's product convention (user decision 2026-10-19 after the rc1 test); `user` and `email` keep no default; a unit criterion added; needs-reverify until test_wizard is green again. Rev 2 = 2026-10-13 (STEP-M12-050): OPEN criterion (environment pre-fill) settled — only --url / EHEM_URL; unit criteria recorded. No meaning change — approved status kept
+revision: 4   # 2026-10-19 (STEP-M12-135 done): re-verified — the rev 3 criterion checked (test_wizard, green on all 10 legs of CI run 39320511927 and in both release jobs' unit suites, run 39320626797 / `v1.2.0-rc2`); verified again. No meaning change. Rev 3 = 2026-10-19 (STEP-M12-135, §6.2 approved in chat): `hostname` defaults to `my.ence.do` — REQ-TOOL-017's product convention (user decision 2026-10-19 after the rc1 test); `user` and `email` keep no default; a unit criterion added; needs-reverify until test_wizard is green again. Rev 2 = 2026-10-13 (STEP-M12-050): OPEN criterion (environment pre-fill) settled — only --url / EHEM_URL; unit criteria recorded. No meaning change — approved status kept
 source: user note 2026-10-10 ("initialisation creator" — hand-hold the user through init; NOT designed then); shape decided by the user 2026-10-12 (M12 planning: a SEPARATE wizard command, `init-device` stays purely scripted; explains and prompts for every field with its default, passphrase hidden and twice, generates the 24 words and confirms the backup by re-typing a few, summary behind a typed confirmation, then the existing init flow incl. the reboot; needs a shared no-echo prompt helper); ARCHITECTURE.md §11 M12 part E (command name settled at decomposition: `init-wizard`); REQ-TOOL-021 (the flow it drives), REQ-AUTH-012 (the words), REQ-TEST-007 (attended-only); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-TOOL-021", "REQ-AUTH-012", "REQ-TEST-007", "REQ-TOOL-020"]
 supersedes: null
@@ -87,10 +87,23 @@ makes the backup of the 24 words a step that cannot be skipped. Keeping
       invalid typed mnemonic re-asks without quoting it; GET-init 406 →
       exit 3; the reboot question: yes → reboot + wait, no → the hint.
       CLI on the real `main.c` (`tool_startup_cli`): empty stdin → exit 6.)*
-- [ ] Unit (rev 3): the hostname prompt reads `hostname [my.ence.do]:` and
+- [x] Unit (rev 3): the hostname prompt reads `hostname [my.ence.do]:` and
       Enter puts `my.ence.do` into the POST body (byte-compare with
       `init-device --hostname my.ence.do`); `user` and `email` still
       re-prompt when empty; a typed hostname is taken over the default.
+      *(2026-10-19, STEP-M12-135: `wizard.c` asks `hostname [my.ence.do]:`
+      with `HEM_TOOL_DEFAULT_HOSTNAME` from `registry.h` — the one
+      definition behind `HEM_TOOL_DEFAULT_URL`. test_wizard: the
+      all-defaults runs press Enter at hostname and the POST body still
+      byte-equals init-device's with `--hostname my.ence.do`; the prompt
+      text is asserted, `user: ` and `email: ` carry no bracketed default;
+      test_required_fields_reprompt — an empty user and an empty email are
+      re-asked once each, "hostname is required" never appears, the summary
+      and the typed confirmation show my.ence.do, cancelling there → exit 6
+      with zero requests; the explicit run types dev.ence.do over the
+      default and confirms it. Green on all 10 legs of CI run 39320511927
+      (8dd915f) and in both release jobs' unit suites (run 39320626797,
+      `v1.2.0-rc2`).)*
 - [x] Unit: after the one display, the 24 words appear in no later
       output (the backup check prints positions only; the summary masks
       them); the passphrase never appears in any output.
