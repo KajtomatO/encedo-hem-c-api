@@ -5,7 +5,7 @@ milestone: M12
 implements: []
 traces:
   architecture: ["ARCHITECTURE.md#11-milestones"]
-depends_on: ["STEP-M12-130"]
+depends_on: ["STEP-M12-130", "STEP-M12-135"]
 evidence:
   commits: []
   tests: []
@@ -17,7 +17,7 @@ cancelled: null
 **Goal:** 1.2.0 ships: every published variant built in CI with its link
 mode asserted and the unit suite green on both backends; attended
 `hem-tool status` under system trust for each of the four published
-hem-tool binaries (dynamic + `-static`, Linux + Windows); the
+hem-tool binaries (the one-file and the `-shared`, Linux + Windows); the
 foreign-library refusal demonstrated — the release dynamic Linux hem-tool
 without its companion library, on the dev host whose `libwolfssl.so.42`
 is 5.6.6, prints the REQ-TOOL-024 message and exits 12 instead of
@@ -31,10 +31,10 @@ transitioned; ARCHITECTURE §11 M12 marked gate-passed; the release per
 docs/RELEASING.md "Final release" (merge, `v1.2.0` tag — the user tags).
 
 **Notes:** Milestone gate (chore, `implements: []`). Attended parts in
-one sitting with the user: (1) the four binaries from the rc
-pre-release, each `status` against the dev device under system trust
-(my.ence.do, public-CA cert), the static ones from a directory with NO
-companion library; (2) the refusal demo on this host (`env -i
+one sitting with the user: (1) the four binaries from the rc2
+pre-release (the final names, STEP-M12-135), each `status` against the
+dev device under system trust (my.ence.do, public-CA cert), the one-file
+ones from a directory with NO companion library; (2) the refusal demo on this host (`env -i
 ./hem-tool status` with the companion library absent → exit 12, the
 message naming wolfSSL 5.7.2 compiled / 5.6.6 loaded — the exact
 KNOWN-ISSUES scenario; the dev host is the only place with a foreign
@@ -72,7 +72,7 @@ without asking).
 - [ ] Fresh local `./dev ci` gcc + clang + ASan + gates green on both
       backends; `./dev test it` green on the wolfSSL build; device clean.
 - [ ] Attended: `status` under system trust for all four published
-      hem-tool binaries (static ones without a companion library) —
+      hem-tool binaries (the one-file ones without a companion library) —
       recorded in REQ-BUILD-009.
 - [ ] Attended: foreign-library refusal demo on this host (release dynamic
       Linux hem-tool, no companion, system 5.6.6 → message, exit 12, no
