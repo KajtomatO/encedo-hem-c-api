@@ -146,11 +146,30 @@ package links wolfSSL statically) says that the build itself is broken.
       *(`./dev ci` 51/51 gcc + clang, ASan 51/51; one explicit call in
       `main.c`; usage errors keep exit 2 under the seam — `version extra`,
       no command, `--mobile cert-install`.)*
-- [ ] Demonstrated at the M12 gate on Linux: the release dynamic hem-tool
+- [x] Demonstrated at the M12 gate on Linux: the release dynamic hem-tool
       in a directory WITHOUT the companion library, on a host whose
       `libwolfssl.so.42` is 5.6.6 → the message, exit 12, no crash
       (recorded with date and versions; this is REQ-API-010's gate
       criterion seen from the tool).
+      *(Gate, 2026-10-19 (STEP-M12-140), the PUBLISHED binary: the
+      `hem-tool-1.2.0-rc2-linux-x86_64-shared.tar.gz` asset of release
+      417736562, checksum verified against the release's `SHA256SUMS`,
+      unpacked alone on the dev host (Ubuntu, system `libwolfssl.so.42` =
+      5.6.6-1.3build1; `ldd` resolves it from `/lib/x86_64-linux-gnu`, the
+      RUNPATH `$ORIGIN` finds nothing). `env -i ./hem-tool --version` →
+      "wolfSSL 5.7.2 (compiled) / 5.6.6 (loaded), dynamic";
+      `env -i ./hem-tool --url https://my.ence.do status` → exit 12, empty
+      stdout, stderr exactly the message of this REQ — "error: hem-tool
+      cannot use the wolfSSL library it loaded (EHEM_ERR_BACKEND_MISMATCH)
+      / wolfSSL: built against 5.7.2, loaded 5.6.6 / remedy: put the wolfSSL
+      library from the release asset wolfssl-5.7.2-linux-x86_64 next to
+      hem-tool, or use the one-file hem-tool asset
+      hem-tool-1.2.0-linux-x86_64 (1.2.0 and later), which needs no separate
+      crypto library" — no crash (1.1.0 aborted here with "stack smashing
+      detected"). With the companion asset's `libwolfssl.so.42` copied
+      beside it: `ldd` resolves the `$ORIGIN` copy, `--version` "5.7.2
+      (compiled) / 5.7.2 (loaded)", `status` under system trust → device
+      data (fw v1.2.2-DIAG), exit 0.)*
       *(Pre-gate preview 2026-10-13 (STEP-M12-030), a dev Release build —
       not the published binary: hem-tool built against the pinned wolfSSL
       5.7.2 + libcurl 8.10.1 prefix, copied alone into an empty directory on

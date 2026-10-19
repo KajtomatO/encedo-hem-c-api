@@ -7,8 +7,10 @@ traces:
   architecture: ["ARCHITECTURE.md#11-milestones"]
 depends_on: ["STEP-M12-130", "STEP-M12-135"]
 evidence:
-  commits: []
-  tests: []
+  commits: ["67ffd14"]   # start; the evidence commits follow
+  tests:
+    - "CI (box 1), 2026-10-19: ci.yml run 39320511927 on development (8dd915f) — all 10 legs green: Linux gcc, clang, gcc OpenSSL, clang OpenSSL, static-only, shared-only (hem-tool on the shared SDK); Windows MinGW, OpenSSL, static-only, shared-only. The rc tag's own CI run 39320626785: 10/10. Release run 39320626797 (the user's annotated v1.2.0-rc2 on 8dd915f): both build jobs green with every package step — the dynamic variants (package.sh, package-wolfssl.sh, package-lib.sh: link-mode, delay-load, no-DLL and drop-in smoke assertions), the OpenSSL variants (package-static.sh, package-lib.sh static: glibc-only / system-DLL-only imports, no wolfSSL symbol or string, the null-provider OPENSSL_CONF control, the static consumer gate), both Linux classifier steps; the publishing job's assemble (sha256sum -c, duplicate-name check) and publish green; release 417736562 with the 12 assets of REQ-BUILD-009 rev 8."
+    - "Linux checks on the PUBLISHED rc2 binaries, 2026-10-19 (run on the dev host from the release assets, checksums verified against SHA256SUMS; the transcript reported to the user): one-file hem-tool-1.2.0-rc2-linux-x86_64 — ldd glibc only, no RUNPATH, --version 'OpenSSL 3.5.9 (compiled) / 3.5.9 (loaded), static' — `env -i ./hem-tool --url https://my.ence.do status` from a directory with no other file → device data, exit 0 (REQ-BUILD-009 attended criterion, Linux half). hem-tool-1.2.0-rc2-linux-x86_64-shared ALONE on this host (system libwolfssl.so.42 = 5.6.6) → --version '5.7.2 (compiled) / 5.6.6 (loaded)', `status` → exit 12, empty stdout, the REQ-TOOL-024 message naming the companion asset and the one-file asset, no crash (REQ-API-010 / REQ-TOOL-024 gate criteria); with the companion libwolfssl.so.42 beside it → resolved from $ORIGIN, 5.7.2 loaded, `status` exit 0. init-wizard on the one-file binary shows `hostname [my.ence.do]:` and cancels with exit 6 at end of input; `--passphrase x keys types` → exit 0 and one warning line; `--help` is 45 lines."
   notes: null
 reopened: []
 cancelled: null
@@ -65,7 +67,7 @@ stay). Tagging/committing/pushing is the user's (feedback: never commit
 without asking).
 
 **Definition of done**
-- [ ] CI: `ci.yml` green on `development` with every leg (default, switch
+- [x] CI: `ci.yml` green on `development` with every leg (default, switch
       legs, openssl Linux + Windows); the rc release run green with every
       variant's link-mode / no-wolfSSL / smoke assertions (run ids
       recorded).
@@ -74,7 +76,7 @@ without asking).
 - [ ] Attended: `status` under system trust for all four published
       hem-tool binaries (the one-file ones without a companion library) —
       recorded in REQ-BUILD-009.
-- [ ] Attended: foreign-library refusal demo on this host (release dynamic
+- [x] Attended: foreign-library refusal demo on this host (release dynamic
       Linux hem-tool, no companion, system 5.6.6 → message, exit 12, no
       crash) — recorded in REQ-API-010 and REQ-TOOL-024.
 - [ ] Attended: Windows missing-DLL message (zip without DLL → message +

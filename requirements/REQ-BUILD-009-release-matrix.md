@@ -224,6 +224,17 @@ GPL-licensed library stays a separately obtained download.
       box waits for the gate (STEP-M12-140): `status` under system trust
       with each of the four rc2 binaries, the one-file ones from a
       directory with no companion library.)*
+      *(rc2 on Linux, 2026-10-19 (STEP-M12-140), the published assets of
+      release 417736562, checksums verified against `SHA256SUMS`, each run
+      with `env -i` and `--url https://my.ence.do` — system trust, no
+      `--cacert` / `--insecure`: `hem-tool-1.2.0-rc2-linux-x86_64` — `ldd`
+      = glibc only, no RUNPATH, `--version` "OpenSSL 3.5.9 (compiled) /
+      3.5.9 (loaded), static" — `status` from a directory holding nothing
+      but the archive's files → device data (fw v1.2.2-DIAG), exit 0;
+      `hem-tool-1.2.0-rc2-linux-x86_64-shared` alone → the REQ-TOOL-024
+      refusal, exit 12 (the host's wolfSSL is 5.6.6); with the companion
+      asset's `libwolfssl.so.42` beside it → `status`, exit 0. The box
+      waits for the Windows half of the rc2 run — the user's sitting.)*
 - [x] REQ-BUILD-005 unchanged in behaviour: the dynamic hem-tool archive,
       the companion assets and the source tarball are byte-for-byte the
       same kind of output as 1.1.0 (same scripts, same assertions).

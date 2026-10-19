@@ -3,7 +3,7 @@ id: REQ-API-010
 title: Crypto-backend compatibility check at ehem_global_init — a foreign library is refused with a distinct error, never masked
 status: verified
 priority: must
-revision: 4   # 2026-10-14 (STEP-M12-090 done): the OpenSSL criterion ticked (CI run 38482938701). No meaning change. Rev 3 = 2026-10-13: pre-gate preview of the foreign-library refusal recorded (dev Release build, STEP-M12-030). Rev 2 = 2026-10-12 (STEP-M12-010): OPEN criterion resolved (DecodedCert probe parses an embedded 375-byte self-signed EC leaf; WC_RNG probed init + one 16-byte draw + free, canaries only, an init failure is NOMEM-class not a mismatch); unit-proven criteria ticked. No meaning change — approved status kept
+revision: 5   # 2026-10-19 (STEP-M12-140): the gate criterion checked — the published v1.2.0-rc2 Linux `-shared` hem-tool, alone on the dev host (system wolfSSL 5.6.6), refused with the REQ-TOOL-024 message and exit 12 (record below). No meaning change. Rev 4 = 2026-10-14 (STEP-M12-090 done): the OpenSSL criterion ticked (CI run 38482938701). No meaning change. Rev 3 = 2026-10-13: pre-gate preview of the foreign-library refusal recorded (dev Release build, STEP-M12-030). Rev 2 = 2026-10-12 (STEP-M12-010): OPEN criterion resolved (DecodedCert probe parses an embedded 375-byte self-signed EC leaf; WC_RNG probed init + one 16-byte draw + free, canaries only, an init failure is NOMEM-class not a mismatch); unit-proven criteria ticked. No meaning change — approved status kept
 source: user decision 2026-10-10 (the v1.1.0-rc4 crash on a foreign libwolfssl is fixed in M12 by an SDK version check + self-test, not in M10); ARCHITECTURE.md §11 M12 part A (planned 2026-10-12), §12 risk 5 (caller-allocated wolfSSL structs are an ABI hazard); KNOWN-ISSUES.md "Release hem-tool with a foreign libwolfssl crashes" (Hmac 784 vs 896 bytes, DecodedCert 1528 vs 2576 — 5.7.2 release build vs Ubuntu 5.6.6, same SONAME); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-API-002", "REQ-API-003", "REQ-AUTH-001"]
 supersedes: null
@@ -108,10 +108,27 @@ installed" from "out of memory" (HEM-SDK-8 distinguishable conditions).
       test_backend_compat, the seam test, runs in `ctest -L unit` on the
       OpenSSL legs of CI run 38482938701 — Linux gcc, Linux clang,
       Windows MinGW — green 2026-10-13.)*
-- [ ] Demonstrated at the M12 gate: the release Linux hem-tool run with
+- [x] Demonstrated at the M12 gate: the release Linux hem-tool run with
       the host's `libwolfssl.so.42` 5.6.6 and no companion library refuses
       with the REQ-TOOL-024 message and exit code instead of crashing —
       recorded here with date, binary and versions.
+      *(Gate, 2026-10-19 (STEP-M12-140), the PUBLISHED binary:
+      `hem-tool-1.2.0-rc2-linux-x86_64-shared` from release 417736562
+      (checksum verified against its `SHA256SUMS`), unpacked alone on the
+      dev host — system `libwolfssl.so.42` = Ubuntu's 5.6.6-1.3build1,
+      which `ldd` resolves from `/lib/x86_64-linux-gnu` because the RUNPATH
+      `$ORIGIN` holds no library. `env -i ./hem-tool --version` → "wolfSSL
+      5.7.2 (compiled) / 5.6.6 (loaded), dynamic"; `env -i ./hem-tool --url
+      https://my.ence.do status` → exit 12, empty stdout, one stderr
+      message: "error: hem-tool cannot use the wolfSSL library it loaded
+      (EHEM_ERR_BACKEND_MISMATCH) / wolfSSL: built against 5.7.2, loaded
+      5.6.6 / remedy: put the wolfSSL library from the release asset
+      wolfssl-5.7.2-linux-x86_64 next to hem-tool, or use the one-file
+      hem-tool asset hem-tool-1.2.0-linux-x86_64 (1.2.0 and later), which
+      needs no separate crypto library" — no crash, where the 1.1.0 binary
+      aborted with "stack smashing detected" (KNOWN-ISSUES). With the
+      companion asset's `libwolfssl.so.42` beside it the same binary loads
+      5.7.2 and `status` returns device data, exit 0.)*
       *(Pre-gate preview 2026-10-13 (STEP-M12-030), a dev Release build —
       not the published binary: hem-tool built against the pinned wolfSSL
       5.7.2 + libcurl 8.10.1 prefix, copied alone into an empty directory on
