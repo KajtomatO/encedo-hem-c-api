@@ -360,8 +360,10 @@ wolfSSL and run with another.
   it with `0xC0000135` (STATUS_DLL_NOT_FOUND) before any of its code ran.
   The 1.2.0 binary loads the DLL on first use (a delay-load import) and
   reports what is missing and where to put it, exit 12 (REQ-TOOL-026).
-- **No companion at all** — the `-static` hem-tool (OpenSSL and libcurl
-  linked in) needs no wolfSSL library (REQ-BUILD-009).
+- **No companion at all** — the one-file hem-tool (OpenSSL and libcurl
+  linked in) needs no wolfSSL library; from 1.2.0 it is the plain
+  `hem-tool-<version>-<os>-x86_64` asset and the wolfSSL build is the
+  `-shared` one (REQ-BUILD-009).
 
 The 1.1.0 binaries keep the old behaviour; the workaround for them is the
 companion asset: put the library from the release's

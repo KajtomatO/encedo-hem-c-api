@@ -184,7 +184,8 @@ that key. The cache handles all of this transparently.
 
 The SDK is built against one crypto library, chosen at configure time with
 `EHEM_CRYPTO_BACKEND`: **wolfSSL** (the default, linked dynamically in
-every published package) or **OpenSSL 3** (the `-static` packages). The
+the `-shared` packages) or **OpenSSL 3** (the one-file hem-tool and the
+static SDK package — the plain asset names from 1.2.0). The
 public headers name neither — no `ehem_*` type depends on the choice — and
 `ehem_build_info_get()` tells a program which one it got, the version it
 was compiled against, the version loaded and how each library is linked.

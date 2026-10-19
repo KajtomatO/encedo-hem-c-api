@@ -395,9 +395,14 @@ sequenceDiagram
   attempt, no polling). The top-level help gains a **"manual recovery"**
   section listing `cert-install` and `tls-recover` below the auth-grouped
   listing, in which `recovery` itself stays.
-- Connection parameters via flags or env (`EHEM_URL`, `EHEM_PASSPHRASE` —
-  the passphrase currently accepted via `--passphrase`/env; a stdin prompt
-  fallback so it never need appear on the command line is a later refinement).
+- Connection parameters via flags or env (`EHEM_URL`, `EHEM_PASSPHRASE`).
+  `--passphrase` is **deprecated** since 1.2.0 (user decision 2026-10-19,
+  REQ-TOOL-020 rev 2): a passphrase on the command line stays in the shell
+  history and shows in the process list, so hem-tool warns once on stderr
+  and will drop the flag in a later release; a safer entry (a session,
+  `hem-tool login`) is a BACKLOG item. `init-wizard` offers `my.ence.do` as
+  the hostname default, the host the default URL points at (REQ-TOOL-028
+  rev 3, user decision 2026-10-19).
 - **Protected-key policy** (mirrors Python `wipe_keys.py`): keys labeled
   exactly `TLS PrivateKey` / `TLS Certificate`, or containing `(Android)`
   / `(iPhone)`, are never removed by bulk operations; removing one
@@ -798,9 +803,11 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   Names settled: error code `EHEM_ERR_BACKEND_MISMATCH`; API
   `ehem_build_info_get`; options `EHEM_BUILD_SHARED` / `EHEM_BUILD_STATIC`
   / `EHEM_TOOL_LINK` / `EHEM_DEPS_LINK` / `EHEM_CRYPTO_BACKEND`; asset
-  suffix `-static` = OpenSSL backend + every third-party library static
-  (glibc dynamic on Linux), library packages
-  `encedo-hem-<label>-<os>-x86_64[-static]`; hem-tool `keys types`,
+  names (user decision 2026-10-19, STEP-M12-135 — until `v1.2.0-rc1` the
+  OpenSSL variants carried `-static`): the plain `hem-tool-<label>-<os>-x86_64`
+  and `encedo-hem-<label>-<os>-x86_64` = OpenSSL backend + every third-party
+  library static (glibc dynamic on Linux), no companion; `-shared` = wolfSSL
+  linked dynamically, the companion asset required; hem-tool `keys types`,
   `init-wizard`, exit 12 = the SDK could not be initialised, 6 = wizard
   cancelled)*. One
   milestone, one release — **1.2.0** (additive: a new error code, CMake
@@ -896,7 +903,13 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
       variants get a suffix — *settled at the decomposition:* `-static`
       means OpenSSL backend + every third-party library static, no
       companion library; library packages are
-      `encedo-hem-<label>-<os>-x86_64[-static]` (REQ-BUILD-009). `ci.yml`
+      `encedo-hem-<label>-<os>-x86_64[-static]` (REQ-BUILD-009).
+      *Reversed 2026-10-19* (user decision after the rc1 test,
+      STEP-M12-135): the one-file OpenSSL build IS the plain
+      `hem-tool-<label>-<os>-x86_64`, the wolfSSL build is `…-shared`, and
+      the SDK packages follow (`encedo-hem-<label>-<os>-x86_64` static on
+      OpenSSL, `…-shared` the shared library on wolfSSL) — the suffix marks
+      the variant that needs a second download. `ci.yml`
       gains legs that exercise the switches and both backends (unit
       suite on every push); `release.yml` builds the published variants.
     - *Dropped (user decision 2026-10-12):* the full-dynamic hem-tool

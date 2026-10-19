@@ -1,9 +1,9 @@
 ---
 id: REQ-TOOL-028
 title: hem-tool init-wizard — attended, prompt-driven device initialisation over the init-device flow
-status: verified
+status: needs-reverify
 priority: should
-revision: 2   # 2026-10-13 (STEP-M12-050): OPEN criterion (environment pre-fill) settled — only --url / EHEM_URL; unit criteria recorded. No meaning change — approved status kept
+revision: 3   # 2026-10-19 (STEP-M12-135, §6.2 approved in chat): `hostname` defaults to `my.ence.do` — REQ-TOOL-017's product convention (user decision 2026-10-19 after the rc1 test); `user` and `email` keep no default; a unit criterion added; needs-reverify until test_wizard is green again. Rev 2 = 2026-10-13 (STEP-M12-050): OPEN criterion (environment pre-fill) settled — only --url / EHEM_URL; unit criteria recorded. No meaning change — approved status kept
 source: user note 2026-10-10 ("initialisation creator" — hand-hold the user through init; NOT designed then); shape decided by the user 2026-10-12 (M12 planning: a SEPARATE wizard command, `init-device` stays purely scripted; explains and prompts for every field with its default, passphrase hidden and twice, generates the 24 words and confirms the backup by re-typing a few, summary behind a typed confirmation, then the existing init flow incl. the reboot; needs a shared no-echo prompt helper); ARCHITECTURE.md §11 M12 part E (command name settled at decomposition: `init-wizard`); REQ-TOOL-021 (the flow it drives), REQ-AUTH-012 (the words), REQ-TEST-007 (attended-only); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-TOOL-021", "REQ-AUTH-012", "REQ-TEST-007", "REQ-TOOL-020"]
 supersedes: null
@@ -24,8 +24,11 @@ runs the **same** init flow (`hem_init_device_run`, REQ-TOOL-021) —
      uninitialised and reached over `http://`, and that the master
      secret cannot be rotated later;
   2. one prompt per `cfg` field with its explanation and the Manager's
-     default in brackets, Enter = default (`user`, `email`, `hostname`
-     have no default and re-prompt when empty; `ip A.B.C.D/N`,
+     default in brackets, Enter = default (`user` and `email` have no
+     default and re-prompt when empty; `hostname` defaults to
+     `my.ence.do` — the product convention behind REQ-TOOL-017's default
+     URL, one definition for both (rev 3, user decision 2026-10-19);
+     `ip A.B.C.D/N`,
      `storage-mode`, `disk0-size`, `origin`, `dnsd`, the three trust
      booleans, `gen-csr`, `ctx`);
   3. the passphrase, **hidden**, typed twice, re-prompted on mismatch
@@ -84,6 +87,10 @@ makes the backup of the 24 words a step that cannot be skipped. Keeping
       invalid typed mnemonic re-asks without quoting it; GET-init 406 →
       exit 3; the reboot question: yes → reboot + wait, no → the hint.
       CLI on the real `main.c` (`tool_startup_cli`): empty stdin → exit 6.)*
+- [ ] Unit (rev 3): the hostname prompt reads `hostname [my.ence.do]:` and
+      Enter puts `my.ence.do` into the POST body (byte-compare with
+      `init-device --hostname my.ence.do`); `user` and `email` still
+      re-prompt when empty; a typed hostname is taken over the default.
 - [x] Unit: after the one display, the 24 words appear in no later
       output (the backup check prints positions only; the summary masks
       them); the passphrase never appears in any output.

@@ -23,9 +23,10 @@ module.
 > switches for the library variants and link modes; an installed
 > `encedo-hem.pc`; hem-tool `--version`, `keys types` and `init-wizard`,
 > and a message instead of a crash or a silent stop when its wolfSSL is
-> wrong or missing (exit 12). Releases add a one-file **`-static`
-> hem-tool** (OpenSSL, no companion library) and **SDK library
-> packages** — see [Download](#download).
+> wrong or missing (exit 12). Releases now carry the **one-file hem-tool**
+> (OpenSSL linked in, no companion library) as the plain asset — the
+> wolfSSL build is the `-shared` one — and **SDK library packages**; see
+> [Download](#download).
 > [docs/COVERAGE.md](docs/COVERAGE.md) maps every documented endpoint to
 > its binding; what is still unbound (firmware/UI upgrade, factory
 > provisioning, diagnostics) is parked in [BACKLOG.md](BACKLOG.md). The
@@ -114,8 +115,8 @@ Useful configure options:
 
 wolfSSL is GPL-licensed: configuring a build that would link it statically
 prints a CMake warning naming the licensing consequence, and the release
-scripts refuse to package such a build (ARCHITECTURE.md §1). The `-static`
-release assets use OpenSSL (Apache-2.0) instead.
+scripts refuse to package such a build (ARCHITECTURE.md §1). The one-file
+hem-tool and the static SDK package use OpenSSL (Apache-2.0) instead.
 
 ### Windows (MSYS2 / MinGW-w64)
 
@@ -225,33 +226,38 @@ message). Linux and Windows (x86_64) each get:
 
 | Asset | Contents |
 |---|---|
-| `hem-tool-<version>-<os>-x86_64.{tar.gz,zip}` | hem-tool with libcurl compiled in and **wolfSSL linked dynamically** — needs the wolfSSL asset below; `README.txt`, `LICENSES/` (MIT SDK/tool, curl, cJSON, BIP39 wordlist, qrcodegen) |
-| `hem-tool-<version>-<os>-x86_64-static.{tar.gz,zip}` *(1.2+)* | hem-tool as **one file**: OpenSSL and libcurl linked in, no companion library; `README.txt`, `LICENSES/` (the above + OpenSSL's Apache-2.0) |
-| `encedo-hem-<version>-<os>-x86_64.{tar.gz,zip}` *(1.2+)* | the SDK as a **shared library** (libcurl inside, wolfSSL dynamic — needs the wolfSSL asset): headers, `libencedo-hem.so.*` / `libencedo-hem.dll` + `.dll.a`, CMake package config, `encedo-hem.pc` |
-| `encedo-hem-<version>-<os>-x86_64-static.{tar.gz,zip}` *(1.2+)* | the SDK as a **static library** on OpenSSL, with the `libcurl.a`, `libssl.a`, `libcrypto.a` it was built against and their headers, CMake package configs and `.pc` files |
+| `hem-tool-<version>-<os>-x86_64.{tar.gz,zip}` | hem-tool as **one file** *(1.2+)*: OpenSSL and libcurl linked in, no companion library; `README.txt`, `LICENSES/` (MIT SDK/tool, curl, cJSON, BIP39 wordlist, qrcodegen, OpenSSL's Apache-2.0) |
+| `hem-tool-<version>-<os>-x86_64-shared.{tar.gz,zip}` | hem-tool with libcurl compiled in and **wolfSSL linked dynamically** — needs the wolfSSL asset below (1.0/1.1 published this one under the plain name); `README.txt`, `LICENSES/` (MIT SDK/tool, curl, cJSON, BIP39 wordlist, qrcodegen) |
+| `encedo-hem-<version>-<os>-x86_64.{tar.gz,zip}` *(1.2+)* | the SDK as a **static library** on OpenSSL, with the `libcurl.a`, `libssl.a`, `libcrypto.a` it was built against and their headers, CMake package configs and `.pc` files |
+| `encedo-hem-<version>-<os>-x86_64-shared.{tar.gz,zip}` *(1.2+)* | the SDK as a **shared library** (libcurl inside, wolfSSL dynamic — needs the wolfSSL asset): headers, `libencedo-hem.so.*` / `libencedo-hem.dll` + `.dll.a`, CMake package config, `encedo-hem.pc` |
 | `wolfssl-<wv>-<os>-x86_64.{tar.gz,zip}` | the wolfSSL companion: `libwolfssl.so.<N>` / `libwolfssl.dll`, wolfSSL's `COPYING` (GPLv2 or later), `BUILD-CONFIG.txt`, `README.txt` |
 | `wolfssl-<wv>-stable-src.tar.gz` | the unmodified upstream source the wolfSSL library was built from (once per release) |
 | `SHA256SUMS` | over all of the above |
 
 **Which one do I want?**
 
-- **Just the CLI, simplest:** `hem-tool-…-static`. One file, nothing to put
-  beside it; TLS and crypto through OpenSSL. On Linux it needs glibc (its
-  README names the oldest version) and reads `/etc/ssl/openssl.cnf`; on
-  Windows it reads no OpenSSL configuration at all and uses the Windows
-  certificate store.
-- **The CLI on wolfSSL:** `hem-tool-…` plus the matching `wolfssl-…` asset;
-  put the library next to the binary — hem-tool looks in its own directory
-  first, then the system's library path (a system wolfSSL with the same
-  soname and build configuration works too). From 1.2 a different wolfSSL
-  is refused with one message and exit code 12, and on Windows so is a
-  missing `libwolfssl.dll` (1.1.0 crashed on a different library, and on
-  Windows stopped before its own code ran, exit `0xC0000135`).
-- **Linking the SDK into your program:** `encedo-hem-…-static` for a
-  self-contained static link (`find_package(encedo-hem)` →
+- **Just the CLI, simplest:** `hem-tool-…-x86_64` (no suffix). One file,
+  nothing to put beside it; TLS and crypto through OpenSSL. On Linux it
+  needs glibc (its README names the oldest version) and reads
+  `/etc/ssl/openssl.cnf`; on Windows it reads no OpenSSL configuration at
+  all and uses the Windows certificate store.
+- **The CLI on wolfSSL:** `hem-tool-…-shared` plus the matching `wolfssl-…`
+  asset; put the library next to the binary — hem-tool looks in its own
+  directory first, then the system's library path (a system wolfSSL with
+  the same soname and build configuration works too). From 1.2 a different
+  wolfSSL is refused with one message and exit code 12, and on Windows so
+  is a missing `libwolfssl.dll` (1.1.0 crashed on a different library, and
+  on Windows stopped before its own code ran, exit `0xC0000135`).
+- **Linking the SDK into your program:** `encedo-hem-…-x86_64` (no suffix)
+  for a self-contained static link (`find_package(encedo-hem)` →
   `encedo-hem::encedo-hem-static`, or `pkg-config --static`), or
-  `encedo-hem-…` for the shared library, shipped with the `wolfssl-…`
-  library beside it (`encedo-hem::encedo-hem`, or `pkg-config`).
+  `encedo-hem-…-shared` for the shared library, shipped with the
+  `wolfssl-…` library beside it (`encedo-hem::encedo-hem`, or `pkg-config`).
+
+**Names changed in 1.2.0:** 1.1's `hem-tool-<version>-<os>-x86_64` was the
+wolfSSL build. From 1.2.0 that name is the one-file build, and the wolfSSL
+build is `hem-tool-<version>-<os>-x86_64-shared` — the suffix marks the
+variant that needs a second download.
 
 No published package links wolfSSL statically (licensing; ARCHITECTURE.md
 §1): wolfSSL is always the separate download, with its source. Verify
@@ -289,7 +295,7 @@ Device lifecycle (attended — both change the device's identity):
 
 ```bash
 hem-tool wipe-device --wait         # factory reset; type the hostname to confirm
-hem-tool --url http://<host> init-device --passphrase P \
+EHEM_PASSPHRASE=P hem-tool --url http://<host> init-device \
          --user U --email E --hostname H --master-generate
                                     # personalise a wiped device: P becomes its
                                     # user password; the 24 master words are
@@ -301,16 +307,19 @@ hem-tool --url http://<host> init-wizard
 
 Connection comes from `--url`/`EHEM_URL` (default `https://my.ence.do` —
 a one-line notice tells you when the default kicked in), credentials from
-`--passphrase`/`EHEM_PASSPHRASE` or `--mobile` (push confirmation;
-`--timeout SEC` bounds the wait; exit 13 = no answer, 14 = rejected on
-the phone). `hem-tool --help` shows the grouped command summary.
+`EHEM_PASSPHRASE` or `--mobile` (push confirmation; `--timeout SEC` bounds
+the wait; exit 13 = no answer, 14 = rejected on the phone). `--passphrase PW`
+still works but is **deprecated** since 1.2.0: a passphrase on the command
+line stays in the shell history and shows in the process list, so hem-tool
+warns once on stderr and will drop the flag in a later release.
+`hem-tool --help` shows the grouped command summary.
 
 Exit codes: 0 success, 1 failure (the message says which), 2 usage error;
 command-specific codes are listed in each command's help (e.g.
 `init-device`: 3 already initialised, 4 clock unset, 5 configuration
 rejected; `init-wizard` adds 6 = cancelled). **12** (1.2) = the SDK could
 not be initialised — the wolfSSL library loaded is not the one hem-tool
-was built for, or (Windows) `libwolfssl.dll` is missing; for the `-static`
+was built for, or (Windows) `libwolfssl.dll` is missing; for the one-file
 hem-tool, an OpenSSL configuration (`OPENSSL_CONF` / `openssl.cnf`, Linux)
 left it without algorithms. The message names the versions and the fix.
 hem-tool checks this before any command, so it never crashes on a foreign
@@ -365,6 +374,6 @@ PKCS#11 implementations). wolfSSL is GPLv2-or-later/commercial
 dual-licensed (per the pinned release's `COPYING`/`LICENSING`); binaries
 that link it must comply accordingly — the published hem-tool links it
 dynamically, and no published package bundles it statically
-(ARCHITECTURE.md §1, §12 risk 1). The `-static` packages contain OpenSSL
-(Apache-2.0) and libcurl (curl license); their notices are in each
-archive's `LICENSES/`.
+(ARCHITECTURE.md §1, §12 risk 1). The one-file hem-tool and the static SDK
+package contain OpenSSL (Apache-2.0) and libcurl (curl license); their
+notices are in each archive's `LICENSES/`.

@@ -50,7 +50,7 @@ remedy for every backend and link mode (REQ-TOOL-024); and
 (`hem-tool-forced-mismatch`) through the command line — exit 12 for every
 command that needs the SDK, 0 for help and `--version`. The release jobs add
 the real cases: the Windows hem-tool without `libwolfssl.dll`, and the Linux
-`-static` hem-tool under an OpenSSL configuration that loads no algorithms.
+one-file hem-tool under an OpenSSL configuration that loads no algorithms.
 
 ### The consumer gate
 
@@ -67,10 +67,10 @@ test's log (`ctest -R consumer_interface -V`). On MinGW the shared consumers
 link with `-Wl,--disable-auto-import`, so the DLL must be reachable without
 the linker's auto-import. Native builds only. The release job runs the same
 script against each unpacked SDK library package (`-DEHEM_PACKAGE=<dir>`,
-`scripts/release/package-lib.sh`, REQ-BUILD-009): the shared one with the
-wolfSSL companion library, and the `-static` one, whose OpenSSL and libcurl
-archives make the full `pkg-config --static` closure linkable — there the
-gate requires it.
+`scripts/release/package-lib.sh`, REQ-BUILD-009): the `-shared` one with the
+wolfSSL companion library, and the plain-named static one, whose OpenSSL and
+libcurl archives make the full `pkg-config --static` closure linkable — there
+the gate requires it.
 
 ## Running integration tests
 

@@ -323,7 +323,11 @@ static const hem_cmd_option SHARED_OPTIONS[] = {
                           HEM_TOOL_DEFAULT_URL ")" },
     { "--cacert FILE",    "verify TLS against this CA/pinned certificate" },
     { "--insecure",       "skip TLS verification (lab use only)" },
-    { "--passphrase PW",  "login passphrase (or EHEM_PASSPHRASE)" },
+    /* REQ-TOOL-020 rev 2 (user decision 2026-10-19): the flag is deprecated —
+     * a passphrase on the command line stays in the shell history and shows
+     * in the process list; main.c warns once when it is used. */
+    { "--passphrase PW",  "login passphrase - DEPRECATED, will be removed (shell "
+                          "history, process list): set EHEM_PASSPHRASE instead" },
     { "--mobile",         "push confirmation on the paired phone instead of "
                           "a passphrase (exit 13 = no answer, 14 = rejected)" },
     { "--timeout SEC",    "mobile confirmation wait (default 60)" },

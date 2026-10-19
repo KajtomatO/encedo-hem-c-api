@@ -13,16 +13,21 @@ Each release job (Linux, Windows) builds two dependency prefixes (see
 
 | Variant | Script | Prefix | Assets |
 |---|---|---|---|
-| dynamic | `package.sh <deps> <os> dist` | `deps` (wolfSSL shared, libcurl static) | `hem-tool-<label>-<os>-x86_64`, `wolfssl-<wv>-<os>-x86_64` (+ the wolfSSL source on Linux), `encedo-hem-<label>-<os>-x86_64` (`package-wolfssl.sh`, `package-lib.sh`) |
-| static | `package.sh <deps-openssl> <os> dist static` | `deps-openssl` (OpenSSL + libcurl, both static) | `hem-tool-<label>-<os>-x86_64-static`, `encedo-hem-<label>-<os>-x86_64-static` (`package-static.sh`, `package-lib.sh static`) |
+| dynamic | `package.sh <deps> <os> dist` | `deps` (wolfSSL shared, libcurl static) | `hem-tool-<label>-<os>-x86_64-shared`, `wolfssl-<wv>-<os>-x86_64` (+ the wolfSSL source on Linux), `encedo-hem-<label>-<os>-x86_64-shared` (`package-wolfssl.sh`, `package-lib.sh`) |
+| static | `package.sh <deps-openssl> <os> dist static` | `deps-openssl` (OpenSSL + libcurl, both static) | `hem-tool-<label>-<os>-x86_64`, `encedo-hem-<label>-<os>-x86_64` (`package-static.sh`, `package-lib.sh static`) |
 
 Both write into the same `dist/`, and each run rewrites `SHA256SUMS` over
-every archive there. `-static` means OpenSSL backend and every third-party
-library linked in; no `-static` asset contains wolfSSL, and `package-static.sh`
-checks that by symbol and by string. The `-static` hem-tool on Windows reads
-no OpenSSL configuration, and the job proves it with an `OPENSSL_CONF` that
-would leave OpenSSL without algorithms; on Linux it reads
-`/etc/ssl/openssl.cnf`, and the same file there is the control (exit 12).
+every archive there. The **plain name** means OpenSSL backend and every
+third-party library linked in — the one-file hem-tool and the static SDK
+package are the default assets; **`-shared`** means wolfSSL linked
+dynamically, the companion asset required (user decision 2026-10-19; until
+`v1.2.0-rc1` the OpenSSL variants carried `-static` and the wolfSSL hem-tool
+the plain name, as 1.0 and 1.1 did). No plain-named asset contains wolfSSL,
+and `package-static.sh` checks that by symbol and by string. The one-file
+hem-tool on Windows reads no OpenSSL configuration, and the job proves it
+with an `OPENSSL_CONF` that would leave OpenSSL without algorithms; on Linux
+it reads `/etc/ssl/openssl.cnf`, and the same file there is the control
+(exit 12).
 
 ## What triggers what
 
@@ -35,6 +40,12 @@ would leave OpenSSL without algorithms; on Linux it reads
 
 Choose a *branch* in "Run workflow": started on a tag, the run behaves like
 a tag push and publishes.
+
+A tag run cannot restore the dependency caches made on `development`
+(GitHub scopes a cache to the branch that wrote it and to the default
+branch), so it builds both prefixes from source: about 8 minutes on Windows
+and 4 on Linux (`v1.2.0-rc1`: 8:07 and 3:46) against 2–3 and 1–2 with warm
+caches.
 
 ## Rules the workflow enforces
 
@@ -86,9 +97,10 @@ git push origin v1.2.0-rc1
 
 Then on GitHub (Actions → Release): wait for the run to finish green, and
 check the pre-release under Releases. From 1.2 it should have twelve assets
-(1.1: six): per platform the hem-tool archive and its `-static` one, the
-SDK library package and its `-static` one, and the wolfSSL archive; the
-wolfSSL source tarball; `SHA256SUMS`.
+(1.1: six): per platform the one-file hem-tool and its `-shared` one, the
+static SDK library package and its `-shared` one, and the wolfSSL archive;
+the wolfSSL source tarball; `SHA256SUMS` (GitHub lists its own two source
+archives besides).
 
 Test the candidate on both platforms, as a user would, for every hem-tool
 variant (REQ-BUILD-009 records these runs):
@@ -96,15 +108,15 @@ variant (REQ-BUILD-009 records these runs):
 1. Download the archives, plus `SHA256SUMS`.
 2. Verify them: `sha256sum -c SHA256SUMS --ignore-missing` (Linux), or
    `CertUtil -hashfile <file> SHA256` compared by hand (Windows).
-3. **Dynamic hem-tool:** unpack it and the matching wolfSSL asset and
+3. **`-shared` hem-tool:** unpack it and the matching wolfSSL asset and
    **put the wolfSSL library next to the binary** (`libwolfssl.so.42` /
    `libwolfssl.dll`). Without it, Windows hem-tool reports the missing DLL
    and exits 12. On Linux the loader reports the missing library, or
    hem-tool refuses a different system `libwolfssl.so.42` with exit 12.
    1.1.0 crashed on that Linux library and stopped silently on Windows.
-4. **`-static` hem-tool:** unpack it alone into an empty directory, with
-   no wolfSSL library anywhere near it; `hem-tool --version` must report
-   OpenSSL compiled and loaded, `static`.
+4. **One-file hem-tool** (the plain name): unpack it alone into an empty
+   directory, with no wolfSSL library anywhere near it; `hem-tool --version`
+   must report OpenSSL compiled and loaded, `static`.
 5. Run `hem-tool status` against the device with system trust (no
    `--cacert` / `--insecure`) with each variant, then whatever the
    milestone needs.
@@ -176,7 +188,7 @@ which builds two prefixes in each release job:
 | Prefix | Command | Contents | Used by |
 |---|---|---|---|
 | `deps` | `build-deps.sh deps` | wolfSSL (shared) + libcurl on wolfSSL (static) | hem-tool, the wolfSSL companion asset, the SDK library package (REQ-BUILD-005, REQ-BUILD-009) |
-| `deps-openssl` | `build-deps.sh deps-openssl openssl` | OpenSSL 3.5 LTS + libcurl on OpenSSL, both static | the `-static` variants (REQ-BUILD-009) |
+| `deps-openssl` | `build-deps.sh deps-openssl openssl` | OpenSSL 3.5 LTS + libcurl on OpenSSL, both static | the plain-named variants: the one-file hem-tool and the static SDK package (REQ-BUILD-009) |
 
 To bump one:
 
@@ -206,6 +218,6 @@ To bump one:
 
 No published package may contain wolfSSL statically linked (ARCHITECTURE.md
 §1, user decision 2026-10-09); `package.sh` asserts that in every build. No
-static library ships with wolfSSL either: the SDK library package carries
-the shared library only (user decision 2026-10-14) — static linking is the
-OpenSSL `-static` package.
+static library ships with wolfSSL either: the `-shared` SDK library package
+carries the shared library only (user decision 2026-10-14) — static linking
+is the plain-named OpenSSL package.

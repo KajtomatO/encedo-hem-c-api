@@ -8,8 +8,9 @@
 
 #include <string.h>
 
-/* The <os> part of the release's companion asset name
- * (wolfssl-<version>-<os>-x86_64, REQ-BUILD-005). */
+/* The <os> part of the release's asset names: the companion
+ * wolfssl-<version>-<os>-x86_64 (REQ-BUILD-005) and the one-file
+ * hem-tool-<version>-<os>-x86_64 (REQ-BUILD-009). */
 #ifdef _WIN32
 #define HEM_RELEASE_OS "windows"
 #else
@@ -69,18 +70,25 @@ void hem_tool_print_refusal(FILE *err, const ehem_build_info *bi)
                     bi->crypto_backend);
         }
     } else if (strcmp(bi->crypto_backend, "wolfSSL") == 0) {
+        /* The one-file hem-tool is the plain asset of the release (REQ-BUILD-009,
+         * user decision 2026-10-19); this binary is its -shared sibling. */
         fprintf(err, "  remedy: put the wolfSSL library from the release asset "
                      "wolfssl-%s-%s-x86_64\n"
-                     "          next to hem-tool, or use the -static hem-tool "
-                     "(1.2.0 and later),\n"
-                     "          which needs no separate crypto library\n",
-                bi->crypto_version_compiled, HEM_RELEASE_OS);
+                     "          next to hem-tool, or use the one-file hem-tool "
+                     "asset\n"
+                     "          hem-tool-%s-%s-x86_64 (1.2.0 and later), which "
+                     "needs no separate\n"
+                     "          crypto library\n",
+                bi->crypto_version_compiled, HEM_RELEASE_OS,
+                ehem_version(), HEM_RELEASE_OS);
     } else {
         fprintf(err, "  remedy: install the %s %s library hem-tool was built "
                      "against, or use the\n"
-                     "          -static hem-tool (1.2.0 and later), which needs "
-                     "no separate crypto library\n",
-                bi->crypto_backend, bi->crypto_version_compiled);
+                     "          one-file hem-tool asset hem-tool-%s-%s-x86_64 "
+                     "(1.2.0 and later),\n"
+                     "          which needs no separate crypto library\n",
+                bi->crypto_backend, bi->crypto_version_compiled,
+                ehem_version(), HEM_RELEASE_OS);
     }
 }
 

@@ -37,7 +37,8 @@ int hem_tool_global_init(FILE *err);
  * from `bi` (REQ-API-011) — separate so the unit test can feed it the build
  * information of other builds. The remedy follows the link: a dynamic library
  * is replaced (the wolfSSL companion asset, or the library hem-tool was built
- * against; or the -static hem-tool); a library linked in leaves only
+ * against; or the one-file hem-tool asset — the plain name from 1.2.0,
+ * REQ-BUILD-009); a library linked in leaves only
  * OpenSSL's configuration as the cause (REQ-TOOL-024 rev 5), and any other
  * backend linked in is a broken build.
  */

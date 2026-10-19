@@ -285,7 +285,8 @@ if(NOT EHEM_DEPS_LINK STREQUAL "default")
 endif()
 # The licensing tripwire (ARCHITECTURE.md §1 and §12 risk 1): any build whose
 # wolfSSL is an archive puts wolfSSL inside every binary it links. (OpenSSL 3
-# is Apache-2.0: a static OpenSSL is the -static packages' design, REQ-BUILD-009.)
+# is Apache-2.0: a static OpenSSL is the design of the one-file hem-tool and
+# the static SDK package, REQ-BUILD-009.)
 if(EHEM_CRYPTO_BACKEND STREQUAL "wolfssl" AND EHEM_CRYPTO_LINK STREQUAL "static")
   message(WARNING "wolfSSL resolves to a STATIC archive in this configuration: "
     "every binary built from it carries wolfSSL, which is licensed GPLv2-or-later "
@@ -522,7 +523,7 @@ if(NOT TARGET PkgConfig::WOLFSSL)
   return()
 endif()]=])
 elseif(EHEM_BUILD_STATIC AND EHEM_DEPS_LINK STREQUAL "static")
-  # The -static library package (REQ-BUILD-009) bundles libcurl.a, libssl.a and
+  # The static library package (REQ-BUILD-009) bundles libcurl.a, libssl.a and
   # libcrypto.a: its consumers must find those archives, never a shared copy.
   set(EHEM_CONFIG_DEPENDENCIES [=[
 # The static library's link interface names libcurl and OpenSSL's libcrypto,

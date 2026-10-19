@@ -1,9 +1,9 @@
 ---
 id: REQ-TOOL-024
 title: hem-tool initialises the SDK up front and refuses a foreign crypto library with a clear message and its own exit code
-status: verified
+status: needs-reverify
 priority: must
-revision: 6   # 2026-10-16 (STEP-M12-120 done): re-verified — the static-link remedy's unit test green on every CI leg (run 38892261894) and the Linux release job's null-provider control (run 38894733780); its criterion checked. No meaning change. Rev 5 = 2026-10-15 (STEP-M12-120, §6.2 approved in chat): when the crypto library is linked into hem-tool, the remedy names the OpenSSL configuration — needs-reverify until its unit test passes. Rev 4 = 2026-10-13: `keys types` criterion closed (STEP-M12-040). Rev 3: pre-gate preview recorded (STEP-M12-030). Rev 2 = 2026-10-13 (STEP-M12-020): message text and init placement settled; unit and documentation criteria recorded. No meaning change — approved status kept
+revision: 7   # 2026-10-19 (STEP-M12-135, §6.2 approved in chat): the dynamic remedies name the one-file hem-tool by its release asset name `hem-tool-<version>-<os>-x86_64` — from 1.2.0 the plain asset (user decision 2026-10-19: the wolfSSL build is `-shared`; until v1.2.0-rc1 the one-file build was `-static`, which the remedy said); needs-reverify until test_tool_startup / tool_startup_cli are green again (STEP-M12-135). Rev 6 = 2026-10-16 (STEP-M12-120 done): re-verified — the static-link remedy's unit test green on every CI leg (run 38892261894) and the Linux release job's null-provider control (run 38894733780); its criterion checked. No meaning change. Rev 5 = 2026-10-15 (STEP-M12-120, §6.2 approved in chat): when the crypto library is linked into hem-tool, the remedy names the OpenSSL configuration — needs-reverify until its unit test passes. Rev 4 = 2026-10-13: `keys types` criterion closed (STEP-M12-040). Rev 3: pre-gate preview recorded (STEP-M12-030). Rev 2 = 2026-10-13 (STEP-M12-020): message text and init placement settled; unit and documentation criteria recorded. No meaning change — approved status kept
 source: ARCHITECTURE.md §11 M12 part A ("hem-tool refuses up front — hem-tool calls ehem_global_init explicitly at startup (today it calls only the cleanup) and exits with a clear message and an exit code of its own"; user decision 2026-10-10); KNOWN-ISSUES.md "Release hem-tool with a foreign libwolfssl crashes"; REQ-API-010 (the SDK check), REQ-API-011 (the versions for the message); approved 2026-10-12 (M12 decomposition, user: "approve"); the static-link remedy approved 2026-10-15 (STEP-M12-120, §6.2 in chat: the -static hem-tool's OpenSSL is linked in, so its refusal can only come from an OpenSSL configuration)
 depends_on: ["REQ-API-010", "REQ-API-011", "REQ-TOOL-001"]
 supersedes: null
@@ -20,7 +20,8 @@ fails, exit with **code 12** after one stderr message naming the cause:
 for `EHEM_ERR_BACKEND_MISMATCH` the crypto backend, the version hem-tool
 was built against, the version it loaded (REQ-API-011) and the remedy
 (put the library from the release's `wolfssl-<v>-<os>-x86_64` asset next
-to the binary; or use the `-static` hem-tool, REQ-BUILD-009 — or, when
+to the binary; or use the one-file hem-tool — the release's plain
+`hem-tool-<version>-<os>-x86_64` asset, REQ-BUILD-009 — or, when
 the crypto library is linked into hem-tool, the OpenSSL configuration it
 read, `OPENSSL_CONF` or `openssl.cnf`); for any other code the
 `ehem_rc_str()` name.
@@ -58,9 +59,13 @@ for REQ-TOOL-026's hook. The message (stderr, ASCII, `%s` only):
 error: hem-tool cannot use the wolfSSL library it loaded (EHEM_ERR_BACKEND_MISMATCH)
   wolfSSL: built against 5.7.2, loaded 5.6.6
   remedy: put the wolfSSL library from the release asset wolfssl-5.7.2-linux-x86_64
-          next to hem-tool, or use the -static hem-tool (1.2.0 and later),
-          which needs no separate crypto library
+          next to hem-tool, or use the one-file hem-tool asset
+          hem-tool-1.2.0-linux-x86_64 (1.2.0 and later), which needs no separate
+          crypto library
 ```
+
+(The one-file asset is named from `ehem_version()` and the build's OS —
+rev 7; until rc1 the line read "or use the -static hem-tool".)
 
 Equal versions (the struct self-test refused a same-version library built
 with other options) append `- same version, incompatible build` to the
@@ -73,9 +78,9 @@ problem either way).
 
 **Settled at STEP-M12-120 (2026-10-15, §6.2 approved in chat).** When the
 build information reports the crypto library linked in (`crypto_link`
-`static` — the `-static` hem-tool, REQ-BUILD-009), no other library can be
+`static` — the one-file hem-tool, REQ-BUILD-009), no other library can be
 the cause. For OpenSSL the remedy names the configuration instead (on
-Linux the `-static` binary reads `/etc/ssl/openssl.cnf`; on Windows it
+Linux the one-file binary reads `/etc/ssl/openssl.cnf`; on Windows it
 reads none):
 
 ```
@@ -108,9 +113,9 @@ package links wolfSSL statically) says that the build itself is broken.
       without the seam reaches the transport and exits 1.)*
 - [x] Unit: with the crypto library linked in, the refusal's remedy
       names the OpenSSL configuration (`OPENSSL_CONF`, `openssl.cnf`) and
-      neither the companion asset nor the `-static` hem-tool; a statically
+      neither the companion asset nor the one-file hem-tool; a statically
       linked non-OpenSSL backend is reported as a broken build. Release
-      job: the Linux `-static` hem-tool under an `OPENSSL_CONF` that
+      job: the Linux one-file hem-tool under an `OPENSSL_CONF` that
       activates only the `null` provider prints that remedy and exits 12
       (REQ-BUILD-009's control).
       *(`hem_tool_print_refusal()` in `startup.c`, split out of
@@ -124,7 +129,10 @@ package links wolfSSL statically) says that the build itself is broken.
       10 legs of CI run 38892261894 (2026-10-16) and in both release jobs'
       static unit suite (run 38894733780). The Linux job ran the unpacked
       `-static` hem-tool under a null-provider `OPENSSL_CONF`: exit 12 and
-      the remedy, else the job fails.)*
+      the remedy, else the job fails. Rev 7, 2026-10-19: the marker the
+      tests look for is now "one-file hem-tool", and the dynamic remedies
+      must name `hem-tool-<ehem_version()>-` + "-x86_64 (1.2.0 and later)";
+      re-verification: STEP-M12-135.)*
 - [x] Without a forced mismatch every command behaves as before
       (existing unit suite green; `ehem_global_init` is called exactly
       once per run — the SDK's idempotency makes a second implicit call

@@ -39,8 +39,8 @@ sleep 1
 # (it fails there, which is fine — the diagnosis line has already printed).
 export EHEM_CHECKIN_URL="https://localhost:$PORT/checkin"
 set +e
-OUT="$("$BIN" --url "https://localhost:$PORT" --cacert "$DIR/ca.pem" \
-        --passphrase x recovery 2>&1)"
+OUT="$(EHEM_PASSPHRASE=x "$BIN" --url "https://localhost:$PORT" --cacert "$DIR/ca.pem" \
+        recovery 2>&1)"
 RC=$?
 set -e
 # shellcheck disable=SC2001  # indenting a multi-line value
@@ -54,8 +54,8 @@ fi
 
 # Not yet valid: refused by TLS on its date, but never "expired" — no check-in.
 set +e
-OUT2="$("$BIN" --url "https://localhost:$PORT2" --cacert "$DIR/ca.pem" \
-         --passphrase x recovery 2>&1)"
+OUT2="$(EHEM_PASSPHRASE=x "$BIN" --url "https://localhost:$PORT2" --cacert "$DIR/ca.pem" \
+         recovery 2>&1)"
 RC2=$?
 set -e
 # shellcheck disable=SC2001  # indenting a multi-line value

@@ -1,9 +1,9 @@
 ---
 id: REQ-BUILD-005
 title: Release builds of hem-tool — dynamic-wolfSSL binaries from CI, artifacts on main, GitHub Releases on tags
-status: implemented
+status: needs-reverify
 priority: should
-revision: 4
+revision: 5   # 2026-10-19 (STEP-M12-135, §6.2 approved in chat): the hem-tool archive is `hem-tool-<version>-<os>-x86_64-shared` from 1.2.0 — the plain name goes to REQ-BUILD-009's one-file build (user decision 2026-10-19 after the rc1 test); contents, assertions and the companion assets unchanged; needs-reverify until the v1.2.0-rc2 release run. Rev 4 = the M12 decomposition record below (`source`)
 source: rev 4 — M12 decomposition 2026-10-12 (§6.2 report approved in chat; record and wording only, no behaviour change, status kept): the resolved-criterion record "-150 older" was wrong — wolfSSL `-150` is `ASN_BEFORE_DATE_E` (not yet valid) in 5.6.6 and 5.7.2 alike, "expired" is `-151` only (REQ-NET-005 rev 2, STEP-M12-030); REQ-BUILD-009 adds the 1.2.0 variants to the same release and `ci.yml` gains legs by REQ-BUILD-006/007 — this REQ's assets and the release workflow's relationship to ci.yml are unchanged; user decision 2026-10-07 ("github ci actions to build and release the cli tool"; answers the same day: build on every push to main, publish a Release on tags; Release-type build + SHA256SUMS); approved 2026-10-08 (user "ok") as rev 1 (fully static binaries); rev 2 — user decision 2026-10-09 (no statically bundled wolfSSL in any published package, for licensing reasons — wolfSSL is linked dynamically and published as a separate release asset; libcurl stays pinned static; a full-dynamic variant and static packages on another library go to M12) — rev 2 approved 2026-10-09 (user "I accept new req"); rev 3 — user decision 2026-10-10 (`v<version>-rc<N>` tags publish a GitHub pre-release, so the never-run publishing job is proven before the real release; the release text = the tag annotation + checksums, annotated tags enforced) — rev 3 approved 2026-10-10 (user "I approve REQ-BUILD-005 rev 3"); ARCHITECTURE.md §1 (wolfSSL "may also serve as libcurl's TLS backend where we build libcurl ourselves"; "wolfSSL is never statically bundled into a published package"), §11 (M10), §12 risk 1 (wolfSSL licensing); REQ-BUILD-002 (the existing CI stays as is)
 depends_on: ["REQ-BUILD-001", "REQ-BUILD-002", "REQ-NET-003", "REQ-NET-005"]
 supersedes: null
@@ -38,10 +38,13 @@ tag `v*`, publish the same archives, the wolfSSL companion assets and a
   (libgcc / libwinpthread) so `hem-tool.exe` imports Windows system DLLs
   and `libwolfssl.dll` only; the DLL itself is linked the same way, so it
   depends on system DLLs only.
-- **Archives.** `hem-tool-<version>-linux-x86_64.tar.gz` and
-  `hem-tool-<version>-windows-x86_64.zip`; `<version>` is the project
-  version (`ehem_version()`), suffixed `+g<shortsha>` for main-branch
-  builds. Each archive carries the binary, a short README (usage pointer,
+- **Archives.** `hem-tool-<version>-linux-x86_64-shared.tar.gz` and
+  `hem-tool-<version>-windows-x86_64-shared.zip` (rev 5: the `-shared`
+  suffix from 1.2.0 — 1.0 and 1.1 published this archive under the plain
+  name, which REQ-BUILD-009 gives to the one-file OpenSSL build; user
+  decision 2026-10-19); `<version>` is the project version
+  (`ehem_version()`), suffixed `+g<shortsha>` for main-branch builds.
+  Each archive carries the binary, a short README (usage pointer,
   checksum command, the run-time wolfSSL requirement and where to get it)
   and the license notices of everything compiled in (MIT for the SDK and
   the tool, curl's license, cJSON, the BIP39 wordlist, qrcodegen) — no
@@ -76,8 +79,10 @@ tag `v*`, publish the same archives, the wolfSSL companion assets and a
   by the checksums, and a lightweight tag fails before publishing. Assets
   are the two hem-tool archives, the two companion assets, the source
   tarball and `SHA256SUMS` *(the 1.1.0 set; from 1.2.0 REQ-BUILD-009 adds
-  the `-static` hem-tool and the library packages to the same release —
-  these assets stay as they are)*. `workflow_dispatch` MAY build any ref
+  the one-file hem-tool and the library packages to the same release —
+  the hem-tool archive is renamed `-shared`, the companion assets, the
+  source tarball and `SHA256SUMS` stay as they are)*. `workflow_dispatch`
+  MAY build any ref
   into artifacts.
 
 **Rationale:** operators need the CLI without a toolchain, and no published

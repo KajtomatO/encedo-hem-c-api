@@ -28,7 +28,8 @@
  *   hem-tool [--url URL] [--cacert FILE | --insecure] [--passphrase PW]
  *            [--force] <status|checkin|cert-install>
  * Connection URL comes from --url or the EHEM_URL environment variable; the
- * passphrase from --passphrase or EHEM_PASSPHRASE.
+ * passphrase from EHEM_PASSPHRASE or --passphrase (deprecated since 1.2.0 —
+ * a warning on stderr; REQ-TOOL-020 rev 2).
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -1213,6 +1214,16 @@ int main(int argc, char **argv)
         fprintf(stderr,
                 "error: --mobile and --passphrase are mutually exclusive\n");
         return 2;
+    }
+    if (o.pw_flag) {
+        /* implements: REQ-TOOL-020 rev 2 — the flag is deprecated (user
+         * decision 2026-10-19): once, on stderr, whenever it is used. */
+        fprintf(stderr,
+                "warning: --passphrase is deprecated and will be removed in a "
+                "later release -\n"
+                "         the passphrase stays in your shell history and shows "
+                "in the process\n"
+                "         list; set EHEM_PASSPHRASE instead\n");
     }
 
     /* Everything up to the ehem_global_init() below runs WITHOUT the SDK

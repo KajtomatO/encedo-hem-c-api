@@ -10,7 +10,10 @@
 #           REQ-TOOL-027 (`keys types [TYPE]` offline: no URL, no passphrase,
 #           under the forced refusal; unknown TYPE exit 2),
 #           REQ-TOOL-028 (`init-wizard` refuses init-device's flags with exit
-#           2 and cancels on the end of input with exit 6, zero traffic)
+#           2 and cancels on the end of input with exit 6, zero traffic),
+#           REQ-TOOL-020 (rev 2: `--passphrase` is deprecated — exactly one
+#           `warning:` line on stderr when the flag is used, none without it;
+#           the command still runs)
 #
 # Run as a CTest (label `unit`):
 #   cmake -DEHEM_TOOL=<hem-tool-forced-mismatch> -DEHEM_VERSION=<x.y.z> \
@@ -181,6 +184,23 @@ expect_not_in(_err "EHEM_ERR_BACKEND_MISMATCH")
 
 run(version keys types ED25519 extra)  # one TYPE at most
 expect_rc(2)
+
+# --passphrase is deprecated (REQ-TOOL-020 rev 2): ONE warning line on stderr
+# when the flag is used — the command still runs (the `keys types` run above
+# proves stderr stays empty without the flag).
+run(version --passphrase x keys types)
+expect_rc(0)
+expect_in(_out "SECP256R1")
+expect_in(_err "warning: --passphrase is deprecated")
+expect_in(_err "EHEM_PASSPHRASE")
+string(REGEX MATCHALL "warning:" _warns "${_err}")
+list(LENGTH _warns _nwarn)
+if(NOT _nwarn EQUAL 1)
+  message(FATAL_ERROR "${_what}: ${_nwarn} warning lines, expected one:\n${_err}")
+endif()
+run(version --passphrase=x keys types)   # the = spelling warns the same way
+expect_rc(0)
+expect_in(_err "warning: --passphrase is deprecated")
 
 # --- usage errors stay exit 2 (reported before the init) -------------------
 run(version version extra)

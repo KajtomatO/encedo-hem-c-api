@@ -88,8 +88,11 @@ int hem_help_command(FILE *f, const char *cmd, const char *subcmd);
  * convention (the provisioning cloud registers devices under the `my`
  * domain: api.encedo.com/domain/register/my), not a user-specific address.
  * Tool-side ONLY: the SDK itself takes URLs as explicit parameters.
+ * REQ-TOOL-028 rev 3: init-wizard offers the same hostname as its default
+ * (user decision 2026-10-19), so both come from one definition.
  */
-#define HEM_TOOL_DEFAULT_URL "https://my.ence.do"
+#define HEM_TOOL_DEFAULT_HOSTNAME "my.ence.do"
+#define HEM_TOOL_DEFAULT_URL "https://" HEM_TOOL_DEFAULT_HOSTNAME
 
 /*
  * Resolve the effective device URL: --url flag > EHEM_URL environment >

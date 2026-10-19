@@ -178,6 +178,11 @@ static void test_top_page_shape(void **state)
     assert_null(strstr(top, "--wait"));     /* reboot-only */
     assert_null(strstr(top, "--label-prefix"));
     assert_non_null(strstr(top, "--mobile"));  /* shared options ARE here */
+    /* REQ-TOOL-020 rev 2: --passphrase is rendered deprecated, pointing at
+     * the environment variable. */
+    assert_non_null(strstr(top, "--passphrase PW"));
+    assert_non_null(strstr(top, "DEPRECATED"));
+    assert_non_null(strstr(top, "set EHEM_PASSPHRASE instead"));
     assert_non_null(strstr(top, HEM_TOOL_DEFAULT_URL));
     assert_non_null(strstr(top, "help <command>"));
     assert_non_null(strstr(top, "hem-tool --version"));  /* REQ-TOOL-025 */

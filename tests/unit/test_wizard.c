@@ -58,9 +58,9 @@ static const char *const LETTER_WORDS[] = {
 static const unsigned POSITIONS[3] = { 2, 13, 24 };   /* advice, amount, bless */
 
 #define PASS EJWT_FX_PASSPHRASE
-/* The 13 settings prompts: user, email, hostname, then Enter for the 10
- * fields that have a default. */
-#define SETTINGS_DEFAULTS "alice\nalice@example.com\nmy.ence.do\n\n\n\n\n\n\n\n\n\n\n"
+/* The 13 settings prompts: user, email, then Enter for the 11 fields that
+ * have a default — hostname's is my.ence.do (REQ-TOOL-028 rev 3). */
+#define SETTINGS_DEFAULTS "alice\nalice@example.com\n\n\n\n\n\n\n\n\n\n\n\n"
 #define PASSPHRASE_TWICE  PASS "\n" PASS "\n"
 #define TYPED_LETTER      "t\n" "letter advice cage absurd amount doctor acoustic " \
                           "avoid letter advice cage absurd amount doctor acoustic " \
@@ -261,6 +261,14 @@ static void test_defaults_match_init_device(void **state)
     assert_int_equal((int)fake_transport_request_count(fake), 5);
     got = posted_body(fake);
     assert_string_equal(got, want);                       /* byte-identical */
+    /* REQ-TOOL-028 rev 3: hostname offers my.ence.do and Enter took it (the
+     * body above carries init-device's "my.ence.do"); user and email have no
+     * default. */
+    assert_non_null(strstr(r.out, "  hostname [my.ence.do]: "));
+    assert_non_null(strstr(r.out, "  user: "));
+    assert_null(strstr(r.out, "  user ["));
+    assert_non_null(strstr(r.out, "  email: "));
+    assert_null(strstr(r.out, "  email ["));
     assert_non_null(strstr(r.out, "Summary - nothing has been sent"));
     assert_non_null(strstr(r.out, "typed in (not shown)"));
     assert_non_null(strstr(r.out, "initialised: instanceid=uuid-wiz-1"));
@@ -341,6 +349,33 @@ static void test_passphrase_mismatch_then_cancel(void **state)
     fake_transport_free(fake);
 }
 
+/* REQ-TOOL-028 rev 3: user and email have no default — an empty answer
+ * re-asks; hostname offers my.ence.do and Enter takes it (the summary shows
+ * it). Cancelled at the typed confirmation: exit 6, zero transport I/O. */
+static void test_required_fields_reprompt(void **state)
+{
+    (void)state;
+    ehem_transport *fake = fake_transport_new();
+    run_result r;
+
+    assert_non_null(fake);
+    r = run_wizard(fake, "\n" "alice\n"                   /* user: empty, then */
+                   "\n" "alice@example.com\n"              /* email: empty, then */
+                   "\n\n\n\n\n\n\n\n\n\n\n"                /* hostname .. ctx */
+                   PASSPHRASE_TWICE TYPED_LETTER "x\n", NULL);
+    assert_int_equal(r.rc, HEM_WIZARD_CANCELLED);
+    assert_int_equal((int)fake_transport_request_count(fake), 0);
+    assert_int_equal(count(r.out, "user is required"), 1);
+    assert_int_equal(count(r.out, "email is required"), 1);
+    assert_null(strstr(r.out, "hostname is required"));
+    assert_int_equal(count(r.out, "  hostname [my.ence.do]: "), 1);
+    assert_non_null(strstr(r.out, "hostname         my.ence.do"));
+    assert_non_null(strstr(r.out, "('my.ence.do')"));      /* the confirmation */
+    assert_no_secrets(&r);
+    run_free(&r);
+    fake_transport_free(fake);
+}
+
 /* The end of input at any prompt cancels: exit 6, zero transport I/O. */
 static void test_end_of_input_cancels(void **state)
 {
@@ -400,6 +435,7 @@ static void tweak_explicit(hem_init_opts *o)
     o->no_trusted_backend = 1;
     o->gen_csr = 1;
     o->ctx_id = 5;
+    o->hostname = "dev.ence.do";          /* typed over the my.ence.do default */
 }
 
 /* Explicit answers (after rejected ones) reach the body exactly as the
@@ -410,7 +446,7 @@ static void test_explicit_answers_match_flags(void **state)
     char *want = init_device_body(LETTER, tweak_explicit);
     ehem_transport *fake = fake_init_ok(0);
     run_result r = run_wizard(fake,
-                              "alice\nalice@example.com\nmy.ence.do\n"
+                              "alice\nalice@example.com\ndev.ence.do\n"
                               "10.0.0.9/16\n"
                               "99\n83\n"                     /* storage: 99 refused */
                               "abc\n4194304\n"               /* disk0 */
@@ -421,7 +457,7 @@ static void test_explicit_answers_match_flags(void **state)
                               "\n"                           /* allow-keysearch: yes */
                               "yes\n"                        /* gen-csr */
                               "-1\n5\n"                      /* ctx: -1 refused */
-                              PASSPHRASE_TWICE TYPED_LETTER CONFIRM, NULL);
+                              PASSPHRASE_TWICE TYPED_LETTER "dev.ence.do\n", NULL);
     char *got;
 
     assert_int_equal(r.rc, HEM_INIT_OK);
@@ -488,6 +524,7 @@ int main(void)
         cmocka_unit_test_setup(test_defaults_match_init_device, setup_clock),
         cmocka_unit_test_setup(test_generated_words_backup, setup_clock),
         cmocka_unit_test_setup(test_passphrase_mismatch_then_cancel, setup_clock),
+        cmocka_unit_test_setup(test_required_fields_reprompt, setup_clock),
         cmocka_unit_test_setup(test_end_of_input_cancels, setup_clock),
         cmocka_unit_test_setup(test_invalid_mnemonic_reprompts, setup_clock),
         cmocka_unit_test_setup(test_explicit_answers_match_flags, setup_clock),

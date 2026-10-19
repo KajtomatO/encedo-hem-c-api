@@ -5,12 +5,15 @@
 # user unpacks them: the REQ-BUILD-008 sample consumer, built against the
 # unpacked package via find_package and pkg-config, runs
 # (tests/consumer/check_consumer.cmake, package mode).
-#   shared (default) — the wolfSSL flavour, encedo-hem-<label>-<os>-x86_64:
+#   shared (default) — the wolfSSL flavour, encedo-hem-<label>-<os>-x86_64-shared:
 #     the SHARED library only — no static library ships with wolfSSL (user
-#     decision 2026-10-14; static linking is the OpenSSL -static package).
+#     decision 2026-10-14; static linking is the OpenSSL package below).
 #     libcurl STATIC inside the library, wolfSSL DYNAMIC: the smoke runs it
 #     beside the wolfSSL companion asset.
-#   static — the OpenSSL flavour, encedo-hem-<label>-<os>-x86_64-static: the
+#   static — the OpenSSL flavour, encedo-hem-<label>-<os>-x86_64 (the PLAIN
+#     name: from 1.2.0 the static package is the default asset and the wolfSSL
+#     one carries -shared — user decision 2026-10-19; until v1.2.0-rc1 this
+#     one was -static): the
 #     STATIC library with the archives it was built against (libcurl.a,
 #     libssl.a, libcrypto.a from the deps-openssl prefix), their headers, CMake
 #     package config and .pc files, so `find_package` and `pkg-config --static`
@@ -49,7 +52,7 @@ case "$VARIANT" in
     BUILD="${LIB_BUILD_DIR:-build-lib}"
     WOLFSSL_VERSION="$(pkg-config --modversion wolfssl)"
     WNAME="wolfssl-${WOLFSSL_VERSION}-${OS}-x86_64"
-    NAME="encedo-hem-${LABEL}-${OS}-x86_64"
+    NAME="encedo-hem-${LABEL}-${OS}-x86_64-shared"
     if [ "$OS" = "windows" ]; then
       # -static folds libgcc + libwinpthread into the DLL, as build-deps.sh does
       # for libwolfssl.dll: the package's DLL imports system DLLs and
@@ -71,7 +74,7 @@ case "$VARIANT" in
     grep -q -- '^openssl-.*-static+curl-.*-static+' "$PREFIX/.stamp" 2>/dev/null \
       || fail "$PREFIX was not built by scripts/release/build-deps.sh <prefix> openssl"
     OPENSSL_VERSION="$(pkg-config --modversion libcrypto)"
-    NAME="encedo-hem-${LABEL}-${OS}-x86_64-static"
+    NAME="encedo-hem-${LABEL}-${OS}-x86_64"
     # EHEM_DEPS_LINK=static: libcurl and OpenSSL resolve to archives or the
     # configure fails (REQ-BUILD-006).
     BUILD_OPTS=(-DEHEM_BUILD_SHARED=OFF -DEHEM_CRYPTO_BACKEND=openssl -DEHEM_DEPS_LINK=static)
@@ -172,7 +175,8 @@ libencedo-hem.dll"
 directory first (RUNPATH \$ORIGIN)"
   fi
   cat > "$STAGE/README.txt" <<EOF
-Encedo HEM C SDK ${LABEL} (${OS}, x86_64) - the shared library.
+Encedo HEM C SDK ${LABEL} (${OS}, x86_64, -shared) - the shared library, wolfSSL
+flavour.
 
 Contents:
   include/ehem/               the public headers (they include no libcurl or
@@ -188,7 +192,7 @@ this archive: download ${WNAME}.${EXT} from the same release and put
 ${WLIB_NAME} ${PLACE}.
 There is no static library here - no published package links wolfSSL
 statically; the static SDK is the OpenSSL-based
-encedo-hem-${LABEL}-${OS}-x86_64-static package of the same release.
+encedo-hem-${LABEL}-${OS}-x86_64 package of the same release (the plain name).
 Verify downloads against SHA256SUMS.
 
 Use:
@@ -227,7 +231,8 @@ locations); elsewhere set a CA file through the SDK's TLS options."
   fi
   cat > "$STAGE/README.txt" <<EOF
 Encedo HEM C SDK ${LABEL} (${OS}, x86_64) - the static library, OpenSSL
-flavour (-static).
+flavour; the default SDK package (the shared, wolfSSL-based library is the
+-shared asset).
 
 Contents:
   include/ehem/               the public headers (they include no libcurl or

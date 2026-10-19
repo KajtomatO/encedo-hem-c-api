@@ -7,9 +7,23 @@ traces:
   architecture: ["ARCHITECTURE.md#8-hem-tool-cli", "ARCHITECTURE.md#11-milestones"]
 depends_on: ["STEP-M12-130"]
 evidence:
-  commits: []
-  tests: []
-  notes: null
+  commits: ["b344fe6"]   # start; the implementation commit and the done commit follow
+  tests:
+    - "Local 2026-10-19: ./dev ci 56/56 gcc + clang (wolfSSL) and ./dev ci --openssl 56/56 gcc + clang, the docs gate, the export baseline and the consumer gate among them. New/changed assertions — test_tool_startup (verifies: REQ-TOOL-024 rev 7): every dynamic remedy contains 'one-file hem-tool' and 'hem-tool-<ehem_version()>-' + '-x86_64 (1.2.0 and later)', the linked-in remedies neither; test_wizard (verifies: REQ-TOOL-028 rev 3): the all-defaults runs press Enter at hostname and the body still equals init-device's with --hostname my.ence.do, the prompt reads 'hostname [my.ence.do]: ', user/email have no bracketed default, test_required_fields_reprompt sees 'user is required' and 'email is required' once each and never 'hostname is required', the explicit run types dev.ence.do over the default; test_registry (verifies: REQ-TOOL-020 rev 2): the top page renders '--passphrase PW' with DEPRECATED and 'set EHEM_PASSPHRASE instead' and stays at 45 lines (the <= 45 budget — exactly at it; the two-line wording first tried made 46 and was shortened); tool_startup_cli: '--passphrase x keys types' and '--passphrase=x keys types' exit 0 with exactly one 'warning:' line on stderr, the plain 'keys types' run keeps stderr empty"
+    - "Scripts: bash -n on package.sh, package-static.sh, package-lib.sh, package-wolfssl.sh, check-expired-classifier.sh; release.yml parses (PyYAML). The published names can only be proven by a release run: the user's v1.2.0-rc2 (box 6)"
+  notes: |
+    Per-command help does not list the shared options — it points at
+    `hem-tool --help` — so the DEPRECATED text lives on the top page only
+    (REQ-TOOL-020's criterion says so); the stderr warning fires on every
+    use of the flag, including `--help`/`--version` runs that carry it.
+    The top page is now exactly 45 lines, the test's budget: the next
+    shared option needs a REQ-TOOL-020 decision on the budget.
+    A grep sweep for `x86_64-static` / `-static hem-tool` leaves only
+    dated records (workplan/done, REQ evidence, ARCHITECTURE's 120
+    paragraph, TRACE history) and REQ-TOOL-026's link flag.
+    rc2 tag message drafted: scratchpad release-notes-1.2.0-rc2.md
+    (rc1's text + a "Changed since rc1" section), for `git tag -a
+    v1.2.0-rc2 --cleanup=whitespace -F <file>` on development after CI.
 reopened: []
 cancelled: null
 ---

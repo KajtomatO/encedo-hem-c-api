@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# package-static.sh — the -static hem-tool (REQ-BUILD-009): hem-tool as a
+# package-static.sh — the one-file hem-tool (REQ-BUILD-009): hem-tool as a
 # Release binary on the OpenSSL backend (REQ-BUILD-007) with EVERY third-party
 # library linked in — OpenSSL and libcurl from the deps-openssl prefix
 # (build-deps.sh <prefix> openssl). Linux keeps glibc dynamic (a static glibc
@@ -8,9 +8,11 @@
 # on that build (the consumer gate included: the all-static pkg-config link,
 # REQ-BUILD-008), the link mode and the absence of any wolfSSL code are
 # asserted, the binary is packaged with its notices as
-# hem-tool-<label>-<os>-x86_64-static.{tar.gz|zip} and smoke-tested from a
-# directory of its own; then the static SDK library package (package-lib.sh
-# static).
+# hem-tool-<label>-<os>-x86_64.{tar.gz|zip} — the PLAIN name: from 1.2.0 the
+# one-file build is the default asset and the wolfSSL build carries -shared
+# (user decision 2026-10-19; until v1.2.0-rc1 this one was -static) — and
+# smoke-tested from a directory of its own; then the static SDK library
+# package (package-lib.sh static).
 #
 # implements: REQ-BUILD-009
 #
@@ -37,7 +39,7 @@ grep -q -- '^openssl-.*-static+curl-.*-static+' "$PREFIX/.stamp" 2>/dev/null \
 export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
 OPENSSL_VERSION="$(pkg-config --modversion libcrypto)"
 CURL_VERSION="$(pkg-config --modversion libcurl)"
-NAME="hem-tool-${LABEL}-${OS}-x86_64-static"
+NAME="hem-tool-${LABEL}-${OS}-x86_64"
 
 EXTRA=()
 if [ "$OS" = "windows" ]; then
@@ -139,13 +141,13 @@ as for the system's OpenSSL. One that leaves OpenSSL without the algorithms
 hem-tool needs makes it stop with one message and exit code 12."
 fi
 cat > "$STAGE/README.txt" <<EOF
-hem-tool ${LABEL} (${OS}, x86_64, -static) - the Encedo HEM device CLI as one file.
+hem-tool ${LABEL} (${OS}, x86_64) - the Encedo HEM device CLI as one file.
 
 OpenSSL ${OPENSSL_VERSION} (the crypto library and libcurl's TLS backend) and
 libcurl ${CURL_VERSION} (HTTP/HTTPS only) are linked INTO hem-tool: it needs
 ${NEEDS}
-(The other hem-tool asset of this release links wolfSSL dynamically and needs
-the wolfSSL companion download beside it.)
+(The -shared hem-tool asset of this release links wolfSSL dynamically and
+needs the wolfSSL companion download beside it.)
 
 ${TRUST}
 ${CONF}
@@ -154,7 +156,9 @@ Usage: hem-tool help            (commands grouped by what they need)
        hem-tool help <command>  (per-command options)
        hem-tool --version       (versions built against and running)
 Device URL via --url or EHEM_URL (default https://my.ence.do); passphrase via
---passphrase or EHEM_PASSPHRASE. Verify downloads against SHA256SUMS:
+EHEM_PASSPHRASE (--passphrase is deprecated: it stays in the shell history and
+shows in the process list; it will be removed). Verify downloads against
+SHA256SUMS:
   sha256sum -c SHA256SUMS      (Linux)
   CertUtil -hashfile <file> SHA256   (Windows)
 
@@ -222,15 +226,15 @@ RC=0; status_rc "OPENSSL_CONF=$CNF" || RC=$?
 echo "with OPENSSL_CONF=$CNF (null provider only): exit $RC"
 if [ "$OS" = "windows" ]; then
   # Windows reads no configuration: the run is the plain one.
-  [ "$RC" -eq 1 ] || fail "the Windows -static hem-tool read OPENSSL_CONF (exit $RC, expected 1)"
+  [ "$RC" -eq 1 ] || fail "the Windows one-file hem-tool read OPENSSL_CONF (exit $RC, expected 1)"
 else
   # The control: Linux reads it — the SDK's self-test refuses the provider-less
   # OpenSSL, and the remedy names the configuration (REQ-TOOL-024 rev 5).
-  [ "$RC" -eq 12 ] || fail "the Linux -static hem-tool ignored OPENSSL_CONF (exit $RC, expected 12)"
+  [ "$RC" -eq 12 ] || fail "the Linux one-file hem-tool ignored OPENSSL_CONF (exit $RC, expected 12)"
   grep -q 'OpenSSL is linked into hem-tool' "$T/err" \
     || fail "the refusal does not name the OpenSSL configuration"
 fi
-echo "-static smoke OK: $NAME.$EXT"
+echo "one-file hem-tool smoke OK: $NAME.$EXT"
 
 # --- the static SDK library package, OpenSSL flavour -------------------------
 "$ROOT/scripts/release/package-lib.sh" "$PREFIX" "$OS" "$DIST" "$LABEL" "$SRC_REF" static

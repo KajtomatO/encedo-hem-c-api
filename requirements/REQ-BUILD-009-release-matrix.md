@@ -1,10 +1,10 @@
 ---
 id: REQ-BUILD-009
-title: Release matrix — static hem-tool and SDK library packages (wolfSSL and OpenSSL flavours) beside the M10 hem-tool release
-status: implemented
+title: Release matrix — the one-file hem-tool and the SDK library packages (OpenSSL as the plain assets, wolfSSL as -shared) beside the M10 hem-tool release
+status: needs-reverify
 priority: should
-revision: 6   # 2026-10-19 (STEP-M12-130 done): the tag-path criterion checked — the user's annotated v1.2.0-rc1 (run 38904497654) published the pre-release with the 12 assets of the table, the annotation + checksums as text, SHA256SUMS re-verified in the job; the user's rc1 tests on both platforms recorded under the attended criterion (its box waits for the gate). No meaning change. Rev 5 = 2026-10-16 (STEP-M12-120 done): release run 38894733780 recorded — the static hem-tool, OpenSSL-configuration, library-package and REQ-BUILD-005 criteria checked; the main-push, tag-path and attended criteria stay open (STEP-M12-130/140). No meaning change. Rev 4 = 2026-10-15 (STEP-M12-120, §6.2 approved in chat): the -static assets' OpenSSL configuration — none on Windows (user decision), /etc/ssl on Linux — and its criterion. Rev 3 = 2026-10-15 (STEP-M12-110 done): the wolfSSL-flavour evidence recorded under the library-package and REQ-BUILD-005 criteria (both stay open for STEP-M12-120 / 130). No meaning change. Rev 2 = 2026-10-14 (STEP-M12-110, §6.2 approved in chat): the wolfSSL library package is shared-only (user decision); its smoke criterion follows; the OPEN criterion resolved (the Windows import library moot; the OpenSSL 3.5.9 pin)
-source: user decisions 2026-10-12 (M12 planning: one milestone, one release 1.2.0; static variants ship on OpenSSL, never wolfSSL; today's hem-tool asset name stays and new variants get a suffix; the full-dynamic hem-tool is dropped; `release.yml` builds the published variants, `ci.yml` exercises the switches and both backends; macOS and MSVC out); user decision 2026-10-14 (STEP-M12-110: "I dont want any distribution with static wolfssl, static distribution should only openssl" — the wolfSSL library package carries no static library; §6.2 report approved the same day); user decision 2026-10-15 (STEP-M12-120: the Windows -static assets load no OpenSSL configuration — "No config at all", chosen over an administrator-only directory and a registry lookup; §6.2 report approved the same day); ARCHITECTURE.md §1, §11 M12 part C, §12 risk 1; REQ-BUILD-005 (the hem-tool release this extends — unchanged); approved 2026-10-12 (M12 decomposition, user: "approve")
+revision: 7   # 2026-10-19 (STEP-M12-135, §6.2 approved in chat): the published names — the one-file hem-tool and the static SDK package are the PLAIN assets, the wolfSSL builds carry `-shared` (user decision 2026-10-19 after the rc1 test; reverses the 2026-10-12 "today's name stays, new variants get a suffix" choice — until v1.2.0-rc1 the OpenSSL variants were `-static`); needs-reverify until the v1.2.0-rc2 release run. Rev 6 = 2026-10-19 (STEP-M12-130 done): the tag-path criterion checked — the user's annotated v1.2.0-rc1 (run 38904497654) published the pre-release with the 12 assets of the table, the annotation + checksums as text, SHA256SUMS re-verified in the job; the user's rc1 tests on both platforms recorded under the attended criterion (its box waits for the gate). No meaning change. Rev 5 = 2026-10-16 (STEP-M12-120 done): release run 38894733780 recorded — the static hem-tool, OpenSSL-configuration, library-package and REQ-BUILD-005 criteria checked; the main-push, tag-path and attended criteria stay open (STEP-M12-130/140). No meaning change. Rev 4 = 2026-10-15 (STEP-M12-120, §6.2 approved in chat): the -static assets' OpenSSL configuration — none on Windows (user decision), /etc/ssl on Linux — and its criterion. Rev 3 = 2026-10-15 (STEP-M12-110 done): the wolfSSL-flavour evidence recorded under the library-package and REQ-BUILD-005 criteria (both stay open for STEP-M12-120 / 130). No meaning change. Rev 2 = 2026-10-14 (STEP-M12-110, §6.2 approved in chat): the wolfSSL library package is shared-only (user decision); its smoke criterion follows; the OPEN criterion resolved (the Windows import library moot; the OpenSSL 3.5.9 pin)
+source: user decision 2026-10-19 (after the v1.2.0-rc1 test, STEP-M12-135: the one-file hem-tool is the default and gets the plain name `hem-tool-<label>-<os>-x86_64`, the wolfSSL build carries `-shared` — "having hem-tool-XXX-static and hem-tool-XXX suggests that the static is special; I want it the other way around"; the suffix chosen from -wolfssl / -dynamic / -shared; the SDK library packages flip the same way; §6.2 report approved with the plan the same day); user decisions 2026-10-12 (M12 planning: one milestone, one release 1.2.0; static variants ship on OpenSSL, never wolfSSL; today's hem-tool asset name stays and new variants get a suffix — reversed 2026-10-19; the full-dynamic hem-tool is dropped; `release.yml` builds the published variants, `ci.yml` exercises the switches and both backends; macOS and MSVC out); user decision 2026-10-14 (STEP-M12-110: "I dont want any distribution with static wolfssl, static distribution should only openssl" — the wolfSSL library package carries no static library; §6.2 report approved the same day); user decision 2026-10-15 (STEP-M12-120: the Windows -static assets load no OpenSSL configuration — "No config at all", chosen over an administrator-only directory and a registry lookup; §6.2 report approved the same day); ARCHITECTURE.md §1, §11 M12 part C, §12 risk 1; REQ-BUILD-005 (the hem-tool release this extends — unchanged); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-BUILD-005", "REQ-BUILD-006", "REQ-BUILD-007", "REQ-BUILD-008", "REQ-API-010", "REQ-TOOL-026"]
 supersedes: null
 superseded_by: null
@@ -17,25 +17,30 @@ traces:
 The release workflow (`.github/workflows/release.yml`, REQ-BUILD-005)
 SHALL additionally build, check and publish — for linux-x86_64 and
 windows-x86_64, as artifacts on `main` and as assets of every `v*`
-release — three further variants, named by a `-static` suffix that means
+release — three further variants. From 1.2.0 the **plain name** means
 "OpenSSL backend, every third-party library static, no companion
-library":
+library" and the **`-shared` suffix** means "wolfSSL linked dynamically —
+the companion asset is required" (user decision 2026-10-19, rev 7: the
+suffix marks the variant that needs a second download; until
+`v1.2.0-rc1` the OpenSSL variants carried `-static` and the wolfSSL
+hem-tool the plain name, as 1.0 and 1.1 did):
 
 | Asset | Contents |
 |---|---|
-| `hem-tool-<label>-<os>-x86_64.{tar.gz,zip}` | **unchanged** (REQ-BUILD-005): dynamic wolfSSL, needs the companion asset |
-| `hem-tool-<label>-<os>-x86_64-static.{tar.gz,zip}` | one file; OpenSSL backend (REQ-BUILD-007); pinned static OpenSSL (3.5 LTS line) + libcurl with OpenSSL as its TLS backend; README + notices (MIT, curl, cJSON, BIP39, qrcodegen, **OpenSSL Apache-2.0**) |
-| `encedo-hem-<label>-<os>-x86_64.{tar.gz,zip}` | SDK library package, wolfSSL flavour, **shared library only** (user decision 2026-10-14 — no static library ships with wolfSSL): `include/ehem/`, `libencedo-hem.so.1.2.0` + symlinks (Linux) / `libencedo-hem.dll` + `libencedo-hem.dll.a` (Windows) — libcurl static inside it — the CMake package config, `encedo-hem.pc`, notices, README. Runs against the **wolfSSL companion asset** of the same release (unchanged `wolfssl-<wv>-<os>-x86_64`) |
-| `encedo-hem-<label>-<os>-x86_64-static.{tar.gz,zip}` | SDK static library package, OpenSSL flavour: `include/ehem/`, `libencedo-hem.a`, the pinned static `libcurl.a`, `libssl.a`, `libcrypto.a` it was built against, the CMake package config and `.pc` pointing at them, notices incl. OpenSSL's, README |
+| `hem-tool-<label>-<os>-x86_64.{tar.gz,zip}` | **one file**; OpenSSL backend (REQ-BUILD-007); pinned static OpenSSL (3.5 LTS line) + libcurl with OpenSSL as its TLS backend; README + notices (MIT, curl, cJSON, BIP39, qrcodegen, **OpenSSL Apache-2.0**). The plain name — 1.1's plain asset was the wolfSSL build below |
+| `hem-tool-<label>-<os>-x86_64-shared.{tar.gz,zip}` | REQ-BUILD-005's archive, **renamed** at 1.2.0 (rev 5 there) and otherwise unchanged: dynamic wolfSSL, needs the companion asset |
+| `encedo-hem-<label>-<os>-x86_64.{tar.gz,zip}` | SDK static library package, OpenSSL flavour: `include/ehem/`, `libencedo-hem.a`, the pinned static `libcurl.a`, `libssl.a`, `libcrypto.a` it was built against, the CMake package config and `.pc` pointing at them, notices incl. OpenSSL's, README |
+| `encedo-hem-<label>-<os>-x86_64-shared.{tar.gz,zip}` | SDK library package, wolfSSL flavour, **shared library only** (user decision 2026-10-14 — no static library ships with wolfSSL): `include/ehem/`, `libencedo-hem.so.1.2.0` + symlinks (Linux) / `libencedo-hem.dll` + `libencedo-hem.dll.a` (Windows) — libcurl static inside it — the CMake package config, `encedo-hem.pc`, notices, README. Runs against the **wolfSSL companion asset** of the same release (unchanged `wolfssl-<wv>-<os>-x86_64`) |
 | `wolfssl-<wv>-<os>-x86_64.*`, `wolfssl-<wv>-stable-src.tar.gz`, `SHA256SUMS` | unchanged, SHA256SUMS now covers every asset |
 
-- **What "static" means.** Linux: every third-party library static and
+- **What the plain name means.** Linux: every third-party library static and
   glibc dynamic — `ldd` lists the glibc family only (a static glibc
   breaks `getaddrinfo`/NSS); RUNPATH absent. Windows: `-static` as today
   — the import table lists Windows system DLLs only (`crypt32`/`ws2_32`
   etc. for OpenSSL are system DLLs). Asserted in the job like the M10
-  link-mode check, plus **no wolfSSL symbol or string in any `-static`
-  asset** (`nm`/`strings` for `wolfSSL_`/`wc_`) — the §1 rule as a test.
+  link-mode check, plus **no wolfSSL symbol or string in any plain-named
+  (OpenSSL) asset** (`nm`/`strings` for `wolfSSL_`/`wc_`) — the §1 rule
+  as a test.
 - **Checked inside the workflow** per variant: unit suite on the Release
   build (both backends), link mode, `hem-tool help`, the REQ-NET-005
   classifier under the OpenSSL-backed libcurl
@@ -49,7 +54,7 @@ library":
   CA-bundle fallbacks (as REQ-BUILD-005); Windows — `CURLSSLOPT_NATIVE_CA`
   (the SDK transport already sets it on `_WIN32`; libcurl supports it
   with the OpenSSL backend).
-- **OpenSSL configuration** of the `-static` assets (user decision
+- **OpenSSL configuration** of the plain-named (OpenSSL) assets (user decision
   2026-10-15): on Windows none is loaded — OpenSSL is built with
   `no-autoload-config` and libcurl with
   `CURL_DISABLE_OPENSSL_AUTO_LOAD_CONFIG`, so neither `openssl.cnf` nor

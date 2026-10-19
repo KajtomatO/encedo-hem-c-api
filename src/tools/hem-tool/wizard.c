@@ -20,6 +20,7 @@
 #include "ehem/auth.h"
 #include "init_cmd.h"
 #include "prompt.h"
+#include "registry.h"     /* HEM_TOOL_DEFAULT_HOSTNAME (REQ-TOOL-028 rev 3) */
 
 #define WORD_COUNT    24
 #define BACKUP_CHECKS 3
@@ -376,10 +377,12 @@ static int ask_settings(wiz *w, answers *a)
                  a->user, sizeof a->user) ||
         ask_text(w, "email", "your address - lets Encedo find or block the "
                  "device when it is lost", NULL, a->email, sizeof a->email) ||
-        ask_text(w, "hostname", "the domain the device answers on, e.g. "
-                 "my.ence.do\n  (Encedo Manager offers my, dev, devel and moje."
-                 "ence.do or your own *.ence.do prefix)", NULL,
-                 a->hostname, sizeof a->hostname) ||
+        /* REQ-TOOL-028 rev 3 (user decision 2026-10-19): the product default,
+         * the same host hem-tool's default URL points at (REQ-TOOL-017). */
+        ask_text(w, "hostname", "the domain the device answers on - hem-tool's "
+                 "default URL is https://<hostname>\n  (Encedo Manager offers "
+                 "my, dev, devel and moje.ence.do or your own *.ence.do prefix)",
+                 HEM_TOOL_DEFAULT_HOSTNAME, a->hostname, sizeof a->hostname) ||
         ask_text(w, "ip", "the device's fixed local address/prefix - check "
                  "your LAN for a collision", HEM_INIT_DEFAULT_IP,
                  a->ip, sizeof a->ip)) {

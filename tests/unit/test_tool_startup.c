@@ -119,15 +119,20 @@ static void test_version_refusal_message(void **state)
     assert_non_null(strstr(s, bi.crypto_version_loaded));
     assert_non_null(strstr(s, "remedy:"));
     if (strcmp(bi.crypto_link, "static") == 0) {
-        /* this build links its crypto library in (the release -static
+        /* this build links its crypto library in (the release one-file
          * build runs this suite): test_static_refusal_message's remedy */
-        assert_null(strstr(s, "-static hem-tool"));
+        assert_null(strstr(s, "one-file hem-tool"));
         assert_non_null(strstr(s, "is linked into hem-tool"));
     } else {
-        assert_non_null(strstr(s, "-static hem-tool"));
+        /* REQ-TOOL-024 rev 7: the one-file hem-tool, by its release name —
+         * the plain hem-tool-<version>-<os>-x86_64 asset (REQ-BUILD-009) */
+        char asset[80];
+        assert_non_null(strstr(s, "one-file hem-tool"));
+        snprintf(asset, sizeof asset, "hem-tool-%s-", ehem_version());
+        assert_non_null(strstr(s, asset));
+        assert_non_null(strstr(s, "-x86_64 (1.2.0 and later)"));
         if (strcmp(bi.crypto_backend, "wolfSSL") == 0) {
             /* the companion asset, by its release name */
-            char asset[64];
             snprintf(asset, sizeof asset, "wolfssl-%s-", bi.crypto_version_compiled);
             assert_non_null(strstr(s, asset));
         }
@@ -170,7 +175,7 @@ static void test_static_refusal_message(void **state)
     assert_non_null(strstr(s, "remedy: OpenSSL is linked into hem-tool"));
     assert_non_null(strstr(s, "OPENSSL_CONF"));
     assert_non_null(strstr(s, "openssl.cnf"));
-    assert_null(strstr(s, "-static hem-tool"));
+    assert_null(strstr(s, "one-file hem-tool"));
     assert_null(strstr(s, "install the"));
     assert_null(strstr(s, "wolfssl-"));
     assert_ascii(s);
@@ -183,7 +188,7 @@ static void test_static_refusal_message(void **state)
     assert_int_equal(count(s, "error:"), 1);
     assert_non_null(strstr(s, "remedy: wolfSSL is linked into hem-tool"));
     assert_non_null(strstr(s, "build is broken"));
-    assert_null(strstr(s, "-static hem-tool"));
+    assert_null(strstr(s, "one-file hem-tool"));
     assert_null(strstr(s, "wolfssl-5.7.2-"));
     assert_null(strstr(s, "OPENSSL_CONF"));
     assert_ascii(s);
@@ -193,7 +198,7 @@ static void test_static_refusal_message(void **state)
     bi.crypto_link = "dynamic";
     s = refusal_for(&bi);
     assert_non_null(strstr(s, "wolfssl-5.7.2-"));
-    assert_non_null(strstr(s, "-static hem-tool"));
+    assert_non_null(strstr(s, "one-file hem-tool"));
     free(s);
     bi.crypto_backend = "OpenSSL";
     bi.crypto_version_compiled = "3.5.9";
@@ -201,7 +206,7 @@ static void test_static_refusal_message(void **state)
     s = refusal_for(&bi);
     assert_non_null(strstr(s, "OpenSSL: built against 3.5.9, loaded 3.0.13\n"));
     assert_non_null(strstr(s, "install the OpenSSL 3.5.9 library"));
-    assert_non_null(strstr(s, "-static hem-tool"));
+    assert_non_null(strstr(s, "one-file hem-tool"));
     free(s);
 }
 

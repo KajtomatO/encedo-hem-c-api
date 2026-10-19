@@ -10,16 +10,18 @@
 # implements: REQ-BUILD-005, REQ-TOOL-026 (Windows: hem-tool delay-loads
 #             libwolfssl.dll — asserted here and smoke-tested without the DLL),
 #             REQ-BUILD-009 (the library package, through package-lib.sh; the
-#             -static variants, through package-static.sh)
+#             one-file hem-tool and the static SDK package, through package-static.sh)
 #
 #   scripts/release/package.sh <prefix> <linux|windows> [dist-dir] [dynamic|static]
 #
 # Output in <dist>, `dynamic` (the default; <prefix> from build-deps.sh
-# wolfssl): hem-tool-<version>[+g<sha>]-<os>-x86_64.{tar.gz|zip},
+# wolfssl): hem-tool-<version>[+g<sha>]-<os>-x86_64-shared.{tar.gz|zip},
 # wolfssl-<wv>-<os>-x86_64.{tar.gz|zip} (+ wolfssl-<wv>-stable-src.tar.gz on
-# Linux) and encedo-hem-<version>[+g<sha>]-<os>-x86_64.{tar.gz|zip}; `static`
-# (<prefix> from build-deps.sh openssl): the same two names with a -static
-# suffix (package-static.sh). Either run then writes SHA256SUMS over every
+# Linux) and encedo-hem-<version>[+g<sha>]-<os>-x86_64-shared.{tar.gz|zip};
+# `static` (<prefix> from build-deps.sh openssl): the same two names WITHOUT
+# the suffix — the one-file hem-tool and the static SDK package are the plain
+# assets from 1.2.0, the wolfSSL builds carry -shared (user decision
+# 2026-10-19; package-static.sh). Either run then writes SHA256SUMS over every
 # archive in <dist>. On a tag build (RELEASE_TAG=v…) the
 # tag must be v<project version> or v<project version>-rc<N> (a pre-release) —
 # anything else fails here, before publishing.
@@ -50,7 +52,7 @@ else
   LABEL="${VERSION}+g${SHA}"
   SRC_REF="commit ${SHA}"
 fi
-NAME="hem-tool-${LABEL}-${OS}-x86_64"
+NAME="hem-tool-${LABEL}-${OS}-x86_64-shared"
 
 write_sums() {
   ( cd "$DIST" && find . -maxdepth 1 \( -name '*.tar.gz' -o -name '*.zip' \) -printf '%f\n' \
@@ -61,8 +63,9 @@ write_sums() {
 case "$VARIANT" in
   dynamic) ;;
   static)
-    # The -static variants (REQ-BUILD-009): OpenSSL and libcurl from the
-    # deps-openssl prefix, linked in — hem-tool and the SDK library package.
+    # The OpenSSL variants (REQ-BUILD-009): OpenSSL and libcurl from the
+    # deps-openssl prefix, linked in — the one-file hem-tool and the static
+    # SDK library package, published under the plain names.
     "$ROOT/scripts/release/package-static.sh" "$PREFIX" "$OS" "$DIST" "$LABEL" "$SRC_REF"
     write_sums
     exit 0
@@ -183,7 +186,8 @@ sed -n '1,/^ \*\/$/p' src/tools/hem-tool/vendor/qrcodegen/qrcodegen.c > "$STAGE/
 grep -q 'Permission is hereby granted' "$STAGE/LICENSES/LICENSE.qrcodegen" \
   || { echo "qrcodegen MIT header not found"; exit 1; }
 cat > "$STAGE/README.txt" <<EOF
-hem-tool ${LABEL} (${OS}, x86_64) - the Encedo HEM device CLI.
+hem-tool ${LABEL} (${OS}, x86_64, -shared) - the Encedo HEM device CLI, wolfSSL
+linked dynamically.
 
 hem-tool links libcurl ${CURL_VERSION} (wolfSSL as its TLS backend, HTTP/HTTPS
 only) STATICALLY and wolfSSL ${WOLFSSL_VERSION} DYNAMICALLY. wolfSSL is NOT in
@@ -191,7 +195,9 @@ this archive: download ${WNAME}.${EXT} from the same release and put
 ${WLIB_NAME} next to hem-tool -
 ${LOOKUP}.
 A system wolfSSL with the same ${SAME} and build configuration (see that
-asset's BUILD-CONFIG.txt) works too. Verify downloads against SHA256SUMS:
+asset's BUILD-CONFIG.txt) works too. (The plain hem-tool-${LABEL}-${OS}-x86_64
+asset of this release is the one-file build - OpenSSL and libcurl linked in -
+and needs no companion library.) Verify downloads against SHA256SUMS:
   sha256sum -c SHA256SUMS      (Linux)
   CertUtil -hashfile <file> SHA256   (Windows)
 
@@ -204,7 +210,8 @@ Usage: hem-tool help            (commands grouped by what they need)
        hem-tool help <command>  (per-command options)
        hem-tool --version       (versions built against and loaded)
 Device URL via --url or EHEM_URL (default https://my.ence.do); passphrase via
---passphrase or EHEM_PASSPHRASE.
+EHEM_PASSPHRASE (--passphrase is deprecated: it stays in the shell history and
+shows in the process list; it will be removed).
 
 Licenses: see LICENSES/ - hem-tool and the Encedo HEM C SDK are MIT; libcurl
 (curl license), cJSON (MIT), the BIP39 wordlist (MIT) and qrcodegen (MIT) are
