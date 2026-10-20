@@ -341,6 +341,32 @@ difference is not known. hem-tool no longer suggests `recovery` after init
 or wipe (REQ-TOOL-021 rev 3, REQ-TOOL-022 rev 2); run it only if HTTPS
 does not verify.
 
+## FIXED in 1.2.0 — 1.1.0 `ext pair`: the new Encedo Auth app rejects the QR
+
+**Status:** fixed in 1.2.0 (STEP-M12-137; found by the user on
+`v1.2.0-rc2`, 2026-10-20). **Affected:** `hem-tool ext pair` in 1.0.0 and
+1.1.0, and any consumer that composed the QR payload itself from the
+broker's `link` with a placeholder `hash`.
+
+**Symptom.** The new Encedo Auth app scans the terminal QR and refuses:
+"the pairing link served a different request than the code promised".
+The Manager's QR pairs. The older app paired from hem-tool's QR
+(2026-08-05).
+
+**Cause.** The payload's `hash` is a commitment the app verifies: it
+fetches `link`, hashes the `request` JWT the broker serves and compares.
+The Manager puts standard base64 of SHA-256 over the `request` string
+from `/api/auth/ext/init` there (`assets/build.js`, `pairdeviceNow`);
+hem-tool sent the literal `"not_implemented_yet"` from hem-api-tester's
+`test_5.php`, which the old app never checked.
+
+**Fix.** The SDK composes the payload — `ehem_ext_qr_payload()`
+(REQ-AUTH-008 rev 5), byte-identical to the Manager's: keys `link, hash,
+user, email, hostname` in that order, compact JSON — and `ext pair` uses
+it (REQ-TOOL-016 rev 3). 1.0/1.1 users pair from the Manager or upgrade
+hem-tool; SDK consumers that built the payload themselves call the new
+function.
+
 ## FIXED in 1.2.0 — 1.1.0 release hem-tool: a foreign libwolfssl crashes it, a missing libwolfssl.dll stops it before `main`
 
 **Status:** fixed in 1.2.0 (M12). **Affected:** the 1.1.0 release

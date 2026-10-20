@@ -7,8 +7,10 @@ traces:
   architecture: ["ARCHITECTURE.md#5-auth--session", "ARCHITECTURE.md#8-hem-tool-cli", "ARCHITECTURE.md#11-milestones"]
 depends_on: ["STEP-M12-135"]
 evidence:
-  commits: []
-  tests: []
+  commits: ["b25b87b"]   # start; the implementation and TRACE commits follow
+  tests:
+    - "Local 2026-10-20 (scratchpad ci137.log, ci137-rerun.log): ./dev ci 56/56 gcc + 56/56 clang (wolfSSL; the first run of the sitting exited 1 with 56/56 in its visible tail while a `./dev tool` build ran in the same build/ directory concurrently — re-run alone: exit 0, both compilers green); ./dev ci --openssl 56/56 gcc + 56/56 clang; ./dev test asan 56/56 and ./dev test asan --openssl 56/56; ./dev check 2/2. New assertions — test_notify `test_qr_payload` (verifies: REQ-AUTH-008 rev 5; runs first, before any context — no ehem_global_init): the exact payload for request \"abc\" with the FIPS 180-2 known answer `ungWv48Bz+pBQUDeXa4iI7ADYaOWF3qctBD/YfIAFa0=` (key order, compactness, the bare `/`), \"r.j.w\" → `BQixETmS1vjcSjAPqjT0yq9poZjfeTnWczNU6VHYuI4=` with `\"`/`\\` in user escaped and NULL email/hostname → \"\", the three ARG cases; test_ext_tool (verifies: REQ-TOOL-016 rev 3): the --no-qr print is that SDK payload for the scripted request, verbatim on its own line, and `not_implemented_yet` appears nowhere. Gates: export_symbols (the new symbol is an addition beyond the 1.0 baseline), docs_coverage (API-GUIDE row), public_headers_dep_free, tests_backend_free, ascii_strings — green."
+    - "Live shape check 2026-10-20 (dev build, wolfSSL, against the dev device — scratchpad extpair137.log): `hem-tool ext pair --no-qr` printed `{\"link\":\"https://api.encedo.com/notify/register/challenge/<64 chars>\",\"hash\":\"<44-char standard base64>\",\"user\":\"Debug HSM\",\"email\":\"\",\"hostname\":\"my.ence.do\"}` — field for field the user's decoded Manager reference QR of the same device (only link and hash differ, as they must); exit 3 after the 60 s window, the registration left to expire broker-side. The phone-side check itself is the user's rc3 scan (box 6)."
   notes: null
 reopened: []
 cancelled: null
@@ -52,20 +54,21 @@ the gate's attended checks move to the rc3 binaries — the SDK and the
 tool both change. Tagging/pushing is the user's.
 
 **Definition of done**
-- [ ] `ehem_ext_qr_payload()` exported from libencedo-hem on both backends,
+- [x] `ehem_ext_qr_payload()` exported from libencedo-hem on both backends,
       documented in `include/ehem/auth.h`, indexed in docs/API-GUIDE.md;
       the export-baseline and docs-coverage gates green.
-- [ ] `ext pair` composes its payload with it — `--no-qr` prints the
+- [x] `ext pair` composes its payload with it — `--no-qr` prints the
       Manager-identical JSON (`{link, hash, user, email, hostname}`,
       `hash` = base64(SHA-256(request))); the tool's own JSON code is gone.
-- [ ] Unit: test_notify (the FIPS 180-2 "abc" known answer in base64, key
+- [x] Unit: test_notify (the FIPS 180-2 "abc" known answer in base64, key
       order, `/` unescaped, `"`/`\` escaped, NULL → `""`, the ARG cases)
       and test_ext_tool (the printed payload for the scripted request,
       verbatim); `./dev ci` and `./dev ci --openssl` green on gcc + clang,
       ASan on both backends.
-- [ ] REQ-AUTH-008 rev 5 and REQ-TOOL-016 rev 3 (the §6.2 changes),
+- [x] REQ-AUTH-008 rev 5 and REQ-TOOL-016 rev 3 (the §6.2 changes),
       REQ-API-008 annotation (1.2.0 additions), ARCHITECTURE §5/§8/§11,
-      KNOWN-ISSUES "FIXED in 1.2.0" entry, release notes (rc3 + final).
+      KNOWN-ISSUES "FIXED in 1.2.0" entry, release notes (rc3 + final —
+      scratchpad `release-notes-1.2.0-rc3.md`, `release-notes-1.2.0.md`).
 - [ ] CI green on `development`; `v1.2.0-rc3` published with the 12 assets
       (run id + release id in REQ-BUILD-009's tag-path record — no meaning
       change).

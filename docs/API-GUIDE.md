@@ -162,6 +162,10 @@ with expiry-aware silent refresh.
   60 s) and fails with `EHEM_ERR_USER_REJECTED` or
   `EHEM_ERR_CONFIRM_TIMEOUT` — distinct by design. Pairing management
   itself always needs a passphrase login (the device demands `sub="U"`).
+  The SDK composes the QR payload the phone scans (`ehem_ext_qr_payload`:
+  `hash` = base64(SHA-256(request)) — the app checks it against the request
+  the pairing link serves); rendering it is the caller's (hem-tool draws a
+  terminal QR).
 - The pollable confirm engine (`ehem_ext_confirm_begin/poll/wait/cancel`)
   serves consumers that cannot block.
 - The optional `ehem_options.confirm_notice` hook fires once per
@@ -269,6 +273,7 @@ rate-sensitive devices).
 | `ehem_ext_request`, `ehem_ext_request_info`, `ehem_ext_request_free` | unauthenticated: emit an `authreq` for paired phones |
 | `ehem_ext_token`, `ehem_ext_token_free` | exchange the phone's `authreply` for a bearer (the one public token return) |
 | `ehem_notify_session`, `ehem_notify_register_init`, `ehem_notify_register_info`, `ehem_notify_register_info_free` | broker session + pairing registration legs |
+| `ehem_ext_qr_payload` | the QR payload the phone app scans — `{link, hash, user, email, hostname}` with `hash` = base64(SHA-256(request)), Manager-identical (free with `ehem_notify_string_free`) |
 | `ehem_notify_register_check`, `ehem_notify_pairing_reply`, `ehem_notify_pairing_reply_free`, `ehem_notify_register_finalise` | pairing scan poll + completion |
 | `ehem_notify_event_new`, `ehem_notify_event_check`, `ehem_notify_event_result`, `ehem_notify_event_result_free` | login push + answer poll |
 | `ehem_notify_string_free` | free helper for broker strings |

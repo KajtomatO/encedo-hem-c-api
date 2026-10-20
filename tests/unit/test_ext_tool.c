@@ -8,7 +8,9 @@
  *           list: EXTAID filter, [PROTECTED] marking, pid printing;
  *           login: approved/rejected/timeout/no-pairing exit codes; QR:
  *           deterministic module matrix — line count and all-light quiet
- *           rows for a known payload; usage errors with zero traffic)
+ *           rows for a known payload; usage errors with zero traffic;
+ *           the --no-qr print is the SDK's ehem_ext_qr_payload verbatim —
+ *           hash = base64(SHA-256(request)), the Manager's key order)
  */
 #include <stdarg.h>
 #include <stddef.h>
@@ -202,7 +204,16 @@ static void test_pair_happy_timeout_refused(void **state)
     assert_string_equal((const char *)fin->body,
         "{\"kid\":\"" KID_HEX "\",\"code\":\"Q09ERQ==\"}");
     char *printed = slurp(out);
-    assert_non_null(strstr(printed, "\"link\":\"https://l.ink/x\""));
+    /* --no-qr prints the payload the phone scans: the SDK's
+     * ehem_ext_qr_payload over the scripted "r.j.w" request and CONFIG_JSON —
+     * the request passed VERBATIM (hash = base64(SHA-256("r.j.w"))), the
+     * Manager's key order, nothing else on the line. */
+    assert_non_null(strstr(printed,
+        "\n{\"link\":\"https://l.ink/x\","
+        "\"hash\":\"BQixETmS1vjcSjAPqjT0yq9poZjfeTnWczNU6VHYuI4=\","
+        "\"user\":\"Alice\",\"email\":\"a@example.com\","
+        "\"hostname\":\"hem.example\"}\n"));
+    assert_null(strstr(printed, "not_implemented_yet"));
     assert_non_null(strstr(printed, "Paired. kid: " KID_HEX));
     free(printed);
 

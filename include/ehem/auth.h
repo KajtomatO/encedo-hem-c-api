@@ -416,15 +416,15 @@ EHEM_API ehem_rc ehem_notify_session(ehem_ctx *ctx, const char *notify_url,
 /* Result of ehem_notify_register_init(). */
 typedef struct ehem_notify_register_info {
     char *rid;    /* registration id — poll register/check with it */
-    char *link;   /* URL the phone app consumes (the QR payload's `link`) */
+    char *link;   /* URL the phone app fetches (the QR payload's `link`) */
 } ehem_notify_register_info;
 
 /*
  * Start a registration at the broker: POST /register/init with the device's
  * `eid` and `request` (from ehem_ext_init) and the broker `epk` (from
  * ehem_notify_session). The returned `link` goes into the QR payload the
- * phone scans; composing/rendering that payload is the caller's (REQ-TOOL-016
- * puts `{link, hash, user, email, hostname}` behind a terminal QR).
+ * phone scans — ehem_ext_qr_payload() composes it; rendering it is the
+ * caller's (REQ-TOOL-016 puts it behind a terminal QR).
  */
 EHEM_API ehem_rc ehem_notify_register_init(ehem_ctx *ctx,
                                            const char *notify_url,
@@ -435,6 +435,25 @@ EHEM_API ehem_rc ehem_notify_register_init(ehem_ctx *ctx,
 
 /* Release a register-init result. NULL is a no-op. */
 EHEM_API void ehem_notify_register_info_free(ehem_notify_register_info *info);
+
+/*
+ * Compose the pairing QR payload the Encedo phone app scans: the JSON object
+ *   {"link":…,"hash":…,"user":…,"email":…,"hostname":…}
+ * — those keys in that order, compact — where `hash` is the standard base64
+ * (padded, 44 chars) of SHA-256 over the bytes of `request_jwt` exactly as
+ * ehem_ext_init() returned it. The phone fetches `link`, hashes the request
+ * the broker serves and compares: a payload whose hash does not match is
+ * refused ("the pairing link served a different request than the code
+ * promised"). Byte-compatible with Encedo Manager (assets/build.js,
+ * pairdeviceNow) and hem-sdk-js. `user`, `email` and `hostname` are the
+ * device's config values (ehem_config_info); NULL → "". No context, no
+ * network, no ehem_global_init() needed: EHEM_ERR_ARG on a NULL
+ * link/request_jwt/json_out, EHEM_ERR_NOMEM on allocation failure. *json_out
+ * is a NUL-terminated string to free with ehem_notify_string_free().
+ */
+EHEM_API ehem_rc ehem_ext_qr_payload(const char *link, const char *request_jwt,
+                                     const char *user, const char *email,
+                                     const char *hostname, char **json_out);
 
 /* Result of ehem_notify_register_check(). */
 typedef struct ehem_notify_pairing_reply {

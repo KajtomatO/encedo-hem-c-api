@@ -50,10 +50,11 @@ typedef struct {
  * login → config (eid + the user/email/hostname the QR payload carries) →
  * broker session (POST with eid — the broker binds registrations to an
  * eid-bound session, REQ-AUTH-008 finding) → device ext/init → broker
- * register/init → render the QR payload `{link, hash, user, email,
- * hostname}` as UTF-8 half-block cells (or print it, --no-qr) → poll
- * register/check until the phone answers → device ext/validate → broker
- * register/finalise → report the new kid.
+ * register/init → the SDK's ehem_ext_qr_payload() (`{link, hash, user,
+ * email, hostname}`, hash = base64(SHA-256(request)) — the phone checks it
+ * against the request the link serves) rendered as UTF-8 half-block cells
+ * (or printed, --no-qr) → poll register/check until the phone answers →
+ * device ext/validate → broker register/finalise → report the new kid.
  */
 int hem_ext_pair_run(ehem_ctx *ctx, const hem_ext_pair_opts *o);
 

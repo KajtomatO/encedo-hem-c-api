@@ -44,93 +44,6 @@ static void sleep_ms(unsigned ms)
 static FILE *or_stdout(FILE *f) { return f != NULL ? f : stdout; }
 static FILE *or_stderr(FILE *f) { return f != NULL ? f : stderr; }
 
-/* Append `s` JSON-escaped to a malloc'd buffer via fputs-style growth. The
- * QR payload embeds device-configured strings (hostname, user, email) that
- * the tool must not let break the JSON. */
-static int json_append_escaped(char **buf, size_t *len, size_t *cap,
-                               const char *s)
-{
-    for (; *s != '\0'; s++) {
-        char piece[8];
-        size_t n;
-        unsigned char c = (unsigned char)*s;
-        if (c == '"' || c == '\\') {
-            piece[0] = '\\'; piece[1] = (char)c; n = 2;
-        } else if (c < 0x20) {
-            n = (size_t)snprintf(piece, sizeof piece, "\\u%04x", c);
-        } else {
-            piece[0] = (char)c; n = 1;
-        }
-        if (*len + n + 1 > *cap) {
-            size_t ncap = (*cap == 0) ? 256 : *cap * 2;
-            char *nb;
-            while (*len + n + 1 > ncap) {
-                ncap *= 2;
-            }
-            nb = realloc(*buf, ncap);
-            if (nb == NULL) {
-                return -1;
-            }
-            *buf = nb;
-            *cap = ncap;
-        }
-        memcpy(*buf + *len, piece, n);
-        *len += n;
-        (*buf)[*len] = '\0';
-    }
-    return 0;
-}
-
-static int json_append_raw(char **buf, size_t *len, size_t *cap,
-                           const char *s)
-{
-    size_t n = strlen(s);
-    if (*len + n + 1 > *cap) {
-        size_t ncap = (*cap == 0) ? 256 : *cap * 2;
-        char *nb;
-        while (*len + n + 1 > ncap) {
-            ncap *= 2;
-        }
-        nb = realloc(*buf, ncap);
-        if (nb == NULL) {
-            return -1;
-        }
-        *buf = nb;
-        *cap = ncap;
-    }
-    memcpy(*buf + *len, s, n);
-    *len += n;
-    (*buf)[*len] = '\0';
-    return 0;
-}
-
-/* The payload the phone scans (hem-api-tester test_5.php:90 shape; `hash`
- * is literally "not_implemented_yet" until upstream defines it). Malloc'd. */
-static char *compose_qr_payload(const char *link, const char *user,
-                                const char *email, const char *hostname)
-{
-    char *buf = NULL;
-    size_t len = 0, cap = 0;
-    int rc = 0;
-
-    rc |= json_append_raw(&buf, &len, &cap, "{\"link\":\"");
-    rc |= json_append_escaped(&buf, &len, &cap, link);
-    rc |= json_append_raw(&buf, &len, &cap,
-                          "\",\"hash\":\"not_implemented_yet\",\"user\":\"");
-    rc |= json_append_escaped(&buf, &len, &cap, user != NULL ? user : "");
-    rc |= json_append_raw(&buf, &len, &cap, "\",\"email\":\"");
-    rc |= json_append_escaped(&buf, &len, &cap, email != NULL ? email : "");
-    rc |= json_append_raw(&buf, &len, &cap, "\",\"hostname\":\"");
-    rc |= json_append_escaped(&buf, &len, &cap,
-                              hostname != NULL ? hostname : "");
-    rc |= json_append_raw(&buf, &len, &cap, "\"}");
-    if (rc != 0) {
-        free(buf);
-        return NULL;
-    }
-    return buf;
-}
-
 /* -------------------------------------------------------------------------- */
 /* terminal QR                                                                */
 /* -------------------------------------------------------------------------- */
@@ -264,10 +177,13 @@ int hem_ext_pair_run(ehem_ctx *ctx, const hem_ext_pair_opts *o)
         goto done;
     }
 
-    payload = compose_qr_payload(reg->link, cfg->user, cfg->email,
-                                 cfg->hostname);
-    if (payload == NULL) {
-        fprintf(err, "error: out of memory\n");
+    /* The payload the phone scans is the SDK's — `hash` is base64(SHA-256(
+     * request)), which the Encedo Auth app checks against the request the
+     * link serves (REQ-AUTH-008). */
+    rc = ehem_ext_qr_payload(reg->link, init->request, cfg->user, cfg->email,
+                             cfg->hostname, &payload);
+    if (rc != EHEM_OK) {
+        fprintf(err, "error: QR payload: %s\n", ehem_rc_str(rc));
         goto done;
     }
 
@@ -332,7 +248,7 @@ done:
     ehem_notify_register_info_free(reg);
     ehem_ext_init_free(init);
     ehem_notify_string_free(epk);
-    free(payload);
+    ehem_notify_string_free(payload);
     ehem_system_config_free(cfg);
     return ret;
 }

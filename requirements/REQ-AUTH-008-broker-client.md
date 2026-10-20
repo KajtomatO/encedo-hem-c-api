@@ -1,10 +1,10 @@
 ---
 id: REQ-AUTH-008
 title: Notification-broker client — cloud legs for ExtAuth pairing and login
-status: verified
+status: needs-reverify
 priority: must
-revision: 4
-source: user decision 2026-07-22 (M8 decomposition); hem-api-tester test_5.php/test_6.php (notify flows); Encedo Manager encedo.js:335/1316, build.js:383/1438 (per doc-repo citations); NO doc page exists for the broker API — shapes are reconstructed, all pinned by live probes
+revision: 5   # 2026-10-20 (STEP-M12-137): MEANING CHANGE — the QR payload is the SDK's (`ehem_ext_qr_payload()`) and its `hash` is defined: standard base64 of SHA-256 over the `request` string from ext/init, as the Manager composes it (assets/build.js:4827-4836) and hem-sdk-js (commit a750037); the placeholder "not_implemented_yet" that the new Encedo Auth app refuses is gone. §6.2 report approved with the plan 2026-10-20. needs-reverify until the unit criterion passes and the user's rc3 scan. Revs 2–4 = the live/attended facts marked inline below (2026-07-23 … 2026-08-06)
+source: user decision 2026-07-22 (M8 decomposition); hem-api-tester test_5.php/test_6.php (notify flows); Encedo Manager encedo.js:335/1316, build.js:383/1438 (per doc-repo citations); NO doc page exists for the broker API — shapes are reconstructed, all pinned by live probes; the QR payload (rev 5): Encedo Manager assets/build.js:378-404 (`pair()`) and :4827-4836 (`pairdeviceNow`: `hash = base64(sha256(request))`, `JSON.stringify({link, hash, user, email, hostname})`), hem-sdk-js hem-sdk.js:1510-1518 (commit a750037, 2026-09-03), the user's bug report 2026-10-20 on v1.2.0-rc2 (the new Encedo Auth app: "the pairing link served a different request than the code promised"); user decision 2026-10-20: the SDK composes the payload
 depends_on: ["REQ-NET-001", "REQ-NET-003", "REQ-AUTH-006", "REQ-AUTH-007"]
 supersedes: null
 superseded_by: null
@@ -72,11 +72,22 @@ itself.
   surfaced as a distinct "pending" result, not an error. Broker error
   statuses map through the shared path with the response payload
   preserved in last-error detail.
-- The QR payload is NOT a broker concern: what the phone scans is a JSON
-  object `{link, hash, user, email, hostname}` composed by the CALLER
-  (tester test_5.php:90; `hash` literally `"not_implemented_yet"`). The
-  broker client exposes `rid`/`link`; composing and rendering the QR is
-  REQ-TOOL-016.
+- **The QR payload** (rev 5): what the phone scans is the JSON object
+  `{"link","hash","user","email","hostname"}` — those keys in that order,
+  compact — where `hash` is the standard base64 (padded) of SHA-256 over
+  the bytes of the `request` string exactly as `ehem_ext_init` returned
+  it. It is a commitment: the phone fetches `link`, hashes the request
+  the broker serves and compares; a mismatch is refused ("the pairing
+  link served a different request than the code promised" — the new
+  Encedo Auth app, 2026-10-20; the older app did not check, which is why
+  the tester's placeholder `"not_implemented_yet"` paired on 2026-08-05).
+  The SDK composes it — **`ehem_ext_qr_payload(link, request, user,
+  email, hostname, &json)`**, no context, byte-compatible with the
+  Manager's `pairdeviceNow` (`JSON.stringify` of the same object: `/`
+  unescaped, `"`/`\`/controls escaped; NULL config fields → `""`), the
+  string freed with `ehem_notify_string_free` — because every consumer of
+  the public registration legs needs it and the hash is the shim's.
+  Rendering the payload (terminal QR) stays REQ-TOOL-016.
 
 **Rationale:** the push leg cannot work device-locally — only the broker
 reaches the phones. Keeping the broker client separate from the wait
@@ -119,3 +130,27 @@ update, hence the everything-is-an-open-criterion posture and the
       real-phone bearers live 15 min regardless of the authreq
       lifetime (the device copies authreply exp verbatim,
       REQ-AUTH-007).
+- [x] Unit (tests/unit/test_notify.c `test_qr_payload`, rev 5 — local
+      2026-10-20: `./dev ci` 56/56 gcc + clang, `./dev ci --openssl` 56/56
+      gcc + clang, ASan both backends 56/56; the CI legs follow with the
+      push):
+      `ehem_ext_qr_payload` renders exactly
+      `{"link":"https://l.ink/x","hash":"ungWv48Bz+pBQUDeXa4iI7ADYaOWF3qctBD/YfIAFa0=","user":"Alice","email":"a@example.com","hostname":"hem.example"}`
+      for request `"abc"` (the FIPS 180-2 known answer in base64 — the
+      key order, compactness and the bare `/` proven by the exact
+      string); `"r.j.w"` → `BQixETmS1vjcSjAPqjT0yq9poZjfeTnWczNU6VHYuI4=`
+      with `"`/`\` in `user` escaped and NULL `email`/`hostname` → `""`;
+      NULL link/request/out → `EHEM_ERR_ARG`; runs before any context
+      exists (no `ehem_global_init`). Both backends, every CI leg.
+- [ ] Attended (rev 5): `ext pair` from the published `v1.2.0-rc3`
+      hem-tool scanned by the NEW Encedo Auth app completes the
+      registration (the user's report: date, app/phone, kid) — the only
+      proof of the phone's check; the Manager's reference QR of
+      2026-10-20 (decoded: the same five keys in the same order, a 44-char
+      standard-base64 `hash`, `"email":""` for an empty field) is the
+      shape evidence. *(Shape check 2026-10-20, dev build against the dev
+      device: `hem-tool ext pair --no-qr` printed
+      `{"link":"https://api.encedo.com/notify/register/challenge/<64>","hash":"<44-char base64>","user":"Debug HSM","email":"","hostname":"my.ence.do"}`
+      — field for field the Manager's reference QR of the same device,
+      only `link` and `hash` differing as they must; exit 3 after the
+      60 s window, the registration left to expire broker-side.)*

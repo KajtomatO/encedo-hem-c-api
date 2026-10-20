@@ -376,6 +376,8 @@ sequenceDiagram
   REQ-TOOL-016; `ext pair` renders the pairing QR **in the terminal**
   via a vendored single-file MIT QR encoder (Nayuki qrcodegen, tool-only
   linkage, cJSON-style vendoring) rather than any web service — the
+  payload comes from the SDK's `ehem_ext_qr_payload` (STEP-M12-137:
+  `hash` = base64(SHA-256(request)), the phone's check) — the
   tester's quickchart.io approach leaks user/email/hostname to a third
   party and is rejected; unpairing is plain `keys rm`, where real
   phones' `(iPhone)`/`(Android)` labels already land in the
@@ -570,6 +572,11 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   `ehem_login_mobile` + `ehem_options.confirm_timeout_ms` routing the
   whole thing through the existing `ensure_token` chokepoint; and
   `hem-tool ext pair|list|login` with terminal QR (vendored qrcodegen).
+  The QR payload itself is the SDK's since STEP-M12-137 (user decision
+  2026-10-20): `ehem_ext_qr_payload` renders the Manager's
+  `{link, hash, user, email, hostname}` with `hash` =
+  base64(SHA-256(request)) — the new Encedo Auth app checks it against
+  the request the pairing link serves and refused 1.1.0's placeholder.
   Testing splits three ways (user decisions 2026-07-22): a
   **simulated authenticator** in test support (shim AES-128-CBC +
   scheme-A codec) covers the entire device surface unattended with zero
@@ -813,8 +820,20 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   user's annotated `v1.2.0-rc2` (run 39320626797, cold caches again —
   Windows 12:39) published pre-release 417736562 with the 12 assets under
   the final names. The five §6.2 REQs are back to implemented / verified.
+  **STEP-M12-137 started 2026-10-20** — the rc2 finding: the new Encedo
+  Auth app checks the pairing QR's `hash` (base64(SHA-256(request)) — the
+  Manager's `pairdeviceNow`, hem-sdk-js) against the request the link
+  serves and refuses hem-tool's placeholder ("the pairing link served a
+  different request than the code promised"; the 2026-08-05 app never
+  checked). User decision 2026-10-20: the SDK composes the payload —
+  `ehem_ext_qr_payload()` exported (a minor addition under REQ-API-008,
+  rev 3 annotation), `ext pair` uses it and its own JSON code is gone
+  (REQ-AUTH-008 rev 5, REQ-TOOL-016 rev 3 — §6.2 approved with the plan);
+  `v1.2.0-rc3` replaces rc2 and the gate's attended checks run on its
+  binaries.
   Names settled: error code `EHEM_ERR_BACKEND_MISMATCH`; API
-  `ehem_build_info_get`; options `EHEM_BUILD_SHARED` / `EHEM_BUILD_STATIC`
+  `ehem_build_info_get`, `ehem_ext_qr_payload` (STEP-M12-137); options
+  `EHEM_BUILD_SHARED` / `EHEM_BUILD_STATIC`
   / `EHEM_TOOL_LINK` / `EHEM_DEPS_LINK` / `EHEM_CRYPTO_BACKEND`; asset
   names (user decision 2026-10-19, STEP-M12-135 — until `v1.2.0-rc1` the
   OpenSSL variants carried `-static`): the plain `hem-tool-<label>-<os>-x86_64`

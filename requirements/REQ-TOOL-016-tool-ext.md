@@ -1,10 +1,10 @@
 ---
 id: REQ-TOOL-016
 title: hem-tool ext family — pair (terminal QR), list, login
-status: verified
+status: needs-reverify
 priority: should
-revision: 2
-source: user decision 2026-07-22 (M8 decomposition; "Add QR code generation to hem-tool" — user decision same day); hem-api-tester test_5.php QR payload; REQ-TOOL-012 family-in-one-REQ precedent
+revision: 3   # 2026-10-20 (STEP-M12-137): MEANING CHANGE — the QR payload comes from the SDK's `ehem_ext_qr_payload()` (REQ-AUTH-008 rev 5: `hash` = base64(SHA-256(request)), the check the new Encedo Auth app makes); the tester's placeholder "not_implemented_yet" is gone from the flow text. §6.2 report approved with the plan 2026-10-20. needs-reverify until the unit criterion passes and the user's rc3 scan. Rev 2 = the M8-080 attended record (2026-08-05/06)
+source: user decision 2026-07-22 (M8 decomposition; "Add QR code generation to hem-tool" — user decision same day); hem-api-tester test_5.php QR payload (its `hash` placeholder — superseded by REQ-AUTH-008 rev 5, the Manager's definition); REQ-TOOL-012 family-in-one-REQ precedent; user bug report 2026-10-20 on v1.2.0-rc2 (the new Encedo Auth app refuses the QR: "the pairing link served a different request than the code promised") and user decision the same day: the SDK composes the payload
 depends_on: ["REQ-AUTH-006", "REQ-AUTH-008", "REQ-AUTH-009", "REQ-AUTH-010", "REQ-KEY-001", "REQ-TOOL-005"]
 supersedes: null
 superseded_by: null
@@ -21,10 +21,12 @@ including rendering the pairing QR code directly in the terminal.
 - **`ext pair [--label-note <s>]`:** orchestrates registration
   end-to-end: login (passphrase; pairing needs `sub=U`) → device eid via
   config → broker `session` → `ehem_ext_init` → broker `register/init`
-  → compose the QR payload `{link, hash, user, email, hostname}` (the
-  test_5.php:90 shape; `hash` = `"not_implemented_yet"` until upstream
-  defines it) → **render it as a QR code in the terminal** (UTF-8
-  half-block cells; `--no-qr` prints the JSON payload only) → poll
+  → the QR payload from the SDK's `ehem_ext_qr_payload()` (REQ-AUTH-008
+  rev 5: `{link, hash, user, email, hostname}` in the Manager's order,
+  `hash` = base64(SHA-256(request)) — the phone checks it against the
+  request the link serves; the tool composes nothing itself) → **render
+  it as a QR code in the terminal** (UTF-8 half-block cells; `--no-qr`
+  prints the JSON payload only) → poll
   `register/check` (bounded, ~60 s, tester cadence) → `ehem_ext_validate`
   → broker `register/finalise` → print the new `kid` + label. Distinct
   nonzero exit codes: scan timeout, slots-full/dedup 406, broker error,
@@ -81,4 +83,17 @@ loop.
       guarded from bulk rm exactly as designed); `ext login`
       demonstrated approve/reject/timeout as exit 0/4/3 back-to-back.
       Pairing KEPT on the device (user decision 2026-08-06) for future
-      mobile testing.
+      mobile testing. *(That app did not check `hash` — the new Encedo
+      Auth app does; see the rev 3 criteria.)*
+- [x] Unit (test_ext_tool.c, rev 3 — local 2026-10-20: `./dev ci` 56/56
+      gcc + clang, `./dev ci --openssl` 56/56 gcc + clang, ASan both
+      backends; CI follows with the push): the `--no-qr` print of the pair
+      happy path is the SDK payload for the scripted request, verbatim —
+      `{"link":"https://l.ink/x","hash":"BQixETmS1vjcSjAPqjT0yq9poZjfeTnWczNU6VHYuI4=","user":"Alice","email":"a@example.com","hostname":"hem.example"}`
+      (base64(SHA-256("r.j.w")): the request reaches the SDK unaltered),
+      on its own line, and `not_implemented_yet` appears nowhere.
+- [ ] Attended (rev 3, STEP-M12-137 / the M12 gate): `ext pair` from the
+      published `v1.2.0-rc3` hem-tool, scanned from the terminal QR by
+      the NEW Encedo Auth app, completes the registration (date,
+      app/phone, kid; `ext list` shows it) — recorded here and under
+      REQ-AUTH-008.

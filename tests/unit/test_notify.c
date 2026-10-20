@@ -259,9 +259,51 @@ static void test_args_and_frees(void **state)
     fake_transport_free(fake);
 }
 
+/* --- the QR payload (ehem_ext_qr_payload) ---------------------------------- */
+/* verifies: REQ-AUTH-008 (the payload the phone scans: hash =
+ * base64(SHA-256(request)) — FIPS 180-2 "abc" known answer; the Manager's key
+ * order, compact, '/' bare, '"' and '\' escaped, NULL config fields → "";
+ * ARG cases; no ehem_global_init() needed — this test runs first). */
+static void test_qr_payload(void **state)
+{
+    (void)state;
+    char *s = NULL;
+
+    assert_int_equal(ehem_ext_qr_payload("https://l.ink/x", "abc", "Alice",
+                                         "a@example.com", "hem.example", &s),
+                     EHEM_OK);
+    assert_string_equal(s,
+        "{\"link\":\"https://l.ink/x\","
+        "\"hash\":\"ungWv48Bz+pBQUDeXa4iI7ADYaOWF3qctBD/YfIAFa0=\","
+        "\"user\":\"Alice\",\"email\":\"a@example.com\","
+        "\"hostname\":\"hem.example\"}");
+    ehem_notify_string_free(s);
+
+    /* test_ext_tool's scripted request; device-configured strings cannot
+     * break the JSON; NULLs render as "". */
+    assert_int_equal(ehem_ext_qr_payload("L", "r.j.w", "A \"B\" \\ C", NULL,
+                                         NULL, &s), EHEM_OK);
+    assert_string_equal(s,
+        "{\"link\":\"L\","
+        "\"hash\":\"BQixETmS1vjcSjAPqjT0yq9poZjfeTnWczNU6VHYuI4=\","
+        "\"user\":\"A \\\"B\\\" \\\\ C\",\"email\":\"\",\"hostname\":\"\"}");
+    ehem_notify_string_free(s);
+
+    assert_int_equal(ehem_ext_qr_payload(NULL, "r", "u", "e", "h", &s),
+                     EHEM_ERR_ARG);
+    assert_null(s);
+    assert_int_equal(ehem_ext_qr_payload("L", NULL, "u", "e", "h", &s),
+                     EHEM_ERR_ARG);
+    assert_null(s);
+    assert_int_equal(ehem_ext_qr_payload("L", "r", "u", "e", "h", NULL),
+                     EHEM_ERR_ARG);
+    ehem_notify_string_free(NULL);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
+        cmocka_unit_test(test_qr_payload),
         cmocka_unit_test(test_session_get_and_post),
         cmocka_unit_test(test_register_init),
         cmocka_unit_test(test_register_check_and_finalise),
