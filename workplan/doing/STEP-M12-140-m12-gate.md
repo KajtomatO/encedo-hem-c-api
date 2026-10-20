@@ -5,7 +5,7 @@ milestone: M12
 implements: []
 traces:
   architecture: ["ARCHITECTURE.md#11-milestones"]
-depends_on: ["STEP-M12-130", "STEP-M12-135"]
+depends_on: ["STEP-M12-130", "STEP-M12-135", "STEP-M12-137"]
 evidence:
   commits: ["67ffd14"]   # start; the evidence commits follow
   tests:
@@ -34,8 +34,11 @@ transitioned; ARCHITECTURE §11 M12 marked gate-passed; the release per
 docs/RELEASING.md "Final release" (merge, `v1.2.0` tag — the user tags).
 
 **Notes:** Milestone gate (chore, `implements: []`). Attended parts in
-one sitting with the user: (1) the four binaries from the rc2
-pre-release (the final names, STEP-M12-135), each `status` against the
+one sitting with the user: (1) the four binaries from the rc3
+pre-release (the final names, STEP-M12-135; rc3 replaced rc2 after the
+user found the `ext pair` QR rejected by the new Encedo Auth app —
+STEP-M12-137, 2026-10-20 — so the attended checks run on rc3's binaries;
+the rc2 Linux checks below stay as dated records), each `status` against the
 dev device under system trust (my.ence.do, public-CA cert), the one-file
 ones from a directory with NO companion library; (2) the refusal demo on this host (`env -i
 ./hem-tool status` with the companion library absent → exit 12, the
@@ -85,6 +88,9 @@ without asking).
 - [ ] Attended: `init-wizard` end to end on the second unit on Linux and
       Windows (echo-off and restoration checked), then `status` + login —
       recorded in REQ-TOOL-028.
+- [ ] Attended: `ext pair` from the published rc3 hem-tool scanned by the
+      new Encedo Auth app → paired (the STEP-M12-137 fix) — recorded in
+      REQ-TOOL-016 and REQ-AUTH-008.
 - [ ] Docs checklist re-verified against the shipped behaviour: README
       Status block / commands / APIs / Documentation / Layout,
       docs/COVERAGE.md, KNOWN-ISSUES.md, docs/RELEASING.md.
