@@ -104,7 +104,10 @@ static void test_qr_render(void **state)
     assert_non_null(f);
 
     /* "HELLO" fits QR v1 (21 modules) at ECC LOW → 21+8 quiet rows over
-     * 2-row lines = 15 lines (last line's bottom half is quiet). */
+     * 2-row lines = 15 lines (last line's bottom half is quiet). A tmpfile
+     * takes the UTF-8 byte path on every platform; the Windows console path
+     * (the same rows as UTF-16 via WriteConsoleW) needs a console and is
+     * covered by the attended run (REQ-TOOL-016 rev 4). */
     assert_int_equal(hem_ext_qr_render("HELLO", f), 0);
     char *s = slurp(f);
     int lines = 0;

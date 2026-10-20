@@ -377,7 +377,10 @@ sequenceDiagram
   via a vendored single-file MIT QR encoder (Nayuki qrcodegen, tool-only
   linkage, cJSON-style vendoring) rather than any web service — the
   payload comes from the SDK's `ehem_ext_qr_payload` (STEP-M12-137:
-  `hash` = base64(SHA-256(request)), the phone's check) — the
+  `hash` = base64(SHA-256(request)), the phone's check), and a Windows
+  console receives the rows as UTF-16 through the console API (also
+  STEP-M12-137 — the console's OEM code page made mojibake of the UTF-8
+  half-blocks, the rc3 finding; a file or pipe gets the bytes) — the
   tester's quickchart.io approach leaks user/email/hostname to a third
   party and is rejected; unpairing is plain `keys rm`, where real
   phones' `(iPhone)`/`(Android)` labels already land in the
@@ -830,7 +833,14 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   rev 3 annotation), `ext pair` uses it and its own JSON code is gone
   (REQ-AUTH-008 rev 5, REQ-TOOL-016 rev 3 — §6.2 approved with the plan);
   `v1.2.0-rc3` replaces rc2 and the gate's attended checks run on its
-  binaries.
+  binaries. rc3 published the same day (release run 39401247243,
+  release 418234162, 12 assets); the user's rc3 tests found one more
+  thing — on Windows the terminal QR rendered as mojibake, the UTF-8
+  half-block rows decoded in the console's OEM code page — fixed in the
+  same step: when stdout is a console the rows go out as UTF-16 through
+  the console API (REQ-TOOL-016 rev 4, an annotation and an attended
+  criterion, no meaning change); `v1.2.0-rc4` replaces rc3 and the
+  Windows attended checks run on its binaries.
   Names settled: error code `EHEM_ERR_BACKEND_MISMATCH`; API
   `ehem_build_info_get`, `ehem_ext_qr_payload` (STEP-M12-137); options
   `EHEM_BUILD_SHARED` / `EHEM_BUILD_STATIC`

@@ -34,11 +34,15 @@ transitioned; ARCHITECTURE §11 M12 marked gate-passed; the release per
 docs/RELEASING.md "Final release" (merge, `v1.2.0` tag — the user tags).
 
 **Notes:** Milestone gate (chore, `implements: []`). Attended parts in
-one sitting with the user: (1) the four binaries from the rc3
+one sitting with the user: (1) the four binaries from the rc4
 pre-release (the final names, STEP-M12-135; rc3 replaced rc2 after the
-user found the `ext pair` QR rejected by the new Encedo Auth app —
-STEP-M12-137, 2026-10-20 — so the attended checks run on rc3's binaries;
-the rc2 Linux checks below stay as dated records), each `status` against the
+user found the `ext pair` QR rejected by the new Encedo Auth app, and
+rc4 replaces rc3 after the user's rc3 Windows test found that QR
+rendered as mojibake in the console — both STEP-M12-137, 2026-10-20 —
+so the Windows attended checks run on rc4's binaries; the Linux
+binaries' behaviour is unchanged between rc3 and rc4 (Windows-only
+code), so the user's rc3 Linux results stand at their discretion per
+RELEASING; the rc2 Linux checks below stay as dated records), each `status` against the
 dev device under system trust (my.ence.do, public-CA cert), the one-file
 ones from a directory with NO companion library; (2) the refusal demo on this host (`env -i
 ./hem-tool status` with the companion library absent → exit 12, the
@@ -88,9 +92,10 @@ without asking).
 - [ ] Attended: `init-wizard` end to end on the second unit on Linux and
       Windows (echo-off and restoration checked), then `status` + login —
       recorded in REQ-TOOL-028.
-- [ ] Attended: `ext pair` from the published rc3 hem-tool scanned by the
-      new Encedo Auth app → paired (the STEP-M12-137 fix) — recorded in
-      REQ-TOOL-016 and REQ-AUTH-008.
+- [ ] Attended: `ext pair` from the published rc3 hem-tool (Linux) scanned
+      by the new Encedo Auth app → paired, and from the published rc4
+      hem-tool on Windows the QR renders in the console and pairs (the
+      STEP-M12-137 fixes) — recorded in REQ-TOOL-016 and REQ-AUTH-008.
 - [ ] Docs checklist re-verified against the shipped behaviour: README
       Status block / commands / APIs / Documentation / Layout,
       docs/COVERAGE.md, KNOWN-ISSUES.md, docs/RELEASING.md.

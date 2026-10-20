@@ -367,6 +367,34 @@ it (REQ-TOOL-016 rev 3). 1.0/1.1 users pair from the Manager or upgrade
 hem-tool; SDK consumers that built the payload themselves call the new
 function.
 
+## FIXED in 1.2.0 — 1.1.0 `ext pair` on Windows: the terminal QR is "a mess of chars"
+
+**Status:** fixed in 1.2.0 (STEP-M12-137; found by the user on
+`v1.2.0-rc3`, 2026-10-20). **Affected:** `hem-tool.exe ext pair` in
+1.0.0, 1.1.0 and the 1.2.0 candidates up to rc3, in every Windows
+console — cmd, PowerShell, Windows Terminal — whose output code page is
+the default OEM one (not 65001).
+
+**Symptom.** Instead of a QR code the console shows rows of letters and
+symbols, three per QR cell (`Γûê` in code page 437, `Ôľł` in 852, …).
+Output redirected to a file, and every Linux terminal, is fine.
+
+**Cause.** The render writes UTF-8 half-block characters (`█ ▀ ▄`)
+through stdio. A Windows console decodes the bytes it receives in its
+OUTPUT code page — the OEM page of the system locale, never UTF-8 unless
+`chcp 65001` was run in that console — so each three-byte character
+turns into three glyphs of that page.
+
+**Fix.** When stdout is a console the rows are written as UTF-16 through
+the console API (`WriteConsoleW`), which no code page touches and which
+even the legacy raster fonts render — the three blocks exist in every
+OEM font; a file or pipe still receives the UTF-8 bytes (REQ-TOOL-016
+rev 4). 1.1.0 users: `chcp 65001` in the same console before `hem-tool
+ext pair` usually helps; or `ext pair --no-qr` and a LOCAL QR generator
+over the printed payload — never a web one, the payload carries `user`,
+`email` and `hostname`. Other device strings hem-tool prints (key labels,
+names) still go through the code page: BACKLOG item 12.
+
 ## FIXED in 1.2.0 — 1.1.0 release hem-tool: a foreign libwolfssl crashes it, a missing libwolfssl.dll stops it before `main`
 
 **Status:** fixed in 1.2.0 (M12). **Affected:** the 1.1.0 release

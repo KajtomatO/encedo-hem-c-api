@@ -19,7 +19,8 @@
 #include "vendor/qrcodegen/qrcodegen.h"
 
 #ifdef _WIN32
-#  include <windows.h>            /* Sleep() — MinGW has no POSIX nanosleep */
+#  include <windows.h>            /* Sleep() — MinGW has no POSIX nanosleep; WriteConsoleW */
+#  include <io.h>                 /* _fileno, _get_osfhandle */
 #else
 #  include <time.h>               /* nanosleep / struct timespec */
 #endif
@@ -55,12 +56,53 @@ static FILE *or_stderr(FILE *f) { return f != NULL ? f : stderr; }
  * quiet zone comes out bright, which is what the scanner needs. On a
  * light-background terminal, scan apps still cope (QR orientation/polarity
  * detection); `--no-qr` prints the payload for anything exotic.
+ *
+ * Windows: a console decodes the bytes a program writes in its OUTPUT code
+ * page — OEM 437/852/…, never UTF-8 by default — so the three-byte
+ * half-blocks came out as three mojibake letters each ("a mess of chars":
+ * the user's v1.2.0-rc3 Windows test, 2026-10-20). When `out` IS a console
+ * the rows go out as UTF-16 through WriteConsoleW, which no code page
+ * touches and which the legacy raster fonts render too (the three blocks
+ * exist in every OEM font). Redirected output — a file, a pipe, the unit
+ * test's tmpfile — stays the UTF-8 bytes, like `--no-qr`.
  */
+
+/* Cell index: bit 1 = top module dark, bit 0 = bottom module dark. Inverted
+ * rendering — a LIGHT half is the lit one. */
+static const char *const k_cell_utf8[4] = {
+    "\xe2\x96\x88",   /* 0: both light  → █ */
+    "\xe2\x96\x80",   /* 1: bottom dark → ▀ */
+    "\xe2\x96\x84",   /* 2: top dark    → ▄ */
+    " "               /* 3: both dark   → background */
+};
+
+#ifdef _WIN32
+static const wchar_t k_cell_utf16[4] = { 0x2588, 0x2580, 0x2584, L' ' };
+
+/* The console behind `out`, or NULL when it is a file or a pipe. */
+static HANDLE console_of(FILE *out)
+{
+    intptr_t fh = _get_osfhandle(_fileno(out));
+    HANDLE h = (HANDLE)fh;
+    DWORD mode;
+
+    if (fh == -1 || h == NULL || !GetConsoleMode(h, &mode)) {
+        return NULL;
+    }
+    return h;
+}
+#endif
+
 int hem_ext_qr_render(const char *text, FILE *out)
 {
     uint8_t qr[qrcodegen_BUFFER_LEN_MAX];
     uint8_t tmp[qrcodegen_BUFFER_LEN_MAX];
     int size, x, y;
+#ifdef _WIN32
+    HANDLE con;
+    wchar_t wline[96];            /* ≤ 80 cells + "\r\n" */
+    DWORD n, written;
+#endif
 
     if (text == NULL || out == NULL) {
         return -1;
@@ -78,20 +120,42 @@ int hem_ext_qr_render(const char *text, FILE *out)
         return -1;
     }
 
+#ifdef _WIN32
+    con = console_of(out);
+    if (con != NULL) {
+        fflush(out);              /* the stdio text above lands first */
+    }
+#endif
+
     /* Rows -4 .. size+3 (quiet zone), two per line. Module reads outside
      * the symbol return false (light) from qrcodegen_getModule. */
     for (y = -4; y < size + 4; y += 2) {
+#ifdef _WIN32
+        n = 0;
+#endif
         for (x = -4; x < size + 4; x++) {
             bool top    = qrcodegen_getModule(qr, x, y);
             bool bottom = (y + 1 < size + 4)
                               ? qrcodegen_getModule(qr, x, y + 1) : false;
-            /* Inverted: light module → lit block half. */
-            const char *glyph = (!top && !bottom) ? "\xe2\x96\x88"   /* █ */
-                              : (!top &&  bottom) ? "\xe2\x96\x80"   /* ▀ */
-                              : ( top && !bottom) ? "\xe2\x96\x84"   /* ▄ */
-                              : " ";
-            fputs(glyph, out);
+            int cell = (top ? 2 : 0) | (bottom ? 1 : 0);
+#ifdef _WIN32
+            if (con != NULL) {
+                wline[n++] = k_cell_utf16[cell];
+                continue;
+            }
+#endif
+            fputs(k_cell_utf8[cell], out);
         }
+#ifdef _WIN32
+        if (con != NULL) {
+            wline[n++] = L'\r';
+            wline[n++] = L'\n';
+            if (!WriteConsoleW(con, wline, n, &written, NULL)) {
+                return -1;        /* the caller prints the payload instead */
+            }
+            continue;
+        }
+#endif
         fputc('\n', out);
     }
     return 0;

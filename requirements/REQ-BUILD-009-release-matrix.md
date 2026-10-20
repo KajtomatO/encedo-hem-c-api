@@ -3,7 +3,7 @@ id: REQ-BUILD-009
 title: Release matrix — the one-file hem-tool and the SDK library packages (OpenSSL as the plain assets, wolfSSL as -shared) beside the M10 hem-tool release
 status: implemented
 priority: should
-revision: 8   # 2026-10-19 (STEP-M12-135 done): re-verified — the user's annotated `v1.2.0-rc2` (8dd915f; release run 39320626797, all three jobs green, SHA256SUMS re-verified in the publishing job) published pre-release 417736562 with the 12 assets under the final names of the table; implemented again — the main-push and attended criteria stay open for STEP-M12-140. No meaning change. Rev 7 = 2026-10-19 (STEP-M12-135, §6.2 approved in chat): the published names — the one-file hem-tool and the static SDK package are the PLAIN assets, the wolfSSL builds carry `-shared` (user decision 2026-10-19 after the rc1 test; reverses the 2026-10-12 "today's name stays, new variants get a suffix" choice — until v1.2.0-rc1 the OpenSSL variants were `-static`); needs-reverify until the v1.2.0-rc2 release run. Rev 6 = 2026-10-19 (STEP-M12-130 done): the tag-path criterion checked — the user's annotated v1.2.0-rc1 (run 38904497654) published the pre-release with the 12 assets of the table, the annotation + checksums as text, SHA256SUMS re-verified in the job; the user's rc1 tests on both platforms recorded under the attended criterion (its box waits for the gate). No meaning change. Rev 5 = 2026-10-16 (STEP-M12-120 done): release run 38894733780 recorded — the static hem-tool, OpenSSL-configuration, library-package and REQ-BUILD-005 criteria checked; the main-push, tag-path and attended criteria stay open (STEP-M12-130/140). No meaning change. Rev 4 = 2026-10-15 (STEP-M12-120, §6.2 approved in chat): the -static assets' OpenSSL configuration — none on Windows (user decision), /etc/ssl on Linux — and its criterion. Rev 3 = 2026-10-15 (STEP-M12-110 done): the wolfSSL-flavour evidence recorded under the library-package and REQ-BUILD-005 criteria (both stay open for STEP-M12-120 / 130). No meaning change. Rev 2 = 2026-10-14 (STEP-M12-110, §6.2 approved in chat): the wolfSSL library package is shared-only (user decision); its smoke criterion follows; the OPEN criterion resolved (the Windows import library moot; the OpenSSL 3.5.9 pin)
+revision: 9   # 2026-10-20 (STEP-M12-137): record only — the rc3 tag-path record (the user's annotated `v1.2.0-rc3` on d532433; release run 39401247243, release 418234162, 12 assets, SHA256SUMS read back) and a note under the attended criterion: the user's rc3 tests found the Windows terminal QR of `ext pair` rendered as mojibake (REQ-TOOL-016 rev 4), so `v1.2.0-rc4` replaces rc3 and the Windows half of the attended runs moves to it. No meaning change. Rev 8 = 2026-10-19 (STEP-M12-135 done): re-verified — the user's annotated `v1.2.0-rc2` (8dd915f; release run 39320626797, all three jobs green, SHA256SUMS re-verified in the publishing job) published pre-release 417736562 with the 12 assets under the final names of the table; implemented again — the main-push and attended criteria stay open for STEP-M12-140. No meaning change. Rev 7 = 2026-10-19 (STEP-M12-135, §6.2 approved in chat): the published names — the one-file hem-tool and the static SDK package are the PLAIN assets, the wolfSSL builds carry `-shared` (user decision 2026-10-19 after the rc1 test; reverses the 2026-10-12 "today's name stays, new variants get a suffix" choice — until v1.2.0-rc1 the OpenSSL variants were `-static`); needs-reverify until the v1.2.0-rc2 release run. Rev 6 = 2026-10-19 (STEP-M12-130 done): the tag-path criterion checked — the user's annotated v1.2.0-rc1 (run 38904497654) published the pre-release with the 12 assets of the table, the annotation + checksums as text, SHA256SUMS re-verified in the job; the user's rc1 tests on both platforms recorded under the attended criterion (its box waits for the gate). No meaning change. Rev 5 = 2026-10-16 (STEP-M12-120 done): release run 38894733780 recorded — the static hem-tool, OpenSSL-configuration, library-package and REQ-BUILD-005 criteria checked; the main-push, tag-path and attended criteria stay open (STEP-M12-130/140). No meaning change. Rev 4 = 2026-10-15 (STEP-M12-120, §6.2 approved in chat): the -static assets' OpenSSL configuration — none on Windows (user decision), /etc/ssl on Linux — and its criterion. Rev 3 = 2026-10-15 (STEP-M12-110 done): the wolfSSL-flavour evidence recorded under the library-package and REQ-BUILD-005 criteria (both stay open for STEP-M12-120 / 130). No meaning change. Rev 2 = 2026-10-14 (STEP-M12-110, §6.2 approved in chat): the wolfSSL library package is shared-only (user decision); its smoke criterion follows; the OPEN criterion resolved (the Windows import library moot; the OpenSSL 3.5.9 pin)
 source: user decision 2026-10-19 (after the v1.2.0-rc1 test, STEP-M12-135: the one-file hem-tool is the default and gets the plain name `hem-tool-<label>-<os>-x86_64`, the wolfSSL build carries `-shared` — "having hem-tool-XXX-static and hem-tool-XXX suggests that the static is special; I want it the other way around"; the suffix chosen from -wolfssl / -dynamic / -shared; the SDK library packages flip the same way; §6.2 report approved with the plan the same day); user decisions 2026-10-12 (M12 planning: one milestone, one release 1.2.0; static variants ship on OpenSSL, never wolfSSL; today's hem-tool asset name stays and new variants get a suffix — reversed 2026-10-19; the full-dynamic hem-tool is dropped; `release.yml` builds the published variants, `ci.yml` exercises the switches and both backends; macOS and MSVC out); user decision 2026-10-14 (STEP-M12-110: "I dont want any distribution with static wolfssl, static distribution should only openssl" — the wolfSSL library package carries no static library; §6.2 report approved the same day); user decision 2026-10-15 (STEP-M12-120: the Windows -static assets load no OpenSSL configuration — "No config at all", chosen over an administrator-only directory and a registry lookup; §6.2 report approved the same day); ARCHITECTURE.md §1, §11 M12 part C, §12 risk 1; REQ-BUILD-005 (the hem-tool release this extends — unchanged); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-BUILD-005", "REQ-BUILD-006", "REQ-BUILD-007", "REQ-BUILD-008", "REQ-API-010", "REQ-TOOL-026"]
 supersedes: null
@@ -211,6 +211,22 @@ GPL-licensed library stays a separately obtained download.
       39320626785 (the tag push), 10 legs green each. The rc1 pre-release
       414975403 and its tag still exist — deleting them is the user's
       call (RELEASING).)*
+      *(2026-10-20, STEP-M12-137: the user tagged d532433 on
+      `development` with the annotated `v1.2.0-rc3` (message: scratchpad
+      draft `release-notes-1.2.0-rc3.md` — a "Changed since rc2" section
+      on top of rc2's text) and pushed it. Release run 39401247243: Linux
+      2:26 and Windows 9:07, every step green; the publishing job green
+      (0:15). Release 418234162, `prerelease: true`, **12 assets** under
+      the final names with the `1.2.0-rc3` label:
+      `hem-tool-1.2.0-rc3-{linux,windows}-x86_64{,-shared}`,
+      `encedo-hem-1.2.0-rc3-{linux,windows}-x86_64{,-shared}`, the three
+      unchanged wolfSSL assets and `SHA256SUMS`, whose 11 lines name
+      exactly those archives (read back through the API); the release
+      text = the rc3 annotation followed by the checksums. CI on the same
+      commit: run 39401189070 (the push to `development`) and 39401247238
+      (the tag push), 10 legs green each. rc3 is replaced by rc4 in turn:
+      the user's rc3 tests found the terminal QR of `ext pair` rendered as
+      mojibake on Windows (REQ-TOOL-016 rev 4, the same step).)*
 - [ ] Attended (recorded here with date and asset labels): each
       published hem-tool variant runs `hem-tool status` against the dev
       device under system trust on Linux and Windows; the static
@@ -235,6 +251,13 @@ GPL-licensed library stays a separately obtained download.
       refusal, exit 12 (the host's wolfSSL is 5.6.6); with the companion
       asset's `libwolfssl.so.42` beside it → `status`, exit 0. The box
       waits for the Windows half of the rc2 run — the user's sitting.)*
+      *(rc3, 2026-10-20: the user reports the rc3 tests finished with one
+      finding — the Windows terminal QR of `ext pair` (STEP-M12-137,
+      REQ-TOOL-016 rev 4) — so `v1.2.0-rc4` replaces rc3 and the Windows
+      half of this box runs on the rc4 binaries; the Linux binaries'
+      behaviour is unchanged between rc3 and rc4 (Windows-only code). The
+      rc3 run's own record — which binaries, which hosts, what `status`
+      showed — is the user's to supply.)*
 - [x] REQ-BUILD-005 unchanged in behaviour: the dynamic hem-tool archive,
       the companion assets and the source tarball are byte-for-byte the
       same kind of output as 1.1.0 (same scripts, same assertions).

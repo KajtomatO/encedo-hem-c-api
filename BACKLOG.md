@@ -100,6 +100,19 @@ only for itself? Perhaps keep that key instead of removing it every time:
 by default create it only if absent, with options to clean up and to use
 another existing key.
 
+### 12. hem-tool on Windows: device strings in the console's OEM code page
+
+Found 2026-10-20 while fixing the `ext pair` QR display (STEP-M12-137;
+not analysed): hem-tool writes UTF-8 to stdout, and a Windows console
+decodes it in its OEM code page — a non-ASCII key label, user name or
+hostname from the device (the device and the Manager are UTF-8) shows as
+mojibake there, and what the wizard reads from the console comes back in
+that code page. The QR fix bypasses the code page for the QR rows only.
+Options: switch the console to UTF-8 for the process
+(`SetConsoleOutputCP(65001)` + `SetConsoleCP(65001)`, restored at exit —
+also on Ctrl-C, as prompt.c restores the echo), or a wide-char console
+path for all console I/O.
+
 ## Candidates (no decision taken)
 
 - General config/administration writes other than `wipeout` — `userkey*`
