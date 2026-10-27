@@ -69,3 +69,4 @@ hem.env
 # other
 tmp/
 scripts/release/__pycache__/
+.self-note.txt
