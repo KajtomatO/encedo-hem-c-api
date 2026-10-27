@@ -1056,6 +1056,14 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   (docs/RELEASING.md "Final release"). Next milestone: none planned;
   candidates in BACKLOG.md (items 6–12: hem-tool/SDK split, `random`
   speed, the Windows code page for device strings, …).
+  **Released 2026-10-27:** `development` merged into `main` (a9780d9),
+  the user's annotated `v1.2.0` on it — release run 40502975833 (Linux
+  2:44, Windows 10:26, publish 0:17) → release 425432937, 12 assets, the
+  release text from the drafted notes; the push to `main` itself ran
+  40502805630 (artifacts, no release) — REQ-BUILD-009's last criterion,
+  verified. The published Linux hem-tool assets smoke-tested on this
+  host (REQ-BUILD-009 rev 12). M12 closed; the four rc pre-releases and
+  tags are the user's to delete.
 - **MFW — firmware-pending** *(created by user decision 2026-08-07: one
   generic future milestone for every feature that is documented — or
   shipped dormant — but MISSING from the running firmware; nothing here

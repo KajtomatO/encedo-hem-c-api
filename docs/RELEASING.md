@@ -45,8 +45,8 @@ A tag run cannot restore the dependency caches made on `development`
 (GitHub scopes a cache to the branch that wrote it and to the default
 branch), so it builds both prefixes from source: 8–13 minutes on Windows
 and 3–4 on Linux (`v1.2.0-rc1`: 8:07 and 3:46; `v1.2.0-rc2`: 12:39 and
-3:15; `v1.2.0-rc3`: 9:07 and 2:26; `v1.2.0-rc4`: 13:41 and 3:17) against
-2–3 and 1–2 with warm caches.
+3:15; `v1.2.0-rc3`: 9:07 and 2:26; `v1.2.0-rc4`: 13:41 and 3:17;
+`v1.2.0`: 10:26 and 2:44) against 2–3 and 1–2 with warm caches.
 
 ## Rules the workflow enforces
 
