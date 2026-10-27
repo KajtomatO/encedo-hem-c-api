@@ -841,6 +841,17 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   the console API (REQ-TOOL-016 rev 4, an annotation and an attended
   criterion, no meaning change); `v1.2.0-rc4` replaces rc3 and the
   Windows attended checks run on its binaries.
+  **STEP-M12-137 done 2026-10-27** — the user's annotated `v1.2.0-rc4`
+  (a481d07) published 2026-10-20 (release run 39439585466, release
+  418511519, 12 assets); the user's runs: the rc3 tests of 2026-10-20
+  with the Windows QR display as the only finding, and on 2026-10-27
+  `ext pair` from the rc4 Windows hem-tool shows the QR and pairs with
+  Encedo HEM Auth 2.0.0-dev.8 (Samsung SM-S938B, kid
+  `3dff0e4888f77b1e14e6812c17dbc4ce` listed `[PROTECTED]`). REQ-AUTH-008
+  and REQ-TOOL-016 back to verified (rev 6 / rev 5, no meaning change).
+  The gate's remaining attended checks (`status` with the four binaries,
+  the Windows missing-DLL message, the wizard on the second unit) run
+  on rc4.
   Names settled: error code `EHEM_ERR_BACKEND_MISMATCH`; API
   `ehem_build_info_get`, `ehem_ext_qr_payload` (STEP-M12-137); options
   `EHEM_BUILD_SHARED` / `EHEM_BUILD_STATIC`

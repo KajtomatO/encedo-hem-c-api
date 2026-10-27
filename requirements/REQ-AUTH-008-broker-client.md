@@ -1,9 +1,9 @@
 ---
 id: REQ-AUTH-008
 title: Notification-broker client — cloud legs for ExtAuth pairing and login
-status: needs-reverify
+status: verified
 priority: must
-revision: 5   # 2026-10-20 (STEP-M12-137): MEANING CHANGE — the QR payload is the SDK's (`ehem_ext_qr_payload()`) and its `hash` is defined: standard base64 of SHA-256 over the `request` string from ext/init, as the Manager composes it (assets/build.js:4827-4836) and hem-sdk-js (commit a750037); the placeholder "not_implemented_yet" that the new Encedo Auth app refuses is gone. §6.2 report approved with the plan 2026-10-20. needs-reverify until the unit criterion passes and the user's rc3 scan. Revs 2–4 = the live/attended facts marked inline below (2026-07-23 … 2026-08-06)
+revision: 6   # 2026-10-27 (STEP-M12-137 done): re-verified — the rev 5 unit criterion green on every CI leg (runs 39401189070 / 39401247238 on d532433, 39439574020 / 39439585486 on a481d07) and the attended one met: the user's `ext pair` from the published 1.2.0 candidates (rc3 on Linux, 2026-10-20; rc4 on Windows, reported 2026-10-27) scanned by Encedo HEM Auth 2.0.0-dev.8 paired; `ext list` shows the authenticator. No meaning change. Rev 5 = 2026-10-20 (STEP-M12-137): MEANING CHANGE — the QR payload is the SDK's (`ehem_ext_qr_payload()`) and its `hash` is defined: standard base64 of SHA-256 over the `request` string from ext/init, as the Manager composes it (assets/build.js:4827-4836) and hem-sdk-js (commit a750037); the placeholder "not_implemented_yet" that the new Encedo Auth app refuses is gone. §6.2 report approved with the plan 2026-10-20. needs-reverify until the unit criterion passes and the user's rc3 scan. Revs 2–4 = the live/attended facts marked inline below (2026-07-23 … 2026-08-06)
 source: user decision 2026-07-22 (M8 decomposition); hem-api-tester test_5.php/test_6.php (notify flows); Encedo Manager encedo.js:335/1316, build.js:383/1438 (per doc-repo citations); NO doc page exists for the broker API — shapes are reconstructed, all pinned by live probes; the QR payload (rev 5): Encedo Manager assets/build.js:378-404 (`pair()`) and :4827-4836 (`pairdeviceNow`: `hash = base64(sha256(request))`, `JSON.stringify({link, hash, user, email, hostname})`), hem-sdk-js hem-sdk.js:1510-1518 (commit a750037, 2026-09-03), the user's bug report 2026-10-20 on v1.2.0-rc2 (the new Encedo Auth app: "the pairing link served a different request than the code promised"); user decision 2026-10-20: the SDK composes the payload
 depends_on: ["REQ-NET-001", "REQ-NET-003", "REQ-AUTH-006", "REQ-AUTH-007"]
 supersedes: null
@@ -142,10 +142,17 @@ update, hence the everything-is-an-open-criterion posture and the
       with `"`/`\` in `user` escaped and NULL `email`/`hostname` → `""`;
       NULL link/request/out → `EHEM_ERR_ARG`; runs before any context
       exists (no `ehem_global_init`). Both backends, every CI leg.
-- [ ] Attended (rev 5): `ext pair` from the published `v1.2.0-rc3`
+- [x] Attended (rev 5): `ext pair` from the published `v1.2.0-rc3`
       hem-tool scanned by the NEW Encedo Auth app completes the
       registration (the user's report: date, app/phone, kid) — the only
-      proof of the phone's check; the Manager's reference QR of
+      proof of the phone's check. **Met:** the user's rc3 report of
+      2026-10-20 ("Finished tests on RC") named the Windows QR *display*
+      as the only finding (REQ-TOOL-016 rev 4), and on 2026-10-27: "Ext
+      pair works on windows" from the published `v1.2.0-rc4` hem-tool —
+      app **Encedo HEM Auth 2.0.0-dev.8**, phone Samsung SM-S938B
+      (Android); `hem-tool ext list` shows the one paired authenticator,
+      kid `3dff0e4888f77b1e14e6812c17dbc4ce`, `[PROTECTED]`. The phone's
+      hash check passed against the SDK's payload. The Manager's reference QR of
       2026-10-20 (decoded: the same five keys in the same order, a 44-char
       standard-base64 `hash`, `"email":""` for an empty field) is the
       shape evidence. *(Shape check 2026-10-20, dev build against the dev

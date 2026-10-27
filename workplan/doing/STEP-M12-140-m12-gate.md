@@ -92,10 +92,14 @@ without asking).
 - [ ] Attended: `init-wizard` end to end on the second unit on Linux and
       Windows (echo-off and restoration checked), then `status` + login —
       recorded in REQ-TOOL-028.
-- [ ] Attended: `ext pair` from the published rc3 hem-tool (Linux) scanned
+- [x] Attended: `ext pair` from the published rc3 hem-tool (Linux) scanned
       by the new Encedo Auth app → paired, and from the published rc4
       hem-tool on Windows the QR renders in the console and pairs (the
       STEP-M12-137 fixes) — recorded in REQ-TOOL-016 and REQ-AUTH-008.
+      *(2026-10-20 / 2026-10-27: the user — rc3 tests finished with the
+      Windows display as the only finding; "Ext pair works on windows"
+      from rc4; Encedo HEM Auth 2.0.0-dev.8, Samsung SM-S938B (Android),
+      kid 3dff0e4888f77b1e14e6812c17dbc4ce listed `[PROTECTED]`.)*
 - [ ] Docs checklist re-verified against the shipped behaviour: README
       Status block / commands / APIs / Documentation / Layout,
       docs/COVERAGE.md, KNOWN-ISSUES.md, docs/RELEASING.md.

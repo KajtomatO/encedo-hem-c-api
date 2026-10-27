@@ -7,13 +7,15 @@ traces:
   architecture: ["ARCHITECTURE.md#5-auth--session", "ARCHITECTURE.md#8-hem-tool-cli", "ARCHITECTURE.md#11-milestones"]
 depends_on: ["STEP-M12-135"]
 evidence:
-  commits: ["b25b87b", "f7b875b", "d532433", "5b4e1bc"]   # start, implementation (the hash), TRACE, the Windows console render (+ rc3 records); the TRACE commit follows
+  commits: ["b25b87b", "f7b875b", "d532433", "5b4e1bc", "a481d07"]   # start, implementation (the hash), TRACE, the Windows console render (+ rc3 records), TRACE (= the v1.2.0-rc4 commit); the done commit follows
   tests:
     - "Local 2026-10-20 (scratchpad ci137.log, ci137-rerun.log): ./dev ci 56/56 gcc + 56/56 clang (wolfSSL; the first run of the sitting exited 1 with 56/56 in its visible tail while a `./dev tool` build ran in the same build/ directory concurrently — re-run alone: exit 0, both compilers green); ./dev ci --openssl 56/56 gcc + 56/56 clang; ./dev test asan 56/56 and ./dev test asan --openssl 56/56; ./dev check 2/2. New assertions — test_notify `test_qr_payload` (verifies: REQ-AUTH-008 rev 5; runs first, before any context — no ehem_global_init): the exact payload for request \"abc\" with the FIPS 180-2 known answer `ungWv48Bz+pBQUDeXa4iI7ADYaOWF3qctBD/YfIAFa0=` (key order, compactness, the bare `/`), \"r.j.w\" → `BQixETmS1vjcSjAPqjT0yq9poZjfeTnWczNU6VHYuI4=` with `\"`/`\\` in user escaped and NULL email/hostname → \"\", the three ARG cases; test_ext_tool (verifies: REQ-TOOL-016 rev 3): the --no-qr print is that SDK payload for the scripted request, verbatim on its own line, and `not_implemented_yet` appears nowhere. Gates: export_symbols (the new symbol is an addition beyond the 1.0 baseline), docs_coverage (API-GUIDE row), public_headers_dep_free, tests_backend_free, ascii_strings — green."
     - "Live shape check 2026-10-20 (dev build, wolfSSL, against the dev device — scratchpad extpair137.log): `hem-tool ext pair --no-qr` printed `{\"link\":\"https://api.encedo.com/notify/register/challenge/<64 chars>\",\"hash\":\"<44-char standard base64>\",\"user\":\"Debug HSM\",\"email\":\"\",\"hostname\":\"my.ence.do\"}` — field for field the user's decoded Manager reference QR of the same device (only link and hash differ, as they must); exit 3 after the 60 s window, the registration left to expire broker-side. The phone-side check itself is the user's rc3 scan (box 6)."
     - "rc3 published 2026-10-20: CI run 39401189070 on development (d532433) and 39401247238 on the tag, 10/10 legs each; release run 39401247243 (Linux 2:26, Windows 9:07, publish 0:15) → pre-release 418234162 with the 12 assets under the final names, SHA256SUMS = those 11 archives (read back through the API) — recorded under REQ-BUILD-009's tag-path criterion (rev 9)."
     - "Windows console render (the rc3 finding), 2026-10-20: `x86_64-w64-mingw32-gcc -std=c99 -Wall -Wextra -Werror -fsyntax-only src/tools/hem-tool/ext_cmd.c` clean (GCC 13 cross; the Windows CI legs compile with MSYS2 GCC 16 and are the check for newer warnings); host rebuild + test_ext_tool, export_symbols, docs_coverage, ascii_strings, public-header gates 5/5 — the byte path's output is unchanged (test_qr_render's 29 × 3-byte first row). The console path cannot run here (no Windows, no Wine): proven by the user's rc4 Windows run (REQ-TOOL-016 rev 4 attended criterion). Local suite after the change (scratchpad ci137b.log, ci137b-openssl.log, asan137b.log): ./dev ci 56/56 gcc + 56/56 clang, exit 0; ./dev ci --openssl 56/56 gcc + 56/56 clang, exit 0; ./dev test asan (wolfSSL) 56/56, exit 0."
-  notes: null
+    - "rc4 published 2026-10-20 (the user's annotated v1.2.0-rc4 on a481d07): CI 39439574020 on development and 39439585486 on the tag, 10/10 legs each (the Windows legs compile the WriteConsoleW path with MSYS2 GCC 16 — clean); release run 39439585466 (Linux 3:17, Windows 13:41, publish 0:17) → pre-release 418511519 with the 12 assets, SHA256SUMS = those 11 archives (read back 2026-10-27) — REQ-BUILD-009 rev 10."
+    - "Attended (the user, 2026-10-20 and 2026-10-27): the rc3 tests finished with the Windows QR display as the only finding; from the published rc4 Windows hem-tool `ext pair` shows the QR and pairs with Encedo HEM Auth 2.0.0-dev.8 (Samsung SM-S938B (Android)); `hem-tool ext list` → kid 3dff0e4888f77b1e14e6812c17dbc4ce, [PROTECTED], 1 paired authenticator — REQ-AUTH-008 rev 6 and REQ-TOOL-016 rev 5 criteria."
+  notes: "Done 2026-10-27. Two fixes in one step: the QR payload's hash (the SDK's ehem_ext_qr_payload, rc3) and the Windows console render (WriteConsoleW, rc4) — both found by the user's candidate tests, both proven by the user's phone. The console path has no automated test (needs a console; no Windows/Wine on the dev host) — the attended criterion is its record. The pairing is KEPT on the device for the gate's `ext login` use and future mobile testing (the 2026-08-06 convention). BACKLOG item 12 (device strings through the Windows code page) is the follow-up this surfaced."
 reopened: []
 cancelled: null
 ---
@@ -101,13 +103,19 @@ Windows code-page question (device strings) this surfaced.
       test's byte path unchanged; REQ-TOOL-016 rev 4 (annotation +
       attended criterion), KNOWN-ISSUES "FIXED in 1.2.0" entry,
       ARCHITECTURE §8/§11, BACKLOG item 12, release notes (rc4 + final).
-- [ ] CI green on `development` again; `v1.2.0-rc4` published with the 12
+- [x] CI green on `development` again; `v1.2.0-rc4` published with the 12
       assets (run id + release id in REQ-BUILD-009's tag-path record — no
-      meaning change).
-- [ ] Attended (the user): `ext pair` from the published rc3 hem-tool on
+      meaning change). *(2026-10-20: CI 39439574020 + 39439585486 (10/10
+      each), release run 39439585466, release 418511519, 12 assets,
+      SHA256SUMS read back — REQ-BUILD-009 rev 10.)*
+- [x] Attended (the user): `ext pair` from the published rc3 hem-tool on
       Linux, scanned by the new Encedo Auth app → paired (the user's
-      2026-10-20 report "Finished tests on RC" — the record's app/phone
-      and kid still to be supplied); `ext pair` from the published rc4
-      Windows hem-tool shows a QR in the console and pairs — recorded in
-      REQ-TOOL-016 and REQ-AUTH-008; both back to `verified`; TRACE
-      regenerated.
+      2026-10-20 report "Finished tests on RC" — the Windows display the
+      only finding); `ext pair` from the published rc4 Windows hem-tool
+      shows a QR in the console and pairs — recorded in REQ-TOOL-016 and
+      REQ-AUTH-008; both back to `verified`; TRACE regenerated.
+      *(2026-10-27, the user: "Ext pair works on windows"; app Encedo HEM
+      Auth 2.0.0-dev.8; `ext list`: kid 3dff0e4888f77b1e14e6812c17dbc4ce,
+      "Samsung SM-S938B (Android)" `[PROTECTED]`, 1 paired authenticator.
+      REQ-AUTH-008 rev 6 and REQ-TOOL-016 rev 5 verified by hand — no
+      meaning change.)*
