@@ -157,11 +157,12 @@ static void test_options_uninitialized_rejected(void **state)
 static void test_rc_str_covers_every_value(void **state)
 {
     (void)state;
-    /* Sentinel string for an out-of-range value; every real value must differ. */
-    const char *unknown = ehem_rc_str((ehem_rc)(EHEM_ERR_UNSUPPORTED + 1));
+    /* Sentinel string for an out-of-range value; every real value must differ.
+     * EHEM_ERR_BACKEND_MISMATCH is the last value (appended in 1.2). */
+    const char *unknown = ehem_rc_str((ehem_rc)(EHEM_ERR_BACKEND_MISMATCH + 1));
     assert_non_null(unknown);
 
-    for (int i = EHEM_OK; i <= EHEM_ERR_UNSUPPORTED; i++) {
+    for (int i = EHEM_OK; i <= EHEM_ERR_BACKEND_MISMATCH; i++) {
         const char *s = ehem_rc_str((ehem_rc)i);
         assert_non_null(s);
         assert_true(s[0] != '\0');

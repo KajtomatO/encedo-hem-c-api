@@ -20,6 +20,7 @@
 #include <stdio.h>
 
 #include "ehem/ehem.h"
+#include "ehem/keymgmt.h"   /* ehem_key_family (hem_keys_gen_default_mode) */
 
 /* Exit codes shared by the keys subcommands (REQ-TOOL-004). */
 enum {
@@ -104,6 +105,18 @@ typedef struct {
  * HEM_KEYS_RUNTIME with a message naming the kid.
  */
 int hem_keys_pub_run(ehem_ctx *ctx, const hem_keys_pub_opts *o);
+
+/*
+ * The mode `keys gen` sends for a NIST-P/K type when --mode is omitted
+ * (REQ-TOOL-009): the device's own default, ECDH-only, cannot sign. The one
+ * definition the command, its help text and `keys types` (REQ-TOOL-027) use.
+ */
+#define HEM_KEYS_GEN_NIST_MODE "ECDH,ExDSA"
+
+/* The --mode `keys gen` sends for `family` when --mode is omitted:
+ * HEM_KEYS_GEN_NIST_MODE for the four NIST-P/K families (REQ-KEY-006), NULL —
+ * no mode field — for every other family. */
+const char *hem_keys_gen_default_mode(ehem_key_family family);
 
 /* Options for `keys gen` (REQ-TOOL-009). `type` and `label` are required. */
 typedef struct {

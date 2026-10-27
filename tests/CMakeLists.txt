@@ -41,15 +41,20 @@ function(ehem_add_unit_test name)
 endfunction()
 
 # ehem_add_integration_test(<name> SOURCES ...)
-# Links the shared library (public API only) and carries the `integration`
-# label. Gating is shared infra (tests/support/integration_env.h): the test
+# Links the shared library (public API only) — the static SDK when the build has
+# no shared variant (EHEM_BUILD_SHARED=OFF, REQ-BUILD-006) — and carries the
+# `integration` label. Gating is shared infra (tests/support/integration_env.h): the test
 # main() exits EHEM_SKIP_EXIT (77) when EHEM_TEST_URL is unset, and
 # SKIP_RETURN_CODE makes CTest report that as "Skipped", not a failure
 # (REQ-TEST-002).
 function(ehem_add_integration_test name)
   cmake_parse_arguments(A "" "" "SOURCES" ${ARGN})
   add_executable(${name} ${A_SOURCES})
-  target_link_libraries(${name} PRIVATE encedo-hem::encedo-hem cmocka::cmocka)
+  if(TARGET encedo-hem)
+    target_link_libraries(${name} PRIVATE encedo-hem::encedo-hem cmocka::cmocka)
+  else()
+    target_link_libraries(${name} PRIVATE ${EHEM_STATIC_TARGET} cmocka::cmocka)
+  endif()
   # PROJECT_SOURCE_DIR (not CMAKE_CURRENT_SOURCE_DIR) because this runs in the
   # caller's scope; the shared gating header lives under tests/support.
   target_include_directories(${name} PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
@@ -81,8 +86,13 @@ endfunction()
 # tests linking it resolve the internal symbols the fake calls.
 add_library(ehem_test_support STATIC
   support/fake_transport.c
-  support/ext_sim.c)
-target_link_libraries(ehem_test_support PUBLIC encedo-hem::encedo-hem-static)
+  support/ext_sim.c
+  # The live tests' reference computations on the build's crypto library
+  # (REQ-BUILD-007) — the only test sources that include a backend header.
+  support/crypto_ref_${EHEM_CRYPTO_BACKEND}.c)
+# EHEM_STATIC_TARGET: the static variant, or the private archive when the
+# variant is off (REQ-BUILD-006) — the unit tests need the hidden seams.
+target_link_libraries(ehem_test_support PUBLIC ${EHEM_STATIC_TARGET})
 target_include_directories(ehem_test_support PUBLIC
   ${PROJECT_SOURCE_DIR}/src
   ${CMAKE_CURRENT_SOURCE_DIR}/support)
@@ -90,6 +100,32 @@ target_compile_options(ehem_test_support PRIVATE ${EHEM_WARNING_FLAGS})
 
 add_subdirectory(unit)
 add_subdirectory(integration)
+
+# REQ-BUILD-008: the consumer gate — install this build into a scratch prefix,
+# then build and run tests/consumer against it via find_package and pkg-config
+# for every variant built (consumer/check_consumer.cmake). Native builds only:
+# the consumer must run. CMAKE_PREFIX_PATH travels with `|` for `;`.
+if(NOT CMAKE_CROSSCOMPILING)
+  string(REPLACE ";" "|" _ehem_prefix_path "${CMAKE_PREFIX_PATH}")
+  add_test(NAME consumer_interface
+    COMMAND ${CMAKE_COMMAND}
+      "-DEHEM_BUILD_DIR=${PROJECT_BINARY_DIR}"
+      "-DEHEM_SCRATCH=${CMAKE_CURRENT_BINARY_DIR}/consumer-gate"
+      "-DEHEM_CONSUMER_SRC=${CMAKE_CURRENT_SOURCE_DIR}/consumer"
+      -DEHEM_VERSION=${PROJECT_VERSION}
+      "-DEHEM_LIBDIR=${CMAKE_INSTALL_LIBDIR}"
+      -DEHEM_SHARED=${EHEM_BUILD_SHARED}
+      -DEHEM_STATIC=${EHEM_BUILD_STATIC}
+      "-DEHEM_GENERATOR=${CMAKE_GENERATOR}"
+      "-DEHEM_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}"
+      "-DEHEM_C_COMPILER=${CMAKE_C_COMPILER}"
+      "-DEHEM_BUILD_TYPE=${CMAKE_BUILD_TYPE}"
+      "-DEHEM_PREFIX_PATH=${_ehem_prefix_path}"
+      -DEHEM_SANITIZE=${EHEM_SANITIZE}
+      -DEHEM_CRYPTO_BACKEND=${EHEM_CRYPTO_BACKEND}
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/consumer/check_consumer.cmake)
+  set_tests_properties(consumer_interface PROPERTIES LABELS unit)
+endif()
 # Disruptive live tests need the shared tool code (hem-tool-core), which only
 # exists when the CLI is built.
 if(TARGET hem-tool-core)

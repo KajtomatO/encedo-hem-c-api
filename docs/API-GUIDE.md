@@ -1,4 +1,4 @@
-# Encedo HEM C SDK — API guide (1.0)
+# Encedo HEM C SDK — API guide (1.2)
 
 The public headers in `include/ehem/` are the **per-symbol reference**:
 every function, struct, enum, and macro carries its full contract there —
@@ -84,7 +84,11 @@ One `ehem_ctx` (opaque) = one HEM device, created from a URL + options,
 destroyed with `ehem_ctx_destroy()` (which zeroizes credential material).
 There is no global mutable state beyond `ehem_global_init()` /
 `ehem_global_cleanup()`, which wrap the backends' process-global setup
-(libcurl, wolfCrypt) and are idempotent. In 1.x a context is used by one
+(libcurl, the crypto library) and are idempotent. Since 1.2 init also checks that the
+crypto library loaded at run time is the one the SDK was built against
+(`EHEM_ERR_BACKEND_MISMATCH` otherwise — see the error model); a refused
+init leaves the global state untouched, so cleanup is a no-op and a later
+init re-checks. In 1.x a context is used by one
 thread at a time; internals keep all mutable state inside the context so a
 per-context lock can be added later without redesign.
 
@@ -96,7 +100,12 @@ distinguish every condition a PKCS#11 backend must map: `EHEM_ERR_NETWORK`,
 `EHEM_ERR_SCOPE_DENIED`, `EHEM_ERR_USER_REJECTED`,
 `EHEM_ERR_CONFIRM_TIMEOUT`, `EHEM_ERR_NOT_FOUND`, `EHEM_ERR_DEVICE`,
 `EHEM_ERR_PROTOCOL`, `EHEM_ERR_ARG`, `EHEM_ERR_NOMEM`,
-`EHEM_ERR_UNSUPPORTED`. The enum is append-only — values never renumber.
+`EHEM_ERR_UNSUPPORTED`, `EHEM_ERR_BACKEND_MISMATCH`. The enum is append-only
+— values never renumber. `EHEM_ERR_BACKEND_MISMATCH` (added in 1.2) is
+`ehem_global_init()`'s refusal of a crypto library other than the one the
+SDK was built against (see "Crypto backend" below); the implicit init paths (`ehem_ctx_create()`
+with the default transport, the login flow's first token acquisition) return
+the same code, and nothing else works until the right library is installed.
 `ehem_rc_str()` names any value. Detail for the LAST call —
 HTTP status, the device's error payload, a human-readable message — is
 retrievable from the context via `ehem_last_error()`; the returned struct
@@ -121,7 +130,10 @@ matching `ehem_*_free()` — all NULL-safe. Byte buffers are
 `(uint8_t *ptr, size_t len)` pairs; strings are NUL-terminated UTF-8.
 Secret material (passphrase-derived keys, shared secrets, plaintexts,
 tokens) is zeroized on free. Strings returned by `ehem_version()` and
-`ehem_rc_str()` are static — never free them.
+`ehem_rc_str()` are static — never free them. The one caller-owned output
+is `ehem_build_info` (1.2): `ehem_build_info_get()` fills your struct with
+static strings and cannot fail; its size is fixed for all of 1.x (new facts
+take its `reserved` slots), so any 1.x binary can call any 1.x library.
 
 ### Options and the ABI
 
@@ -150,6 +162,10 @@ with expiry-aware silent refresh.
   60 s) and fails with `EHEM_ERR_USER_REJECTED` or
   `EHEM_ERR_CONFIRM_TIMEOUT` — distinct by design. Pairing management
   itself always needs a passphrase login (the device demands `sub="U"`).
+  The SDK composes the QR payload the phone scans (`ehem_ext_qr_payload`:
+  `hash` = base64(SHA-256(request)) — the app checks it against the request
+  the pairing link serves); rendering it is the caller's (hem-tool draws a
+  terminal QR).
 - The pollable confirm engine (`ehem_ext_confirm_begin/poll/wait/cancel`)
   serves consumers that cannot block.
 - The optional `ehem_options.confirm_notice` hook fires once per
@@ -167,6 +183,33 @@ scopes; **every per-key crypto operation uses the exact scope
 `keymgmt:use:<kid>`** — firmware matches it with a plain strcmp, so one
 cached token per KID serves get + sign + verify + ECDH + cipher + PQC on
 that key. The cache handles all of this transparently.
+
+### Crypto backend
+
+The SDK is built against one crypto library, chosen at configure time with
+`EHEM_CRYPTO_BACKEND`: **wolfSSL** (the default, linked dynamically in
+the `-shared` packages) or **OpenSSL 3** (the one-file hem-tool and the
+static SDK package — the plain asset names from 1.2.0). The
+public headers name neither — no `ehem_*` type depends on the choice — and
+`ehem_build_info_get()` tells a program which one it got, the version it
+was compiled against, the version loaded and how each library is linked.
+`ehem_global_init()` checks the loaded library before anything else uses
+it, and refuses it with `EHEM_ERR_BACKEND_MISMATCH`:
+
+- **wolfSSL** — the loaded version must equal the compiled one exactly,
+  and a known-answer self-test runs every wolfCrypt struct the SDK
+  allocates itself inside guard-banded buffers. wolfSSL's struct layouts
+  depend on its build options, so a library with the same soname but a
+  different version or configuration would otherwise corrupt memory (the
+  1.1.0 hem-tool crashed that way on Ubuntu's `libwolfssl.so.42`).
+- **OpenSSL 3** — the loaded major version must equal the compiled one
+  (OpenSSL keeps its ABI within a major; its objects are opaque), and
+  known answers (HMAC-SHA256, SHA-256) must come out of the library. An
+  OpenSSL configuration that leaves the default provider unloaded fails
+  this check.
+
+The libcurl the SDK talks through is not checked; its version is reported
+the same way.
 
 ### TLS trust
 
@@ -202,7 +245,7 @@ rate-sensitive devices).
 
 | Symbol | What it is |
 |---|---|
-| `EHEM_API` | export/visibility macro (define `EHEM_USING_SHARED` when consuming the DLL on Windows) |
+| `EHEM_API` | export/visibility macro — `EHEM_USING_SHARED` selects dllimport when consuming the DLL on Windows: the CMake target `encedo-hem::encedo-hem` defines it for its consumers; with pkg-config, define it yourself (never for the static library) |
 | `ehem_version` | runtime SDK version string |
 | `ehem_rc`, `ehem_rc_str` | the error enum (append-only) + name lookup |
 | `ehem_ctx`, `ehem_ctx_create`, `ehem_ctx_destroy` | opaque per-device context lifecycle |
@@ -210,7 +253,8 @@ rate-sensitive devices).
 | `ehem_tls_mode` | `EHEM_TLS_SYSTEM` / `EHEM_TLS_CA_FILE` / `EHEM_TLS_INSECURE` |
 | `ehem_error`, `ehem_last_error` | last-call detail (http status, device payload, message) |
 | `ehem_cert_refreshed` | sticky flag: automatic cert recovery took effect |
-| `ehem_global_init`, `ehem_global_cleanup` | idempotent process-global backend setup |
+| `ehem_global_init`, `ehem_global_cleanup` | idempotent process-global backend setup; init refuses a foreign crypto library with `EHEM_ERR_BACKEND_MISMATCH` (1.2) |
+| `ehem_build_info`, `ehem_build_info_get` | crypto + transport backend names, compiled-against vs loaded versions, link modes (1.2); caller-owned struct of fixed size, static strings, works before/without a successful init |
 | `ehem_transport` | opaque transport-override slot in the options (testing seam) |
 | `EHEM_DEFAULT_CONNECT_TIMEOUT_MS`, `EHEM_DEFAULT_TOTAL_TIMEOUT_MS`, `EHEM_DEFAULT_CONFIRM_TIMEOUT_MS` | documented option defaults |
 | `EHEM_DEFAULT_CHECKIN_URL` | the Encedo cloud check-in endpoint |
@@ -229,6 +273,7 @@ rate-sensitive devices).
 | `ehem_ext_request`, `ehem_ext_request_info`, `ehem_ext_request_free` | unauthenticated: emit an `authreq` for paired phones |
 | `ehem_ext_token`, `ehem_ext_token_free` | exchange the phone's `authreply` for a bearer (the one public token return) |
 | `ehem_notify_session`, `ehem_notify_register_init`, `ehem_notify_register_info`, `ehem_notify_register_info_free` | broker session + pairing registration legs |
+| `ehem_ext_qr_payload` | the QR payload the phone app scans — `{link, hash, user, email, hostname}` with `hash` = base64(SHA-256(request)), Manager-identical (free with `ehem_notify_string_free`) |
 | `ehem_notify_register_check`, `ehem_notify_pairing_reply`, `ehem_notify_pairing_reply_free`, `ehem_notify_register_finalise` | pairing scan poll + completion |
 | `ehem_notify_event_new`, `ehem_notify_event_check`, `ehem_notify_event_result`, `ehem_notify_event_result_free` | login push + answer poll |
 | `ehem_notify_string_free` | free helper for broker strings |
@@ -314,4 +359,9 @@ The CLI is a thin consumer of exactly this public API and doubles as its
 living documentation: `hem-tool help <command>` documents each command
 (auth requirement included), the top-level page groups commands by
 credential need, and every command accepts `--mobile` where a bearer
-suffices. Default device URL: `https://my.ence.do`.
+suffices. Default device URL: `https://my.ence.do`. Since 1.2 it
+initialises the SDK before any command and turns a refusal into one
+message naming the library and the remedy, exit code 12; `hem-tool
+--version` prints the SDK version and the compiled/loaded versions and
+link modes of the crypto library and libcurl, and works even when the
+library is refused.

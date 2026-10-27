@@ -1,6 +1,6 @@
 /*
- * test_sign_live.c — live signing + local wolfCrypt verification + the sign
- * scope probe that closes ARCHITECTURE §12 risk 3.
+ * test_sign_live.c — live signing + local verification through the crypto
+ * shim + the sign scope probe that closes ARCHITECTURE §12 risk 3.
  *
  * verifies: REQ-OPS-001 (an EHEMTEST SECP256R1 key created with mode ExDSA
  *           signs via SHA256WithECDSA and the DER signature verifies locally

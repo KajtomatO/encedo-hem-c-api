@@ -50,10 +50,13 @@ typedef struct {
  * login → config (eid + the user/email/hostname the QR payload carries) →
  * broker session (POST with eid — the broker binds registrations to an
  * eid-bound session, REQ-AUTH-008 finding) → device ext/init → broker
- * register/init → render the QR payload `{link, hash, user, email,
- * hostname}` as UTF-8 half-block cells (or print it, --no-qr) → poll
- * register/check until the phone answers → device ext/validate → broker
- * register/finalise → report the new kid.
+ * register/init → the SDK's ehem_ext_qr_payload() (`{link, hash, user,
+ * email, hostname}`, hash = base64(SHA-256(request)) — the phone checks it
+ * against the request the link serves) rendered as UTF-8 half-block cells
+ * — a Windows console receives the same rows as UTF-16 through the console
+ * API, its OEM code page never sees them — (or printed, --no-qr) → poll
+ * register/check until the phone answers →
+ * device ext/validate → broker register/finalise → report the new kid.
  */
 int hem_ext_pair_run(ehem_ctx *ctx, const hem_ext_pair_opts *o);
 
@@ -89,9 +92,13 @@ int hem_ext_login_run(ehem_ctx *ctx, const hem_ext_login_opts *o);
 
 /*
  * Render `text` as a QR code in UTF-8 half-block cells (two module rows per
- * terminal line, 4-module quiet zone). Returns 0 on success, -1 when the
- * text does not fit a QR code (caller falls back to printing the payload).
- * Exposed for the unit test.
+ * terminal line, 4-module quiet zone). When `out` is a Windows console the
+ * rows are written as UTF-16 through WriteConsoleW instead — the console's
+ * OEM code page turned the UTF-8 bytes into mojibake (v1.2.0-rc3 finding);
+ * a file or pipe gets the UTF-8 bytes on every platform. Returns 0 on
+ * success, -1 when the text does not fit a QR code or the console write
+ * fails (caller falls back to printing the payload). Exposed for the unit
+ * test (which exercises the byte path).
  */
 int hem_ext_qr_render(const char *text, FILE *out);
 

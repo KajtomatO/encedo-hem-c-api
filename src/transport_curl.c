@@ -31,6 +31,43 @@ typedef struct curl_state {
     char   detail[CURL_ERROR_SIZE];/* last_detail() view (errbuf or strerror) */
 } curl_state;
 
+/* -------------------------------------------------------------------------- */
+/* Expired-certificate classification (REQ-NET-005) — pure, unit-tested       */
+/* -------------------------------------------------------------------------- */
+
+/* implements: REQ-NET-005 — the trigger classifies ONLY an expired peer
+ * certificate. Primary signal: the TLS backend's verify result —
+ * OpenSSL/GnuTLS X509_V_ERR_CERT_HAS_EXPIRED == 10; wolfSSL (the release
+ * build's backend, REQ-BUILD-005) ASN_AFTER_DATE_E == -151. NOT -150: that is
+ * ASN_BEFORE_DATE_E, certificate not yet valid, in wolfSSL 5.6.x and 5.7.x
+ * alike (as OpenSSL's 9 is) — a clock or issuance problem a check-in cannot
+ * cure (STEP-M12-030 removed it). Fallback: the error text — OpenSSL says
+ * "certificate has expired", wolfSSL "ASN date error, current date after"
+ * (not-yet-valid reads "... current date before"). The release pin (libcurl
+ * 8.10.1 + wolfSSL 5.7.2) reports verify result 0 and "server verification
+ * failed: certificate has expired." / "... certificate not valid yet."
+ * (measured 2026-10-13), so there the text decides. Any other verification
+ * failure (self-signed, wrong host, unknown CA) stays unclassified. */
+int ehem_curl_tls_expired(CURLcode code, long verify_result, const char *detail)
+{
+    if (code != CURLE_PEER_FAILED_VERIFICATION && code != CURLE_SSL_CONNECT_ERROR) {
+        return 0;
+    }
+    if (verify_result == 10 || verify_result == -151) {
+        return 1;
+    }
+    if (verify_result == 9 || verify_result == -150) {
+        return 0;               /* not yet valid: never "expired", whatever the text */
+    }
+    if (detail != NULL &&
+        (strstr(detail, "expired") != NULL ||
+         strstr(detail, "date error, current date after") != NULL ||
+         strstr(detail, "ASN_AFTER_DATE") != NULL)) {
+        return 1;
+    }
+    return 0;
+}
+
 /* Growable byte buffer for the response body write callback. */
 typedef struct body_buf {
     uint8_t *data;
@@ -338,24 +375,10 @@ static ehem_rc curl_send(void *state, const ehem_request *req, ehem_response *re
         free(body.data);
         msg = (st->errbuf[0] != '\0') ? st->errbuf : curl_easy_strerror(cc);
         snprintf(st->detail, sizeof st->detail, "%s", msg);
-        /* Classify the one recoverable verification failure (REQ-NET-005):
-         * peer certificate EXPIRED. Primary signal is the TLS backend's verify
-         * result via CURLINFO_SSL_VERIFYRESULT — OpenSSL/GnuTLS
-         * X509_V_ERR_CERT_HAS_EXPIRED == 10; wolfSSL (the release build's
-         * backend, REQ-BUILD-005) ASN_AFTER_DATE_E == -151 (5.6.x/5.7.x; it was
-         * -150 in older releases) — fallback is the error text: OpenSSL says
-         * "certificate has expired", wolfSSL "ASN date error, current date
-         * after". Any other verification failure (self-signed, wrong host)
-         * stays unclassified. */
         if (cc == CURLE_PEER_FAILED_VERIFICATION || cc == CURLE_SSL_CONNECT_ERROR) {
             long vr = 0;
             curl_easy_getinfo(h, CURLINFO_SSL_VERIFYRESULT, &vr);
-            if (vr == 10 || vr == -151 || vr == -150 ||
-                strstr(msg, "expired") != NULL ||
-                strstr(msg, "date error, current date after") != NULL ||
-                strstr(msg, "ASN_AFTER_DATE") != NULL) {
-                st->tls_expired = true;
-            }
+            st->tls_expired = ehem_curl_tls_expired(cc, vr, msg) != 0;
         }
         return ehem_curl_map_error(cc, connect_time);
     }
@@ -486,4 +509,22 @@ ehem_rc ehem_transport_backend_global_init(void)
 void ehem_transport_backend_global_cleanup(void)
 {
     curl_global_cleanup();
+}
+
+/* implements: REQ-API-011 — LIBCURL_VERSION is the header this file was built
+ * with; curl_version_info() is the loaded library's report (no
+ * curl_global_init needed). */
+void ehem_transport_backend_describe(ehem_build_info *out)
+{
+    const curl_version_info_data *vi = curl_version_info(CURLVERSION_NOW);
+
+    out->transport_backend          = "libcurl";
+    out->transport_version_compiled = LIBCURL_VERSION;
+    out->transport_version_loaded   = (vi != NULL && vi->version != NULL)
+                                      ? vi->version : "unknown";
+#ifdef EHEM_TRANSPORT_LINK_STATIC
+    out->transport_link             = "static";
+#else
+    out->transport_link             = "dynamic";
+#endif
 }

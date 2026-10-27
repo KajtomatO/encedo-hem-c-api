@@ -3,8 +3,8 @@ id: REQ-API-003
 title: Single error enum distinguishing consumer-required conditions
 status: verified
 priority: must
-revision: 1
-source: ARCHITECTURE.md §4; HEM-SDK-8 and HEM-ERR-1 (requirements/start_point/encedo-pkcs11/REQUIREMENTS-hem.md)
+revision: 2
+source: ARCHITECTURE.md §4; HEM-SDK-8 and HEM-ERR-1 (requirements/start_point/encedo-pkcs11/REQUIREMENTS-hem.md); rev 2 — note 2026-10-12 (M12 decomposition, §6.2 approved in chat; no status change): the list is a minimum and `ehem_rc` is append-only (REQ-API-008) — M12 appends `EHEM_ERR_BACKEND_MISMATCH` (REQ-API-010)
 depends_on: []
 supersedes: null
 superseded_by: null
@@ -21,6 +21,12 @@ enum, `ehem_rc`, whose values distinguish at minimum: `EHEM_OK`,
 `EHEM_ERR_CONFIRM_TIMEOUT`, `EHEM_ERR_NOT_FOUND`, `EHEM_ERR_DEVICE`,
 `EHEM_ERR_PROTOCOL`, `EHEM_ERR_ARG`, `EHEM_ERR_NOMEM`,
 `EHEM_ERR_UNSUPPORTED`.
+
+*(Rev 2, 2026-10-12: "at minimum" — the enum grows append-only under the
+1.0 ABI rules (REQ-API-008); 1.2.0 appends `EHEM_ERR_BACKEND_MISMATCH`
+(REQ-API-010, "wrong crypto library installed" — a distinguishable
+condition in the HEM-SDK-8 sense). The obligation is unchanged; the
+enum-iterating `ehem_rc_str()` test covers every appended value.)*
 
 **Rationale:** The PKCS#11 backend must implement its HEM-ERR-1 mapping
 table without guessing (HEM-SDK-8): user rejection vs. confirm timeout vs.

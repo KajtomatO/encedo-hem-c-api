@@ -213,7 +213,13 @@ time.
    first (§7) and get them approved — steps implement requirements, not
    improvisation (chore steps per §5.1 excepted).
 3. Propose the step list as a table (id, title, implements, depends_on,
-   rough size) in chat. **Stop.**
+   rough size) in chat. The list ends with the milestone's **gate** step
+   (a chore, `implements: []`), whose Definition of done always includes
+   bringing the user-facing docs up to the milestone: `README.md` (Status
+   block with version and date, new commands and APIs, the Documentation
+   list, the Layout), `docs/COVERAGE.md` (dispositions of the endpoints
+   the milestone binds) and `KNOWN-ISSUES.md` — the checklist in
+   [docs/RELEASING.md](docs/RELEASING.md) "Final release". **Stop.**
 4. On human approval: create the step files in `todo/` from the template,
    one commit (`[Mx] decomposition`).
 5. On the *first* decomposition also create one coarse placeholder step per

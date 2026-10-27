@@ -19,7 +19,8 @@
 #include "vendor/qrcodegen/qrcodegen.h"
 
 #ifdef _WIN32
-#  include <windows.h>            /* Sleep() — MinGW has no POSIX nanosleep */
+#  include <windows.h>            /* Sleep() — MinGW has no POSIX nanosleep; WriteConsoleW */
+#  include <io.h>                 /* _fileno, _get_osfhandle */
 #else
 #  include <time.h>               /* nanosleep / struct timespec */
 #endif
@@ -44,93 +45,6 @@ static void sleep_ms(unsigned ms)
 static FILE *or_stdout(FILE *f) { return f != NULL ? f : stdout; }
 static FILE *or_stderr(FILE *f) { return f != NULL ? f : stderr; }
 
-/* Append `s` JSON-escaped to a malloc'd buffer via fputs-style growth. The
- * QR payload embeds device-configured strings (hostname, user, email) that
- * the tool must not let break the JSON. */
-static int json_append_escaped(char **buf, size_t *len, size_t *cap,
-                               const char *s)
-{
-    for (; *s != '\0'; s++) {
-        char piece[8];
-        size_t n;
-        unsigned char c = (unsigned char)*s;
-        if (c == '"' || c == '\\') {
-            piece[0] = '\\'; piece[1] = (char)c; n = 2;
-        } else if (c < 0x20) {
-            n = (size_t)snprintf(piece, sizeof piece, "\\u%04x", c);
-        } else {
-            piece[0] = (char)c; n = 1;
-        }
-        if (*len + n + 1 > *cap) {
-            size_t ncap = (*cap == 0) ? 256 : *cap * 2;
-            char *nb;
-            while (*len + n + 1 > ncap) {
-                ncap *= 2;
-            }
-            nb = realloc(*buf, ncap);
-            if (nb == NULL) {
-                return -1;
-            }
-            *buf = nb;
-            *cap = ncap;
-        }
-        memcpy(*buf + *len, piece, n);
-        *len += n;
-        (*buf)[*len] = '\0';
-    }
-    return 0;
-}
-
-static int json_append_raw(char **buf, size_t *len, size_t *cap,
-                           const char *s)
-{
-    size_t n = strlen(s);
-    if (*len + n + 1 > *cap) {
-        size_t ncap = (*cap == 0) ? 256 : *cap * 2;
-        char *nb;
-        while (*len + n + 1 > ncap) {
-            ncap *= 2;
-        }
-        nb = realloc(*buf, ncap);
-        if (nb == NULL) {
-            return -1;
-        }
-        *buf = nb;
-        *cap = ncap;
-    }
-    memcpy(*buf + *len, s, n);
-    *len += n;
-    (*buf)[*len] = '\0';
-    return 0;
-}
-
-/* The payload the phone scans (hem-api-tester test_5.php:90 shape; `hash`
- * is literally "not_implemented_yet" until upstream defines it). Malloc'd. */
-static char *compose_qr_payload(const char *link, const char *user,
-                                const char *email, const char *hostname)
-{
-    char *buf = NULL;
-    size_t len = 0, cap = 0;
-    int rc = 0;
-
-    rc |= json_append_raw(&buf, &len, &cap, "{\"link\":\"");
-    rc |= json_append_escaped(&buf, &len, &cap, link);
-    rc |= json_append_raw(&buf, &len, &cap,
-                          "\",\"hash\":\"not_implemented_yet\",\"user\":\"");
-    rc |= json_append_escaped(&buf, &len, &cap, user != NULL ? user : "");
-    rc |= json_append_raw(&buf, &len, &cap, "\",\"email\":\"");
-    rc |= json_append_escaped(&buf, &len, &cap, email != NULL ? email : "");
-    rc |= json_append_raw(&buf, &len, &cap, "\",\"hostname\":\"");
-    rc |= json_append_escaped(&buf, &len, &cap,
-                              hostname != NULL ? hostname : "");
-    rc |= json_append_raw(&buf, &len, &cap, "\"}");
-    if (rc != 0) {
-        free(buf);
-        return NULL;
-    }
-    return buf;
-}
-
 /* -------------------------------------------------------------------------- */
 /* terminal QR                                                                */
 /* -------------------------------------------------------------------------- */
@@ -142,12 +56,53 @@ static char *compose_qr_payload(const char *link, const char *user,
  * quiet zone comes out bright, which is what the scanner needs. On a
  * light-background terminal, scan apps still cope (QR orientation/polarity
  * detection); `--no-qr` prints the payload for anything exotic.
+ *
+ * Windows: a console decodes the bytes a program writes in its OUTPUT code
+ * page — OEM 437/852/…, never UTF-8 by default — so the three-byte
+ * half-blocks came out as three mojibake letters each ("a mess of chars":
+ * the user's v1.2.0-rc3 Windows test, 2026-10-20). When `out` IS a console
+ * the rows go out as UTF-16 through WriteConsoleW, which no code page
+ * touches and which the legacy raster fonts render too (the three blocks
+ * exist in every OEM font). Redirected output — a file, a pipe, the unit
+ * test's tmpfile — stays the UTF-8 bytes, like `--no-qr`.
  */
+
+/* Cell index: bit 1 = top module dark, bit 0 = bottom module dark. Inverted
+ * rendering — a LIGHT half is the lit one. */
+static const char *const k_cell_utf8[4] = {
+    "\xe2\x96\x88",   /* 0: both light  → █ */
+    "\xe2\x96\x80",   /* 1: bottom dark → ▀ */
+    "\xe2\x96\x84",   /* 2: top dark    → ▄ */
+    " "               /* 3: both dark   → background */
+};
+
+#ifdef _WIN32
+static const wchar_t k_cell_utf16[4] = { 0x2588, 0x2580, 0x2584, L' ' };
+
+/* The console behind `out`, or NULL when it is a file or a pipe. */
+static HANDLE console_of(FILE *out)
+{
+    intptr_t fh = _get_osfhandle(_fileno(out));
+    HANDLE h = (HANDLE)fh;
+    DWORD mode;
+
+    if (fh == -1 || h == NULL || !GetConsoleMode(h, &mode)) {
+        return NULL;
+    }
+    return h;
+}
+#endif
+
 int hem_ext_qr_render(const char *text, FILE *out)
 {
     uint8_t qr[qrcodegen_BUFFER_LEN_MAX];
     uint8_t tmp[qrcodegen_BUFFER_LEN_MAX];
     int size, x, y;
+#ifdef _WIN32
+    HANDLE con;
+    wchar_t wline[96];            /* ≤ 80 cells + "\r\n" */
+    DWORD n, written;
+#endif
 
     if (text == NULL || out == NULL) {
         return -1;
@@ -165,20 +120,42 @@ int hem_ext_qr_render(const char *text, FILE *out)
         return -1;
     }
 
+#ifdef _WIN32
+    con = console_of(out);
+    if (con != NULL) {
+        fflush(out);              /* the stdio text above lands first */
+    }
+#endif
+
     /* Rows -4 .. size+3 (quiet zone), two per line. Module reads outside
      * the symbol return false (light) from qrcodegen_getModule. */
     for (y = -4; y < size + 4; y += 2) {
+#ifdef _WIN32
+        n = 0;
+#endif
         for (x = -4; x < size + 4; x++) {
             bool top    = qrcodegen_getModule(qr, x, y);
             bool bottom = (y + 1 < size + 4)
                               ? qrcodegen_getModule(qr, x, y + 1) : false;
-            /* Inverted: light module → lit block half. */
-            const char *glyph = (!top && !bottom) ? "\xe2\x96\x88"   /* █ */
-                              : (!top &&  bottom) ? "\xe2\x96\x80"   /* ▀ */
-                              : ( top && !bottom) ? "\xe2\x96\x84"   /* ▄ */
-                              : " ";
-            fputs(glyph, out);
+            int cell = (top ? 2 : 0) | (bottom ? 1 : 0);
+#ifdef _WIN32
+            if (con != NULL) {
+                wline[n++] = k_cell_utf16[cell];
+                continue;
+            }
+#endif
+            fputs(k_cell_utf8[cell], out);
         }
+#ifdef _WIN32
+        if (con != NULL) {
+            wline[n++] = L'\r';
+            wline[n++] = L'\n';
+            if (!WriteConsoleW(con, wline, n, &written, NULL)) {
+                return -1;        /* the caller prints the payload instead */
+            }
+            continue;
+        }
+#endif
         fputc('\n', out);
     }
     return 0;
@@ -264,10 +241,13 @@ int hem_ext_pair_run(ehem_ctx *ctx, const hem_ext_pair_opts *o)
         goto done;
     }
 
-    payload = compose_qr_payload(reg->link, cfg->user, cfg->email,
-                                 cfg->hostname);
-    if (payload == NULL) {
-        fprintf(err, "error: out of memory\n");
+    /* The payload the phone scans is the SDK's — `hash` is base64(SHA-256(
+     * request)), which the Encedo Auth app checks against the request the
+     * link serves (REQ-AUTH-008). */
+    rc = ehem_ext_qr_payload(reg->link, init->request, cfg->user, cfg->email,
+                             cfg->hostname, &payload);
+    if (rc != EHEM_OK) {
+        fprintf(err, "error: QR payload: %s\n", ehem_rc_str(rc));
         goto done;
     }
 
@@ -332,7 +312,7 @@ done:
     ehem_notify_register_info_free(reg);
     ehem_ext_init_free(init);
     ehem_notify_string_free(epk);
-    free(payload);
+    ehem_notify_string_free(payload);
     ehem_system_config_free(cfg);
     return ret;
 }

@@ -3,7 +3,7 @@ id: REQ-BUILD-004
 title: Developer assist tool `./dev` — build, test, and environment runner
 status: implemented
 priority: should
-revision: 1
+revision: 3   # 2026-10-13 (STEP-M12-080): note — `--openssl` on build / test / ci (REQ-BUILD-007); rev 2 (STEP-M12-060): `./dev build` takes the REQ-BUILD-006 switches. Additions the other REQs require; every obligation here unchanged, status kept
 source: user decision 2026-07-16 (commissioned with usage spec; name/runtime/extras/compiler-default chosen via Q&A same day; approved 2026-07-16)
 depends_on: ["REQ-BUILD-001", "REQ-TEST-002"]
 supersedes: null
@@ -35,6 +35,21 @@ or CMake (both keep working without it).
 | `./dev install-dependencies [--yes]` | install build deps; detects apt (Linux) / pacman (MSYS2); prints the package list and asks before installing |
 | `./dev completions` | print the bash completion script (`source <(./dev completions)`) |
 | `./dev help` / no args | usage |
+
+*Extension (rev 2, 2026-10-13, STEP-M12-060 — required by REQ-BUILD-006):
+`./dev build` also takes `--shared-only`, `--static-only`, `--tool-link
+static|shared` and `--deps default|static|shared`, mapped to the CMake
+switches `EHEM_BUILD_STATIC=OFF`, `EHEM_BUILD_SHARED=OFF`, `EHEM_TOOL_LINK`,
+`EHEM_DEPS_LINK`; a non-default set builds in its own directory
+(`build[-clang]-<tags>`, e.g. `build-static-only`) so the default
+directories stay default. Usage text and completion cover them;
+shellcheck clean.*
+
+*Extension (rev 3, 2026-10-13, STEP-M12-080 — required by REQ-BUILD-007):
+`--openssl` selects `EHEM_CRYPTO_BACKEND=openssl` for `./dev build`, `./dev
+test <suite>` and `./dev ci` (both compilers), each in its own `-openssl`
+directory (`build-openssl`, `build-clang-openssl`, `build-asan-openssl`).
+Usage text and completion cover it; shellcheck clean.*
 
 **Environment fallback:** commands that need device credentials
 (`test it`, `test all`, `tool`) use the `EHEM_*` variables when already

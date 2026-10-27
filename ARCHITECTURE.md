@@ -124,9 +124,12 @@ the context.
   decision 2026-10-09; licensing — wolfSSL is GPLv2-or-later/commercial):
   published hem-tool and library packages link wolfSSL dynamically, and the
   shared wolfSSL ships as a separate asset with its license text, its build
-  configuration and the corresponding source; static packages, when they
-  come, use a different library (M12). libcurl (permissive curl license)
-  may be compiled in.
+  configuration and the corresponding source; static packages use a
+  different library — **OpenSSL 3.x** (user decision 2026-10-12, M12;
+  Apache-2.0; release pin on the 3.5 LTS line — 3.0 LTS reached end of
+  life 2026-09-07), selected by a build-time crypto backend switch with
+  wolfSSL the default. libcurl (permissive curl license) may be compiled
+  in.
 - **PBKDF2-HMAC-SHA256 as the login KDF, per Encedo Manager** (user
   decision 2026-07-15: Encedo Manager is the authoritative auth-flow
   reference; corrected 2026-10-06) — 600 000 iterations, 32-byte output,
@@ -240,7 +243,9 @@ graph TD
   callers serialize. Internals keep all mutable state inside the context
   struct so a per-context lock can be added without redesign.
 - **Memory:** output structs are heap-allocated by the library and
-  released with matching `ehem_*_free()` functions; byte buffers are
+  released with matching `ehem_*_free()` functions (the one exception,
+  1.2's `ehem_build_info`, is a fixed-size caller struct filled with
+  static strings — REQ-API-011); byte buffers are
   `(uint8_t *ptr, size_t len)` pairs; strings are NUL-terminated UTF-8.
   Secret material (passphrase-derived keys, shared secrets, tokens) is
   zeroized on free.
@@ -371,6 +376,11 @@ sequenceDiagram
   REQ-TOOL-016; `ext pair` renders the pairing QR **in the terminal**
   via a vendored single-file MIT QR encoder (Nayuki qrcodegen, tool-only
   linkage, cJSON-style vendoring) rather than any web service — the
+  payload comes from the SDK's `ehem_ext_qr_payload` (STEP-M12-137:
+  `hash` = base64(SHA-256(request)), the phone's check), and a Windows
+  console receives the rows as UTF-16 through the console API (also
+  STEP-M12-137 — the console's OEM code page made mojibake of the UTF-8
+  half-blocks, the rc3 finding; a file or pipe gets the bytes) — the
   tester's quickchart.io approach leaks user/email/hostname to a third
   party and is rejected; unpairing is plain `keys rm`, where real
   phones' `(iPhone)`/`(Android)` labels already land in the
@@ -390,9 +400,14 @@ sequenceDiagram
   attempt, no polling). The top-level help gains a **"manual recovery"**
   section listing `cert-install` and `tls-recover` below the auth-grouped
   listing, in which `recovery` itself stays.
-- Connection parameters via flags or env (`EHEM_URL`, `EHEM_PASSPHRASE` —
-  the passphrase currently accepted via `--passphrase`/env; a stdin prompt
-  fallback so it never need appear on the command line is a later refinement).
+- Connection parameters via flags or env (`EHEM_URL`, `EHEM_PASSPHRASE`).
+  `--passphrase` is **deprecated** since 1.2.0 (user decision 2026-10-19,
+  REQ-TOOL-020 rev 2): a passphrase on the command line stays in the shell
+  history and shows in the process list, so hem-tool warns once on stderr
+  and will drop the flag in a later release; a safer entry (a session,
+  `hem-tool login`) is a BACKLOG item. `init-wizard` offers `my.ence.do` as
+  the hostname default, the host the default URL points at (REQ-TOOL-028
+  rev 3, user decision 2026-10-19).
 - **Protected-key policy** (mirrors Python `wipe_keys.py`): keys labeled
   exactly `TLS PrivateKey` / `TLS Certificate`, or containing `(Android)`
   / `(iPhone)`, are never removed by bulk operations; removing one
@@ -437,7 +452,13 @@ src/                   library sources
   proto_*.c            protocol bindings per API group
   transport.c          vtable + helpers
   transport_curl.c     libcurl implementation
-  crypto_shim.c        wolfCrypt wrappers
+  crypto_shim.h        crypto backend contract (backend-free)
+  crypto_shim_wolfssl.c / crypto_shim_openssl.c
+                       the two backends — EHEM_CRYPTO_BACKEND compiles
+                       one per configure (REQ-BUILD-007)
+  crypto_shim_common.{h,c}
+                       what both share (scrub, serial / date formatting,
+                       the compatibility-check test seam)
   jwt.c                eJWT encode/decode
   vendor/cjson/        vendored cJSON
   tools/hem-tool/      CLI (inside src/ so implements-tags are greppable)
@@ -554,6 +575,11 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   `ehem_login_mobile` + `ehem_options.confirm_timeout_ms` routing the
   whole thing through the existing `ensure_token` chokepoint; and
   `hem-tool ext pair|list|login` with terminal QR (vendored qrcodegen).
+  The QR payload itself is the SDK's since STEP-M12-137 (user decision
+  2026-10-20): `ehem_ext_qr_payload` renders the Manager's
+  `{link, hash, user, email, hostname}` with `hash` =
+  base64(SHA-256(request)) — the new Encedo Auth app checks it against
+  the request the pairing link serves and refused 1.1.0's placeholder.
   Testing splits three ways (user decisions 2026-07-22): a
   **simulated authenticator** in test support (shim AES-128-CBC +
   scheme-A codec) covers the entire device surface unattended with zero
@@ -696,81 +722,347 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   release hem-tool — fix in M12; a wipe does not always remove the TLS
   material). MFW re-checked: firmware still v1.2.2 — unchanged. Next:
   merge to `main` and the annotated `v1.1.0` tag (docs/RELEASING.md).
+  **Released 2026-10-10:** `v1.1.0` on `main` 78ca2fb (run 38063406319,
+  six assets). The gate missed the user-facing docs — README.md still
+  said "1.0 track" and docs/COVERAGE.md still listed `auth/init` as
+  DEFERRED-M10; both were brought up to 1.1.0 after the tag, and every
+  gate now carries that docs check (REQUIREMENTS-MANAGEMENT.md §5.3,
+  docs/RELEASING.md).
 - **M11 — retired (2026-10-07)**: created 2026-08-07 for
   `system/config/provisioning` and the `diag/*` family; both are parked
   in [BACKLOG.md](BACKLOG.md) together with the reserved design
   constraint (diag support must not enter the production SDK). The
   number is not reused.
-- **M12 — build variants & multi-package releases** *(early draft, user
-  request 2026-10-09; NOT decomposed — its open questions are deferred by
-  the user; placeholder STEP-M12-000)*. Today both SDK variants are always
-  built, hem-tool always links the static SDK, and third-party
-  dependencies link however pkg-config / FindCURL resolve them — there is
-  no switch:
-  - **Link-mode switches** — CMake options choosing which SDK variant(s)
-    to build, whether hem-tool links the SDK statically or dynamically,
-    and whether third-party dependencies (libcurl, the crypto/TLS
-    library) are linked statically or dynamically; candidate names
-    `EHEM_BUILD_SHARED` / `EHEM_BUILD_STATIC`, `EHEM_TOOL_LINK`,
-    `EHEM_DEPS_LINK`, settled at decomposition.
-  - **Crypto/TLS backend switch** — `EHEM_CRYPTO_BACKEND=wolfssl|<tbd>`;
-    wolfSSL stays the default; the alternative library is a pending user
-    decision; static package variants use it, never wolfSSL (§1).
-    Touchpoints: `src/crypto_shim.c` (the only wolfCrypt includer),
-    `ehem_global_init` (`wolfCrypt_Init`), the `transport_curl.c`
-    expired-cert texts, the libcurl TLS backend in
-    `scripts/release/build-deps.sh`, the `public_headers_dep_free` gate.
-  - **Static-wolfSSL warning** — configuring a build whose wolfSSL
-    resolves to a static archive emits a CMake `WARNING` naming the
-    licensing consequence (§12 risk 1); the release scripts refuse to
-    package such a binary (the M10 link-mode assertion stays).
-  - **Multi-variant GitHub release** — {SDK library package, hem-tool} ×
-    {dynamic, static} × {linux-x86_64, windows-x86_64, …}: library
-    packages = headers + `libencedo-hem.{so,a}` / `.dll` + import lib +
-    the CMake package config (fix `cmake/encedo-hem-config.cmake.in`,
-    which lacks the wolfSSL `find_dependency` the static target's link
-    interface needs; decide the pkg-config `.pc` file promised in §1 but
-    declared not shipped in REQ-API-008) + notices; dynamic variants reuse
-    the M10 wolfSSL companion asset; static variants ship only once the
-    alternative backend exists; plus a **full-dynamic hem-tool** variant —
-    libcurl dynamic as well (user note 2026-10-09; the M10 release keeps
-    libcurl static).
-  - **wolfSSL library check + self-test** *(user decision 2026-10-10:
-    M12, not M10)* — at `ehem_global_init` the SDK refuses a wolfSSL
-    other than the one it was built against: a version check (runtime
-    vs compile-time) plus a known-answer self-test of the wolfCrypt
-    structs the SDK allocates itself (run inside guard-banded buffers),
-    which also catches a same-version library built with other options.
-    Found 2026-10-10: the rc4 Linux hem-tool, run without the companion
-    `libwolfssl.so.42` beside it, loaded the host's Ubuntu wolfSSL 5.6.6
-    (same soname) and aborted with "stack smashing detected" (Hmac 784
-    bytes in the 5.7.2 release build vs 896 in 5.6.6; DecodedCert 1528
-    vs 2576). Until then only the companion library — or one with the
-    same soname AND build configuration, as the archive README says — is
-    supported.
-  - **Key types in hem-tool** *(user request 2026-10-10)* —
-    `hem-tool keys gen -h` lists every key type the tool supports (today
-    it shows three examples and says "the device validates the type"),
-    and a separate command lists the types and explains each one: what
-    it can be used for (signing, ECDH, encryption, ...) and its defaults
-    such as the NIST-P/K `--mode`.
-  - **NOTE — "initialisation creator"** *(user decision 2026-10-10,
-    moved into M12 the same day)*: hand-hold the user through the device
-    initialisation process. A note only — not designed yet: no scope,
-    requirements or steps until the user starts it.
-  - *Open questions (deferred):* the alternative library; whether any
-    static variant ships before that backend lands; the `.pc` file; macOS
-    and MSVC; the asset naming scheme; whether `ci.yml` or `release.yml`
-    carries the variant matrix. **Gate (draft):** every variant built in
-    CI with its link mode asserted and the unit suite green; attended
-    `hem-tool status` per variant.
+- **M12 — build variants, multi-package releases & hem-tool UX**
+  *(early draft 2026-10-09; planned 2026-10-12; **decomposed 2026-10-12**
+  — REQ-API-010/011, REQ-BUILD-006/007/008/009, REQ-TOOL-024/025/026/027/028
+  drafted and **approved the same day**; STEP-M12-010 … 140 created,
+  placeholder STEP-M12-000 cancelled. **STEP-M12-010 done 2026-10-12** —
+  REQ-API-010 verified: the backend check is live on `development`,
+  `EHEM_ERR_BACKEND_MISMATCH` exists. **STEP-M12-020 done 2026-10-13** —
+  REQ-API-011, REQ-TOOL-024/025 verified: `ehem_build_info_get`, hem-tool
+  initialises first (refusal → one message, exit 12) and has `--version`.
+  **STEP-M12-030 done 2026-10-13** — REQ-NET-005 verified again (`-150`
+  dropped; the release check also proves not-yet-valid ≠ expired).
+  **STEP-M12-040 done 2026-10-13** — REQ-TOOL-027 verified: `keys types`
+  and the `keys gen -h` type list from one table. **STEP-M12-050 done
+  2026-10-13** — REQ-TOOL-028 verified (attended run at the gate):
+  `init-wizard` + the no-echo prompt helper; only `--url` pre-fills it.
+  **STEP-M12-060 done 2026-10-13** — REQ-BUILD-006: the four build
+  switches and the static-wolfSSL warning; ci.yml's switch legs green on
+  Linux and Windows (run 38403218107). **STEP-M12-100 done 2026-10-13** —
+  REQ-TOOL-026: the Windows release hem-tool delay-loads libwolfssl.dll and
+  reports a missing DLL itself (exit 12), proven by the release job's
+  no-DLL smoke on the UCRT64 runner (run 38407235207); the attended check
+  stays the gate's. The first runs found two latent compile failures
+  outside the newest steps — MSYS2's GCC 16 (STEP-M12-010 code) and the
+  release job's GCC 11 + cmocka 1.1.5 (a STEP-M12-050 test) — both fixed.
+  **STEP-M12-080 done 2026-10-13** — REQ-BUILD-007's OpenSSL 3 backend:
+  `EHEM_CRYPTO_BACKEND=openssl`, the shim split per backend, the unit suite
+  and ASan green on OpenSSL locally (CI legs: STEP-M12-090).
+  **STEP-M12-070 done 2026-10-14** — REQ-BUILD-008 on wolfSSL: the package
+  config resolves the crypto dependency, `encedo-hem.pc` is relocatable,
+  and the consumer gate (find_package + pkg-config, shared + static) is
+  green on every CI leg and in both release jobs (runs 38481008774,
+  38481505956); the OpenSSL variants: STEP-M12-090.
+  **STEP-M12-090 done 2026-10-14** — REQ-BUILD-007 complete: the live tests
+  reach device crypto through `tests/support/crypto_ref` (no test includes
+  a crypto library header), the header gate covers OpenSSL, `./dev test it`
+  is 23/23 on OpenSSL, and ci.yml's OpenSSL legs are green on Linux and
+  Windows (run 38482938701), the consumer gate included.
+  **STEP-M12-110 done 2026-10-15** — REQ-BUILD-009's wolfSSL library
+  package: `encedo-hem-<label>-<os>-x86_64` is the shared library only (user
+  decision 2026-10-14: no static library ships with wolfSSL). Both release
+  jobs build and package it and run the consumer gate against it plus the
+  companion asset (run 38719457329). `encedo-hem.pc` names
+  `Requires.private` only with the static library (REQ-BUILD-008 rev 5,
+  re-verified on every CI leg). `build-deps.sh` builds the all-static
+  `deps-openssl` prefix (OpenSSL 3.5.9 + libcurl) on both platforms for
+  STEP-M12-120. The first dispatch found that the Windows wolfSSL `.def`
+  had never been written by the link: MSYS2 left its path unconverted, and
+  a `gendef` fallback hid that until MSYS2 dropped `gendef`. Fixed.
+  **STEP-M12-120 done 2026-10-16** — the `-static` variants: both release
+  jobs build `hem-tool-<label>-<os>-x86_64-static` (OpenSSL 3.5.9 +
+  libcurl linked in; Linux needs glibc only, Windows system DLLs only) and
+  `encedo-hem-<label>-<os>-x86_64-static` (the static SDK + `libcurl.a`,
+  `libssl.a`, `libcrypto.a`), assert no wolfSSL in either, run the unit
+  suite, the classifier (Linux) and the static consumer gate (run
+  38894733780). The Windows `-static` OpenSSL reads no configuration
+  (user decision 2026-10-15, REQ-BUILD-009 rev 4); its compiled-in
+  directories lie under the admin-only `C:\Program Files\Common
+  Files\SSL`, the Linux ones are root-owned. A refused `-static` hem-tool
+  names the OpenSSL configuration as the cause (REQ-TOOL-024 rev 5). A
+  release now carries 11 archives + `SHA256SUMS`.
+  **STEP-M12-130 done 2026-10-19** — 1.2.0 everywhere observable
+  (`project(VERSION 1.2.0)`, `ehem_version()`, `libencedo-hem.so.1.2.0`
+  with SONAME 1, the package version file, `encedo-hem.pc`) and the
+  user-facing docs describe 1.2.0 (README Status block, API-GUIDE "Crypto
+  backend", COVERAGE re-checked, KNOWN-ISSUES' foreign-libwolfssl entry
+  FIXED in 1.2.0, RELEASING, tests/README). CI 38903704626 (10 legs) and
+  the release dispatch 38903755451 green on 5954950; the user's annotated
+  `v1.2.0-rc1` (run 38904497654) published the pre-release with 12 assets,
+  and the user tested both hem-tool variants on Linux and Windows (the
+  dynamic one refuses to start without wolfSSL and runs `status` with the
+  companion library; the one-file one ran `init-wizard`, a key generation,
+  a signature, `wipe-device` and `keys list` on the Manager-initialised
+  unit). The rc1 test brought three fixes for M12 before 1.2.0 (user
+  decision 2026-10-19): the one-file hem-tool becomes the plain asset name
+  and the wolfSSL builds get `-shared` (the SDK packages follow),
+  `init-wizard` defaults `hostname` to `my.ence.do`, and `--passphrase` is
+  deprecated — STEP-M12-135, then `v1.2.0-rc2` replaces rc1.
+  **STEP-M12-135 done 2026-10-19** — the rc1 fixes: the published names
+  flipped (`package.sh`, `package-static.sh`, `package-lib.sh`,
+  `release.yml`'s texts, the archive READMEs, README "Download",
+  RELEASING; REQ-BUILD-009 rev 7–8, REQ-BUILD-005 rev 5–6), the refusal
+  remedy names the one-file asset from `ehem_version()` (REQ-TOOL-024 rev
+  7–8), `init-wizard` offers `hostname [my.ence.do]` from the definition
+  behind the default URL (REQ-TOOL-028 rev 3–4), `--passphrase` reads
+  DEPRECATED in the top help page — now exactly its 45-line budget — and
+  warns once on stderr (REQ-TOOL-020 rev 2–3); BACKLOG items 6–11 hold
+  the user's notes unanalysed. CI 39320511927 green on 8dd915f; the
+  user's annotated `v1.2.0-rc2` (run 39320626797, cold caches again —
+  Windows 12:39) published pre-release 417736562 with the 12 assets under
+  the final names. The five §6.2 REQs are back to implemented / verified.
+  **STEP-M12-137 started 2026-10-20** — the rc2 finding: the new Encedo
+  Auth app checks the pairing QR's `hash` (base64(SHA-256(request)) — the
+  Manager's `pairdeviceNow`, hem-sdk-js) against the request the link
+  serves and refuses hem-tool's placeholder ("the pairing link served a
+  different request than the code promised"; the 2026-08-05 app never
+  checked). User decision 2026-10-20: the SDK composes the payload —
+  `ehem_ext_qr_payload()` exported (a minor addition under REQ-API-008,
+  rev 3 annotation), `ext pair` uses it and its own JSON code is gone
+  (REQ-AUTH-008 rev 5, REQ-TOOL-016 rev 3 — §6.2 approved with the plan);
+  `v1.2.0-rc3` replaces rc2 and the gate's attended checks run on its
+  binaries. rc3 published the same day (release run 39401247243,
+  release 418234162, 12 assets); the user's rc3 tests found one more
+  thing — on Windows the terminal QR rendered as mojibake, the UTF-8
+  half-block rows decoded in the console's OEM code page — fixed in the
+  same step: when stdout is a console the rows go out as UTF-16 through
+  the console API (REQ-TOOL-016 rev 4, an annotation and an attended
+  criterion, no meaning change); `v1.2.0-rc4` replaces rc3 and the
+  Windows attended checks run on its binaries.
+  **STEP-M12-137 done 2026-10-27** — the user's annotated `v1.2.0-rc4`
+  (a481d07) published 2026-10-20 (release run 39439585466, release
+  418511519, 12 assets); the user's runs: the rc3 tests of 2026-10-20
+  with the Windows QR display as the only finding, and on 2026-10-27
+  `ext pair` from the rc4 Windows hem-tool shows the QR and pairs with
+  Encedo HEM Auth 2.0.0-dev.8 (Samsung SM-S938B, kid
+  `3dff0e4888f77b1e14e6812c17dbc4ce` listed `[PROTECTED]`). REQ-AUTH-008
+  and REQ-TOOL-016 back to verified (rev 6 / rev 5, no meaning change).
+  The gate's remaining attended checks (`status` with the four binaries,
+  the Windows missing-DLL message, the wizard on the second unit) run
+  on rc4.
+  Names settled: error code `EHEM_ERR_BACKEND_MISMATCH`; API
+  `ehem_build_info_get`, `ehem_ext_qr_payload` (STEP-M12-137); options
+  `EHEM_BUILD_SHARED` / `EHEM_BUILD_STATIC`
+  / `EHEM_TOOL_LINK` / `EHEM_DEPS_LINK` / `EHEM_CRYPTO_BACKEND`; asset
+  names (user decision 2026-10-19, STEP-M12-135 — until `v1.2.0-rc1` the
+  OpenSSL variants carried `-static`): the plain `hem-tool-<label>-<os>-x86_64`
+  and `encedo-hem-<label>-<os>-x86_64` = OpenSSL backend + every third-party
+  library static (glibc dynamic on Linux), no companion; `-shared` = wolfSSL
+  linked dynamically, the companion asset required; hem-tool `keys types`,
+  `init-wizard`, exit 12 = the SDK could not be initialised, 6 = wizard
+  cancelled)*. One
+  milestone, one release — **1.2.0** (additive: a new error code, CMake
+  options, hem-tool commands; the public ABI otherwise unchanged). Today
+  both SDK variants are always built, hem-tool always links the static
+  SDK, and third-party dependencies link however pkg-config / FindCURL
+  resolve them — there is no switch; and the 1.1.0 release hem-tool
+  crashes on a foreign `libwolfssl` (KNOWN-ISSUES.md).
+  - **A. Foreign-library crash & diagnostics**
+    - **wolfSSL library check + self-test** *(user decision 2026-10-10:
+      M12, not M10)* — at `ehem_global_init` the SDK refuses a wolfSSL
+      other than the one it was built against: an exact version check
+      (runtime `wolfSSL_lib_version_hex()` vs compile-time
+      `LIBWOLFSSL_VERSION_HEX`) plus a known-answer self-test of every
+      wolfCrypt struct the SDK allocates itself — `Hmac`, `WC_RNG`,
+      `DecodedCert` (whose fields it also reads), `Aes`, `ed25519_key`,
+      `ed448_key` — run inside guard-banded buffers, which also catches
+      a same-version library built with other options. The refusal is a
+      distinct error (recommended: a new append-only `ehem_rc` value).
+      Found 2026-10-10: the rc4 Linux hem-tool, run without the
+      companion `libwolfssl.so.42` beside it, loaded the host's Ubuntu
+      wolfSSL 5.6.6 (same soname) and aborted with "stack smashing
+      detected" (Hmac 784 bytes in the 5.7.2 release build vs 896 in
+      5.6.6; DecodedCert 1528 vs 2576). Until then only the companion
+      library — or one with the same soname AND build configuration, as
+      the archive README says — is supported.
+    - **No masked init failure** — today a failed implicit global init
+      inside the default transport factory reaches the caller as
+      `EHEM_ERR_NOMEM` from `ehem_ctx_create`; the real cause is
+      reported instead.
+    - **hem-tool refuses up front** — hem-tool calls `ehem_global_init`
+      explicitly at startup (today it calls only the cleanup) and exits
+      with a clear message and an exit code of its own.
+    - **`hem-tool --version`** *(user decision 2026-10-12)* — the SDK
+      version, the wolfSSL version compiled against and the one loaded,
+      and the libcurl version (today `--version` is an unknown option).
+    - **Friendly missing-DLL message on Windows** *(BACKLOG item 5,
+      moved in by user decision 2026-10-12)* — `libwolfssl.dll` is loaded
+      on demand (a delay-load import: `dlltool --output-delaylib` +
+      mingw-w64's `libdelayimp.a`, failure hook `__pfnDliFailureHook2`;
+      proven to *link* at the decomposition 2026-10-12 with the Debian
+      cross toolchain, run-time proof in the Windows release job —
+      REQ-TOOL-026), so hem-tool says what is missing and where to put
+      it instead of Windows failing with 0xC0000135 before any of its
+      code runs.
+    - **Expired-cert classifier fix** *(user decision 2026-10-12)* — the
+      REQ-NET-005 classifier (`src/transport_curl.c`) also accepts
+      wolfSSL `-150`, which is `ASN_BEFORE_DATE_E` (certificate not yet
+      valid) in 5.6.6 and 5.7.2; "expired" is `-151`
+      (`ASN_AFTER_DATE_E`). `-150` is dropped, with a test.
+  - **B. Build system**
+    - **Link-mode switches** — CMake options choosing which SDK
+      variant(s) to build, whether hem-tool links the SDK statically or
+      dynamically, and whether third-party dependencies (libcurl, the
+      crypto/TLS library) are linked statically or dynamically;
+      candidate names `EHEM_BUILD_SHARED` / `EHEM_BUILD_STATIC`,
+      `EHEM_TOOL_LINK`, `EHEM_DEPS_LINK`, settled at decomposition.
+    - **Static-wolfSSL warning** — configuring a build whose wolfSSL
+      resolves to a static archive emits a CMake `WARNING` naming the
+      licensing consequence (§12 risk 1); the release scripts refuse to
+      package such a binary (the M10 link-mode assertion stays).
+    - **CMake package config fix** — `cmake/encedo-hem-config.cmake.in`
+      declares only `find_dependency(CURL)`, so the exported static
+      target's crypto link interface cannot resolve in a consumer; the
+      config follows the selected backend.
+    - **Export macro for consumers** — *corrected at the decomposition
+      2026-10-12:* `include/ehem/ehem.h` already expands `EHEM_API` to
+      nothing unless `EHEM_BUILDING_SHARED` or `EHEM_USING_SHARED` is
+      defined, so static consumers get plain declarations today; the
+      gap is the opposite one — the shared target does not advertise
+      `EHEM_USING_SHARED` as a usage requirement (MinGW's auto-import
+      hides it; MSVC would not). The shared target gains the INTERFACE
+      definition; no `EHEM_STATIC` define (REQ-BUILD-008).
+    - **pkg-config file** *(user decision 2026-10-12)* —
+      `encedo-hem.pc` is generated and installed (`Requires.private`:
+      libcurl and the selected crypto library), honouring the §1 name;
+      this reverses REQ-API-008's "no `.pc` file is shipped" (§6.2 at
+      decomposition).
+  - **C. Library packages & the release matrix** — on top of M10's
+    REQ-BUILD-005 release:
+    - **SDK library packages** for linux-x86_64 and windows-x86_64:
+      headers, `libencedo-hem` shared and static (+ the import library),
+      the CMake package config, the `.pc` file and the notices; the
+      wolfSSL flavour reuses the M10 wolfSSL companion asset.
+    - **Static hem-tool** — one file with no companion library, built
+      on the OpenSSL backend (D), for Linux and Windows. On Linux
+      "static" is expected to mean every third-party library static and
+      glibc dynamic (a static glibc breaks `getaddrinfo` / NSS) —
+      settled at decomposition.
+    - **Static SDK library package** — the library package flavour
+      built on the OpenSSL backend.
+    - Asset names: today's `hem-tool-<label>-<os>-x86_64` stays; new
+      variants get a suffix — *settled at the decomposition:* `-static`
+      means OpenSSL backend + every third-party library static, no
+      companion library; library packages are
+      `encedo-hem-<label>-<os>-x86_64[-static]` (REQ-BUILD-009).
+      *Reversed 2026-10-19* (user decision after the rc1 test,
+      STEP-M12-135): the one-file OpenSSL build IS the plain
+      `hem-tool-<label>-<os>-x86_64`, the wolfSSL build is `…-shared`, and
+      the SDK packages follow (`encedo-hem-<label>-<os>-x86_64` static on
+      OpenSSL, `…-shared` the shared library on wolfSSL) — the suffix marks
+      the variant that needs a second download. `ci.yml`
+      gains legs that exercise the switches and both backends (unit
+      suite on every push); `release.yml` builds the published variants.
+    - *Dropped (user decision 2026-10-12):* the full-dynamic hem-tool
+      (libcurl dynamic as well — user note 2026-10-09).
+  - **D. OpenSSL backend** *(user decision 2026-10-12: OpenSSL 3.x is
+    the alternative library — Apache-2.0, so it may be linked
+    statically; every primitive the SDK needs, Ed25519/Ed448 included;
+    libcurl's main TLS backend; opaque heap objects, so the struct-size
+    hazard of A cannot occur)* — `EHEM_CRYPTO_BACKEND=wolfssl|openssl`,
+    wolfSSL the default; static packages use OpenSSL, never wolfSSL
+    (§1). `src/crypto_shim.c` is split per backend behind the unchanged
+    `src/crypto_shim.h`. The production SDK computes only
+    PBKDF2-HMAC-SHA256/-SHA512, HMAC-SHA256, SHA-256, X25519, the X.509
+    leaf parse and random bytes locally; the ECDSA / Ed25519 / Ed448
+    verify and AES-CBC shim functions serve the tests and the simulated
+    authenticator only — OpenSSL covers all of them, so the unit suite
+    runs unchanged on both backends. libcurl uses OpenSSL as its TLS
+    backend in the static builds (pinned source in
+    `scripts/release/build-deps.sh`), and the REQ-NET-005 classifier is
+    proven under it too. Other touchpoints: `ehem_global_init`
+    (`wolfCrypt_Init`), the `public_headers_dep_free` gate (extended to
+    OpenSSL identifiers). *Found at the decomposition 2026-10-12:* three
+    integration tests (`test_cipher_live.c`, `test_wrap_live.c`,
+    `test_ecdh_live.c`) include wolfCrypt directly for reference
+    computations — they move to a per-backend `tests/support/crypto_ref`
+    so the live suite runs on both backends (REQ-BUILD-007). *Version
+    line:* any OpenSSL 3.x serves development; the release pin is the
+    **3.5 LTS line** — 3.0 LTS reached end of life on 2026-09-07
+    (REQ-BUILD-007/009).
+  - **E. hem-tool UX**
+    - **Key types** *(user request 2026-10-10)* — `hem-tool keys gen -h`
+      lists every key type the device creates (the 23 of REQ-TEST-004;
+      today it shows three examples and says "the device validates the
+      type"), and a separate command (`keys types`, name settled at
+      decomposition) explains each one: what it can be used for
+      (signing, ECDH, encryption and wrapping, HMAC, ML-KEM, ML-DSA) and
+      its defaults such as the NIST-P/K `--mode`. One table in
+      hem-tool-core feeds both, checked against `ehem_key_type_parse`
+      by a unit test.
+    - **Initialisation wizard** *(note 2026-10-10; shape decided by the
+      user 2026-10-12)* — a separate command (name settled at
+      decomposition, e.g. `init-wizard`); `init-device` stays purely
+      scripted. It explains and prompts for every field with its
+      default, takes the passphrase hidden and twice, generates the 24
+      words and confirms the backup by having a few of them re-typed,
+      shows a summary behind a typed confirmation, then runs the
+      existing init flow including the reboot. Needs a shared no-echo
+      prompt helper (termios / `SetConsoleMode`), new to hem-tool. The
+      top-level help page is capped at 45 lines (43 used).
+  - *Out of scope (user decision 2026-10-12):* macOS and MSVC builds —
+    BACKLOG.md candidates.
+  - **Gate (draft):** every variant built in CI with its link mode
+    asserted and the unit suite green on both backends; attended
+    `hem-tool status` per published variant; the foreign-library refusal
+    demonstrated (the release hem-tool against the host's wolfSSL 5.6.6
+    refuses instead of crashing); an attended wizard run; the docs
+    checklist (REQUIREMENTS-MANAGEMENT.md §5.3).
+  - *Decomposition (2026-10-12):* order as suggested — A and E first
+    (STEP-M12-010/020/030, 040/050; independent starts), then B (060,
+    070), then D (080, 090), then C (100 Windows delay-load, 110 library
+    packages, 120 static variants), then 130 (1.2.0 + docs + rc) and the
+    gate 140. §6.2 run and approved in chat: REQ-NET-005 rev 2 →
+    **needs-reverify** (rework STEP-M12-030); REQ-API-002 rev 3,
+    REQ-API-003 rev 2, REQ-API-008 rev 2, REQ-BUILD-005 rev 4 (record
+    correction: `-150`), REQ-TOOL-009 rev 2 — wording/record bumps,
+    statuses kept.
+
+  **Gate PASSED (2026-10-27, STEP-M12-140):** all fourteen steps done
+  (010 … 130, the inserted 135 and 137, the gate). Verified: REQ-API-010,
+  REQ-API-011, REQ-TOOL-024, REQ-TOOL-025, REQ-TOOL-026 (the attended
+  Windows missing-DLL check), REQ-TOOL-027, REQ-TOOL-028, REQ-BUILD-007,
+  REQ-BUILD-008; verified again: REQ-NET-005, REQ-TOOL-020, REQ-AUTH-008
+  and REQ-TOOL-016 (STEP-M12-137). Implemented, proven by the workflow
+  runs: REQ-BUILD-006, REQ-BUILD-009 (its push-to-`main` criterion closes
+  with the release itself), REQ-BUILD-005 again. Version **1.2.0**
+  (minor: a new error code, two functions, CMake options, hem-tool
+  commands; SONAME `.so.1`). The tested candidate is the user's annotated
+  `v1.2.0-rc4` (a481d07; release run 39439585466, release 418511519, 12
+  assets) — the fourth: rc1 → rc2 renamed the assets (STEP-M12-135), rc2
+  → rc3 fixed the `ext pair` QR hash, rc3 → rc4 its Windows display
+  (STEP-M12-137). CI 39439574020 / 39439585486 (10/10 legs each); the
+  local suite green on both backends (gcc, clang, ASan, gates); the live
+  sweep 23/23 (2026-10-19; the re-run on the final code is in the step's
+  record). Attended by the user on the rc4 assets (2026-10-27): `status`
+  under system trust with the four hem-tool variants, the Windows
+  missing-DLL message, the wizard on the second unit on Linux and
+  Windows, `ext pair` with the new Encedo Auth app; on this host
+  (2026-10-19): the foreign-library refusal. Docs checklist re-verified;
+  README Status = 1.2.0. The release — merge `development` → `main`, the
+  annotated `v1.2.0` tag from the drafted notes — is the user's
+  (docs/RELEASING.md "Final release"). Next milestone: none planned;
+  candidates in BACKLOG.md (items 6–12: hem-tool/SDK split, `random`
+  speed, the Windows code page for device strings, …).
 - **MFW — firmware-pending** *(created by user decision 2026-08-07: one
   generic future milestone for every feature that is documented — or
   shipped dormant — but MISSING from the running firmware; nothing here
   can be built or verified until upstream routes it; re-swept on every
   firmware upgrade, items promote to a numbered milestone when they go
-  live; re-checked at the M10 gate 2026-10-10 — firmware still v1.2.2,
-  list unchanged)*:
+  live; re-checked at the M10 gate 2026-10-10 and at the M12 gate
+  2026-10-27 — firmware still v1.2.2, list unchanged)*:
   - `DELETE /api/logger/{id}` — documented, handler exists, dispatch
     commented out (`/* not available in CC mode */`), every request
     404s (REQ-SYS-009 hook);
@@ -803,10 +1095,11 @@ not in a milestone (user decision 2026-10-07).
    dynamically and the shared wolfSSL is published as a separate asset
    with its `COPYING`, its exact build configuration and the corresponding
    source tarball; the hem-tool archive carries only MIT/permissive
-   notices. Static packages, when wanted, use a different library (M12).
+   notices. Static packages use a different library: **OpenSSL 3.x**
+   (Apache-2.0; user decision 2026-10-12 at M12 planning, §11).
    *Still open:* encedo-pkcs11's own shipping shape inherits the same
-   dynamic-link position; the alternative static-build library is an M12
-   decision. REQ-BUILD-005 rev 2 was re-approved on 2026-10-09.
+   dynamic-link position. REQ-BUILD-005 rev 2 was re-approved on
+   2026-10-09.
 2. **Login KDF — CLOSED (2026-10-06).** Was "Login-KDF discrepancy between
    official clients" (2026-07-16, itself superseding "Argon2 parameters
    not pinned"). There is no discrepancy: the current Encedo Manager

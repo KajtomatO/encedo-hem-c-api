@@ -54,7 +54,8 @@ or, at your option, any later version", or commercially by wolfSSL Inc.);
 BUILD-CONFIG.txt (the exact CMake configure line and toolchain this library was
 built with); this file.
 
-Use: put ${LIBNAME} in the same directory as hem-tool -
+Use: put ${LIBNAME} in the same directory as hem-tool (the -shared hem-tool
+asset; the plain one has OpenSSL linked in and needs no library) -
 ${HOWTO}.
 hem-tool was compiled against the headers of THIS build: a substitute library
 must be built with the same options (BUILD-CONFIG.txt) or its struct layouts

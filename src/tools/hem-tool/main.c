@@ -13,7 +13,11 @@
  *             REQ-TOOL-012 (the `logs` subcommands),
  *             REQ-TOOL-013 (the `selftest` subcommand),
  *             REQ-TOOL-014 (the `reboot` subcommand),
- *             REQ-TOOL-015 (the `tls-recover` subcommand)
+ *             REQ-TOOL-015 (the `tls-recover` subcommand),
+ *             REQ-TOOL-024 (ehem_global_init up front, exit 12 on refusal),
+ *             REQ-TOOL-025 (`--version` / `version`),
+ *             REQ-TOOL-027 (`keys types`, dispatched before the SDK init),
+ *             REQ-TOOL-028 (the `init-wizard` subcommand)
  *
  * Consumes ONLY the public headers in include/ehem/ — it doubles as living
  * documentation of the API and as the manual driver for the M1/M2 gates.
@@ -24,7 +28,8 @@
  *   hem-tool [--url URL] [--cacert FILE | --insecure] [--passphrase PW]
  *            [--force] <status|checkin|cert-install>
  * Connection URL comes from --url or the EHEM_URL environment variable; the
- * passphrase from --passphrase or EHEM_PASSPHRASE.
+ * passphrase from EHEM_PASSPHRASE or --passphrase (deprecated since 1.2.0 —
+ * a warning on stderr; REQ-TOOL-020 rev 2).
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -39,6 +44,7 @@
 #include "ext_cmd.h"
 #include "init_cmd.h"
 #include "keys.h"
+#include "keytypes.h"
 #include "logs.h"
 #include "random.h"
 #include "recover.h"
@@ -46,10 +52,19 @@
 #include "registry.h"
 #include "selftest.h"
 #include "sign.h"
+#include "startup.h"
 #include "wipe.h"
+#include "wizard.h"
 #include "tool_auth.h"
 
 #define MAX_LABEL_PREFIXES 32
+
+#ifdef HEM_TOOL_DELAYLOAD
+/* Windows release build (delayload_win.c, REQ-TOOL-026): while set, a missing
+ * libwolfssl.dll reads "not found" in the --version report instead of ending
+ * the run. */
+void hem_tool_delayload_tolerate(int on);
+#endif
 
 typedef struct {
     const char *url;
@@ -123,6 +138,9 @@ typedef struct {
     /* help (REQ-TOOL-020): -h/--help defers until the command is known so
      * `hem-tool keys rm --help` renders keys-rm help, not the top page. */
     int         want_help;
+
+    /* --version (REQ-TOOL-025): wins over any command, like --help. */
+    int         want_version;
 } cli_opts;
 
 /* REQ-TOOL-019/020: the top-level page renders from the command
@@ -569,8 +587,8 @@ static int cmd_keys_update(const cli_opts *o, const char *kid)
 static int cmd_keys(const cli_opts *o, const char *subcmd, const char *arg)
 {
     if (subcmd == NULL) {
-        fprintf(stderr,
-                "error: 'keys' needs a subcommand (list, pub, gen, rm, update)\n");
+        fprintf(stderr, "error: 'keys' needs a subcommand "
+                        "(list, pub, gen, rm, update, types)\n");
         usage(stderr);
         return 2;
     }
@@ -810,6 +828,48 @@ static int cmd_init_device(const cli_opts *o)
     io.err                = stderr;
 
     ret = hem_init_device_run(ctx, &io);
+    ehem_ctx_destroy(ctx);
+    return ret;
+}
+
+/* `init-wizard` — REQ-TOOL-028 (attended-only, REQ-TEST-007). The wizard asks
+ * for every input itself; --url / EHEM_URL is its only pre-fill (settled at
+ * STEP-M12-050: nothing secret from the environment in an interactive flow).
+ * init-device's input flags are refused, and secrets in the environment are
+ * ignored with a notice. */
+static int cmd_init_wizard(const cli_opts *o)
+{
+    ehem_ctx *ctx = NULL;
+    hem_wizard_opts wo;
+    int ret;
+
+    if (o->pw_flag || o->user != NULL || o->email != NULL ||
+        o->hostname != NULL || o->ip != NULL || o->origin != NULL ||
+        o->master_words != NULL || o->master_hex != NULL ||
+        o->master_generate || o->csr_out != NULL || o->storage_mode != 0 ||
+        o->disk0_size != 0 || o->dnsd || o->no_trusted_ts ||
+        o->no_trusted_backend || o->no_allow_keysearch || o->gen_csr ||
+        o->ctx_id != 0 || o->reboot_flag) {
+        fprintf(stderr, "error: init-wizard asks for every value itself - "
+                        "for a scripted run with flags use init-device\n");
+        return 2;
+    }
+    if ((o->passphrase != NULL && o->passphrase[0] != '\0') ||
+        getenv("EHEM_MASTER_WORDS") != NULL) {
+        fprintf(stderr, "notice: init-wizard ignores EHEM_PASSPHRASE and "
+                        "EHEM_MASTER_WORDS - it asks for both\n");
+    }
+    ret = make_ctx(o, &ctx);
+    if (ret != 0) {
+        return ret;
+    }
+    memset(&wo, 0, sizeof wo);
+    wo.url           = o->url;
+    wo.in            = stdin;
+    wo.out           = stdout;
+    wo.err           = stderr;
+    wo.poll_delay_ms = HEM_INIT_POLL_DELAY_MS;
+    ret = hem_init_wizard_run(ctx, &wo);
     ehem_ctx_destroy(ctx);
     return ret;
 }
@@ -1124,6 +1184,8 @@ int main(int argc, char **argv)
             o.raw = 1;
         } else if (strcmp(a, "-h") == 0 || strcmp(a, "--help") == 0) {
             o.want_help = 1;   /* deferred: per-command help needs the command */
+        } else if (strcmp(a, "--version") == 0) {
+            o.want_version = 1;
         } else if (a[0] == '-') {
             fprintf(stderr, "error: unknown option '%s'\n", a);
             usage(stderr);
@@ -1152,6 +1214,35 @@ int main(int argc, char **argv)
         fprintf(stderr,
                 "error: --mobile and --passphrase are mutually exclusive\n");
         return 2;
+    }
+    if (o.pw_flag) {
+        /* implements: REQ-TOOL-020 rev 2 — the flag is deprecated (user
+         * decision 2026-10-19): once, on stderr, whenever it is used. */
+        fprintf(stderr,
+                "warning: --passphrase is deprecated and will be removed in a "
+                "later release -\n"
+                "         the passphrase stays in your shell history and shows "
+                "in the process\n"
+                "         list; set EHEM_PASSPHRASE instead\n");
+    }
+
+    /* Everything up to the ehem_global_init() below runs WITHOUT the SDK
+     * initialised, so it works on any crypto library (REQ-TOOL-024): the
+     * version report and the help pages. */
+
+    /* REQ-TOOL-025: `--version` anywhere (it wins over a command, like
+     * --help) or the `version` command spelling. */
+    if (o.want_version || (cmd != NULL && strcmp(cmd, "version") == 0)) {
+        if (!o.want_version && subcmd != NULL) {
+            fprintf(stderr, "error: unexpected argument '%s'\n", subcmd);
+            usage(stderr);
+            return 2;
+        }
+#ifdef HEM_TOOL_DELAYLOAD
+        hem_tool_delayload_tolerate(1);
+#endif
+        hem_tool_print_version(stdout);
+        return 0;
     }
 
     /* REQ-TOOL-020: `hem-tool help [<command> [<sub>]]` and the deferred
@@ -1182,20 +1273,25 @@ int main(int argc, char **argv)
         return 0;
     }
 
+    /* REQ-TOOL-027: `keys types [TYPE]` is local documentation — no SDK
+     * initialisation, no URL, no credentials, so it works offline and on any
+     * crypto library (REQ-TOOL-024). */
+    if (cmd != NULL && strcmp(cmd, "keys") == 0 &&
+        subcmd != NULL && strcmp(subcmd, "types") == 0) {
+        return hem_keys_types_run(arg, stdout, stderr);
+    }
+
     if (cmd == NULL) {
         usage(stderr);
         return 2;
     }
 
-    /* REQ-TOOL-017: --url > EHEM_URL > the built-in default (with a
-     * one-line stderr notice when the default is used). */
-    o.url = hem_tool_resolve_url(o.url, getenv("EHEM_URL"), stderr);
-
     /* REQ-TOOL-019 rev 2: the registry's auth class is enforced here, before
      * any traffic — a PASSPHRASE_ONLY command (ext pair, cert-install,
      * tls-recover, wipe-device, recovery) refuses --mobile up front. A
      * top-level command's second word is a positional argument (sign KID),
-     * so try the bare name first. */
+     * so try the bare name first. A usage error, so it is reported whatever
+     * the state of the crypto library. */
     {
         const hem_command *rc_cmd = hem_registry_find(cmd, NULL);
         if (rc_cmd == NULL) {
@@ -1205,6 +1301,20 @@ int main(int argc, char **argv)
             return 2;
         }
     }
+
+    /* REQ-TOOL-024: the first SDK call of every command — before any other
+     * output (the URL notice below included) or traffic. A refused crypto
+     * library gets one message and exit 12 here instead of crashing inside
+     * the first context; the SDK's own implicit inits are idempotent no-ops
+     * after this. */
+    ret = hem_tool_global_init(stderr);
+    if (ret != 0) {
+        return ret;
+    }
+
+    /* REQ-TOOL-017: --url > EHEM_URL > the built-in default (with a
+     * one-line stderr notice when the default is used). */
+    o.url = hem_tool_resolve_url(o.url, getenv("EHEM_URL"), stderr);
 
     if (strcmp(cmd, "status") == 0) {
         ret = cmd_status(&o);
@@ -1241,6 +1351,14 @@ int main(int argc, char **argv)
             ret = 2;
         } else {
             ret = cmd_init_device(&o);
+        }
+    } else if (strcmp(cmd, "init-wizard") == 0) {
+        if (subcmd != NULL) {
+            fprintf(stderr, "error: unexpected argument '%s'\n", subcmd);
+            usage(stderr);
+            ret = 2;
+        } else {
+            ret = cmd_init_wizard(&o);
         }
     } else if (strcmp(cmd, "wipe-device") == 0) {
         if (subcmd != NULL) {

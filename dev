@@ -133,24 +133,48 @@ maybe_source_hem_env() {
 }
 
 # --- subcommands ----------------------------------------------------------
+# The build switches (REQ-BUILD-006) map to CMake options; a non-default set
+# builds in its own directory (<compiler dir>-<tags>, e.g. build-static-only),
+# so the default directories stay default and cached library lookups never
+# leak from one link mode into another.
 cmd_build() {
   local compilers=() default_cc
   default_cc="$(active_cc)"
-  local a
-  for a in "$@"; do
-    case "$a" in
+  local defs=() tags=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
       --gcc)      compilers=(gcc) ;;
       --clang)    compilers=(clang) ;;
       --both)     compilers=(gcc clang) ;;
+      --shared-only) defs+=(-DEHEM_BUILD_STATIC=OFF); tags+=(shared-only) ;;
+      --static-only) defs+=(-DEHEM_BUILD_SHARED=OFF); tags+=(static-only) ;;
+      --openssl)  defs+=(-DEHEM_CRYPTO_BACKEND=openssl); tags+=(openssl) ;;
+      --tool-link)
+        shift
+        [[ "${1:-}" =~ ^(static|shared)$ ]] || die "build: --tool-link static|shared"
+        defs+=(-DEHEM_TOOL_LINK="$1")
+        [[ "$1" == shared ]] && tags+=(tool-shared)
+        ;;
+      --deps)
+        shift
+        [[ "${1:-}" =~ ^(default|static|shared)$ ]] || die "build: --deps default|static|shared"
+        defs+=(-DEHEM_DEPS_LINK="$1")
+        [[ "$1" != default ]] && tags+=("deps-$1")
+        ;;
       -h|--help)  usage; return 0 ;;
-      *)          die "build: unknown option '$a' (--gcc|--clang|--both)" ;;
+      *)          die "build: unknown option '$1' (--gcc|--clang|--both|--shared-only|--static-only|--openssl|--tool-link X|--deps X)" ;;
     esac
+    shift
   done
   [[ ${#compilers[@]} -eq 0 ]] && compilers=("$default_cc")
-  local cc
+  local cc dir suffix=""
+  if [[ ${#tags[@]} -gt 0 ]]; then
+    suffix="-$(IFS=-; printf '%s' "${tags[*]}")"
+  fi
   for cc in "${compilers[@]}"; do
-    log "build ($cc) -> $(build_dir_for "$cc")"
-    configure_and_build "$(build_dir_for "$cc")" "$cc"
+    dir="$(build_dir_for "$cc")$suffix"
+    log "build ($cc${suffix:+,${suffix//-/ }}) -> $dir"
+    configure_and_build "$dir" "$cc" ${defs[@]+"${defs[@]}"}
   done
 }
 
@@ -185,16 +209,20 @@ cmd_test() {
   local suite=ut disruptive=0 reboot_each=0
   case "${1:-}" in
     ut|it|all|asan) suite="$1"; shift ;;
-    ""|-d|--disruptive) suite=ut ;;
+    ""|-d|--disruptive|--openssl) suite=ut ;;
     -h|--help)          usage; return 0 ;;
     *) die "test: unknown suite '$1' (ut|it|all|asan)" ;;
   esac
+  # --openssl: the OpenSSL crypto backend (REQ-BUILD-007), in its own build
+  # directory (<dir>-openssl) like every non-default switch set.
+  local sfx="" bdefs=()
   local a
   for a in "$@"; do
     case "$a" in
       -d|--disruptive) disruptive=1 ;;
       --reboot-each)   reboot_each=1 ;;
-      *) die "test $suite: unknown option '$a' (-d|--disruptive|--reboot-each)" ;;
+      --openssl)       sfx="-openssl"; bdefs=(-DEHEM_CRYPTO_BACKEND=openssl) ;;
+      *) die "test $suite: unknown option '$a' (-d|--disruptive|--reboot-each|--openssl)" ;;
     esac
   done
   if [[ $disruptive -eq 1 && "$suite" != it && "$suite" != all ]]; then
@@ -212,19 +240,19 @@ cmd_test() {
 
   case "$suite" in
     ut)
-      local cc dir; cc="$(active_cc)"; dir="$(build_dir_for "$cc")"
-      configure_and_build "$dir" "$cc"
+      local cc dir; cc="$(active_cc)"; dir="$(build_dir_for "$cc")$sfx"
+      configure_and_build "$dir" "$cc" ${bdefs[@]+"${bdefs[@]}"}
       ctest_run "$dir" unit
       ;;
     asan)
       # GCC only — Clang's ASan runtime is absent on the dev machine (M1 finding).
-      log "asan unit run (gcc) -> build-asan"
-      configure_and_build build-asan gcc -DEHEM_SANITIZE=ON
-      ctest_run build-asan unit
+      log "asan unit run (gcc) -> build-asan$sfx"
+      configure_and_build "build-asan$sfx" gcc -DEHEM_SANITIZE=ON ${bdefs[@]+"${bdefs[@]}"}
+      ctest_run "build-asan$sfx" unit
       ;;
     it)
-      local cc dir; cc="$(active_cc)"; dir="$(build_dir_for "$cc")"
-      configure_and_build "$dir" "$cc"
+      local cc dir; cc="$(active_cc)"; dir="$(build_dir_for "$cc")$sfx"
+      configure_and_build "$dir" "$cc" ${bdefs[@]+"${bdefs[@]}"}
       maybe_source_hem_env EHEM_TEST_URL
       ctest_run_it "$dir"
       if [[ $disruptive -eq 1 ]]; then
@@ -232,8 +260,8 @@ cmd_test() {
       fi
       ;;
     all)
-      local cc dir; cc="$(active_cc)"; dir="$(build_dir_for "$cc")"
-      configure_and_build "$dir" "$cc"
+      local cc dir; cc="$(active_cc)"; dir="$(build_dir_for "$cc")$sfx"
+      configure_and_build "$dir" "$cc" ${bdefs[@]+"${bdefs[@]}"}
       ctest_run "$dir" unit
       maybe_source_hem_env EHEM_TEST_URL
       ctest_run_it "$dir"
@@ -254,11 +282,17 @@ cmd_check() {
 }
 
 cmd_ci() {
-  local overall=0 cc
+  local overall=0 cc sfx="" bdefs=()
+  case "${1:-}" in
+    "")        ;;
+    --openssl) sfx="-openssl"; bdefs=(-DEHEM_CRYPTO_BACKEND=openssl) ;;
+    -h|--help) usage; return 0 ;;
+    *)         die "ci: unknown option '$1' (--openssl)" ;;
+  esac
   for cc in gcc clang; do
-    log "CI mirror: $cc (unit build + checks)"
-    if configure_and_build "$(build_dir_for "$cc")" "$cc" \
-       && ctest_run "$(build_dir_for "$cc")" unit; then
+    log "CI mirror: $cc${sfx:+ (openssl)} (unit build + checks)"
+    if configure_and_build "$(build_dir_for "$cc")$sfx" "$cc" ${bdefs[@]+"${bdefs[@]}"} \
+       && ctest_run "$(build_dir_for "$cc")$sfx" unit; then
       :
     else
       overall=1
@@ -337,15 +371,22 @@ _dev_complete() {
 
     sub="${COMP_WORDS[1]}"
     case "$sub" in
-        build)  COMPREPLY=( $(compgen -W "--gcc --clang --both" -- "$cur") ) ;;
+        build)
+            case "$prev" in
+                --tool-link) COMPREPLY=( $(compgen -W "static shared" -- "$cur") ) ;;
+                --deps)      COMPREPLY=( $(compgen -W "default static shared" -- "$cur") ) ;;
+                *) COMPREPLY=( $(compgen -W "--gcc --clang --both --shared-only --static-only --openssl --tool-link --deps" -- "$cur") ) ;;
+            esac
+            ;;
         clean)  COMPREPLY=( $(compgen -W "--all" -- "$cur") ) ;;
         test)
             if [[ $COMP_CWORD -eq 2 ]]; then
                 COMPREPLY=( $(compgen -W "ut it all asan" -- "$cur") )
             else
-                COMPREPLY=( $(compgen -W "-d --disruptive --reboot-each" -- "$cur") )
+                COMPREPLY=( $(compgen -W "-d --disruptive --reboot-each --openssl" -- "$cur") )
             fi
             ;;
+        ci)     COMPREPLY=( $(compgen -W "--openssl" -- "$cur") ) ;;
         install-dependencies) COMPREPLY=( $(compgen -W "--yes" -- "$cur") ) ;;
         *) COMPREPLY=() ;;
     esac
@@ -363,6 +404,13 @@ Usage: ./dev <command> [options]
 Commands:
   build [--gcc|--clang|--both]   configure (if needed) + build; default compiler
                                  from \$EHEM_DEV_CC (gcc when unset)
+        [--shared-only|--static-only] [--tool-link static|shared]
+        [--deps default|static|shared] [--openssl]
+                                 the CMake switches EHEM_BUILD_STATIC=OFF /
+                                 EHEM_BUILD_SHARED=OFF / EHEM_TOOL_LINK /
+                                 EHEM_DEPS_LINK / EHEM_CRYPTO_BACKEND=openssl;
+                                 a non-default set builds in its own dir
+                                 (e.g. build-static-only, build-openssl)
   clean [--all]                  remove the active build dir; --all removes all build*/
   test [ut]                      unit suite only (ctest -L unit)
   test it [-d|--disruptive] [--reboot-each]
@@ -372,8 +420,10 @@ Commands:
                                  and EHEM_ALLOW_DISRUPTIVE=1
   test all [-d|--disruptive]     unit + integration (+ disruptive with -d)
   test asan                      ASan/LSan unit run (gcc)
+  test <suite> --openssl         the same on the OpenSSL backend (<dir>-openssl)
   check                          static gates: export-symbols + public-header checks
-  ci                             mirror the CI matrix locally (gcc + clang unit builds)
+  ci [--openssl]                 mirror the CI matrix locally (gcc + clang unit
+                                 builds); --openssl: the OpenSSL backend legs
   tool <args...>                 run the built hem-tool with device env loaded
   install-dependencies [--yes]   install build deps (apt on Linux / pacman on MSYS2)
   completions                    print the bash completion script

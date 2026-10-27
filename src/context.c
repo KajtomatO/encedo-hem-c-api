@@ -1,7 +1,9 @@
 /*
  * context.c — ehem_ctx lifecycle, options, error enum, last-error, global init.
  *
- * implements: REQ-API-001, REQ-API-002, REQ-API-003, REQ-API-004
+ * implements: REQ-API-001, REQ-API-002, REQ-API-003, REQ-API-004,
+ *             REQ-API-010 (the implicit-init paths carry the backend verdict
+ *             out unmasked; the check itself lives in crypto_shim.c)
  */
 #include "context.h"
 #include "crypto_shim.h"
@@ -36,6 +38,7 @@ const char *ehem_rc_str(ehem_rc rc)
     case EHEM_ERR_ARG:           return "EHEM_ERR_ARG";
     case EHEM_ERR_NOMEM:         return "EHEM_ERR_NOMEM";
     case EHEM_ERR_UNSUPPORTED:   return "EHEM_ERR_UNSUPPORTED";
+    case EHEM_ERR_BACKEND_MISMATCH: return "EHEM_ERR_BACKEND_MISMATCH";
     }
     /* Out-of-range value (never for a valid ehem_rc). */
     return "EHEM_ERR_UNKNOWN";
@@ -305,8 +308,16 @@ ehem_rc ehem_ctx_create(const char *url, const ehem_options *opts, ehem_ctx **ou
     }
 
     /* No caller override → stand up the built-in default transport (libcurl),
-     * owned by and torn down with this context. */
+     * owned by and torn down with this context. The factory needs the
+     * process-global init; run it here first so its verdict reaches the caller
+     * (REQ-API-010: a refused crypto backend is EHEM_ERR_BACKEND_MISMATCH, not
+     * the NOMEM a NULL transport would read as). Idempotent, so free later. */
     if (ctx->transport == NULL) {
+        rc = ehem_global_init();
+        if (rc != EHEM_OK) {
+            ehem_ctx_destroy(ctx);
+            return rc;
+        }
         ctx->transport = ehem_transport_default_new(ctx->url, ctx->tls_mode,
                                                     ctx->ca_file);
         if (ctx->transport == NULL) {
@@ -352,7 +363,12 @@ void ehem_ctx_destroy(ehem_ctx *ctx)
  * wrappers below are idempotent. The raw global steps live in the backends
  * (curl_global_init/cleanup, wolfCrypt_Init/Cleanup) so this file stays free of
  * libcurl and wolfSSL. Not thread-safe — call at startup and shutdown
- * (documented in the public header). */
+ * (documented in the public header).
+ *
+ * The crypto step doubles as the backend compatibility check (REQ-API-010): a
+ * library other than the one the SDK was built against is refused with
+ * EHEM_ERR_BACKEND_MISMATCH, and nothing below is touched — g_global_ready stays
+ * false, so cleanup is a no-op and the next init re-checks. */
 static bool g_global_ready = false;
 
 ehem_rc ehem_global_init(void)

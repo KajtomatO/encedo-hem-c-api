@@ -146,6 +146,12 @@ ehem_transport *ehem_transport_default_new(const char *base_url,
 ehem_rc ehem_transport_backend_global_init(void);
 void    ehem_transport_backend_global_cleanup(void);
 
+/* The transport half of ehem_build_info_get() (REQ-API-011): fills the four
+ * transport_* fields of *out with static strings (backend "libcurl", header vs
+ * run-time version, link mode — "static" when configured with
+ * EHEM_TRANSPORT_LINK_STATIC). Needs no global init. */
+void    ehem_transport_backend_describe(ehem_build_info *out);
+
 /* Tear down a transport instance created by a constructor. NULL-safe. Calls
  * ops->destroy(state) then frees the wrapper. Never call this on a
  * caller-supplied override — the caller owns that one. */

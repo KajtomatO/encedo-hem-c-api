@@ -12,7 +12,8 @@
  *           claims 48 — recorded in REQ-OPS-004)
  *
  * Links the STATIC lib + internal headers (via ehem_test_support) for the
- * crypto-shim X25519 and wolfCrypt SHA-256 — the same exception
+ * crypto-shim X25519 and the reference SHA-256 of tests/support/crypto_ref
+ * (the build's crypto library, either backend) — the same exception
  * test_sign_live takes. EHEMTEST key hygiene per REQ-TEST-003.
  */
 #include <stdarg.h>
@@ -23,14 +24,13 @@
 #include <string.h>
 #include <cmocka.h>
 
-#include <wolfssl/options.h>
-#include <wolfssl/wolfcrypt/hash.h>
 
 #include "ehem/ehem.h"
 #include "ehem/auth.h"
 #include "ehem/crypto.h"
 #include "ehem/keymgmt.h"
 #include "crypto_shim.h"      /* internal: local X25519 for the cross-check */
+#include "crypto_ref.h"       /* reference SHA-256, the build's library */
 #include "integration_env.h"
 #include "ehem_test_keys.h"
 
@@ -127,8 +127,8 @@ static void test_x25519_local_crosscheck(void **state)
     assert_memory_equal(dev_raw->secret, local_secret, EHEM_X25519_KEYSIZE);
 
     /* Hashed variant digests the full secret. */
-    assert_int_equal(wc_Sha256Hash(local_secret, sizeof local_secret,
-                                   local_hash), 0);
+    assert_int_equal(ref_sha256(local_secret, sizeof local_secret,
+                                local_hash), 0);
     assert_int_equal(ehem_ecdh(s->ctx, kid, NULL, local_pub,
                                sizeof local_pub, EHEM_HASH_ALG_SHA2_256,
                                &dev_hashed), EHEM_OK);

@@ -3,8 +3,8 @@ id: REQ-BUILD-005
 title: Release builds of hem-tool — dynamic-wolfSSL binaries from CI, artifacts on main, GitHub Releases on tags
 status: implemented
 priority: should
-revision: 3
-source: user decision 2026-10-07 ("github ci actions to build and release the cli tool"; answers the same day: build on every push to main, publish a Release on tags; Release-type build + SHA256SUMS); approved 2026-10-08 (user "ok") as rev 1 (fully static binaries); rev 2 — user decision 2026-10-09 (no statically bundled wolfSSL in any published package, for licensing reasons — wolfSSL is linked dynamically and published as a separate release asset; libcurl stays pinned static; a full-dynamic variant and static packages on another library go to M12) — rev 2 approved 2026-10-09 (user "I accept new req"); rev 3 — user decision 2026-10-10 (`v<version>-rc<N>` tags publish a GitHub pre-release, so the never-run publishing job is proven before the real release; the release text = the tag annotation + checksums, annotated tags enforced) — rev 3 approved 2026-10-10 (user "I approve REQ-BUILD-005 rev 3"); ARCHITECTURE.md §1 (wolfSSL "may also serve as libcurl's TLS backend where we build libcurl ourselves"; "wolfSSL is never statically bundled into a published package"), §11 (M10), §12 risk 1 (wolfSSL licensing); REQ-BUILD-002 (the existing CI stays as is)
+revision: 6   # 2026-10-19 (STEP-M12-135 done): re-verified — release run 39320626797 (the user's annotated `v1.2.0-rc2` on 8dd915f) built, asserted and published `hem-tool-1.2.0-rc2-{linux,windows}-x86_64-shared.*` with the companion assets, the source tarball and `SHA256SUMS` (pre-release 417736562); implemented again. No meaning change. Rev 5 = 2026-10-19 (STEP-M12-135, §6.2 approved in chat): the hem-tool archive is `hem-tool-<version>-<os>-x86_64-shared` from 1.2.0 — the plain name goes to REQ-BUILD-009's one-file build (user decision 2026-10-19 after the rc1 test); contents, assertions and the companion assets unchanged; needs-reverify until the v1.2.0-rc2 release run. Rev 4 = the M12 decomposition record below (`source`)
+source: rev 4 — M12 decomposition 2026-10-12 (§6.2 report approved in chat; record and wording only, no behaviour change, status kept): the resolved-criterion record "-150 older" was wrong — wolfSSL `-150` is `ASN_BEFORE_DATE_E` (not yet valid) in 5.6.6 and 5.7.2 alike, "expired" is `-151` only (REQ-NET-005 rev 2, STEP-M12-030); REQ-BUILD-009 adds the 1.2.0 variants to the same release and `ci.yml` gains legs by REQ-BUILD-006/007 — this REQ's assets and the release workflow's relationship to ci.yml are unchanged; user decision 2026-10-07 ("github ci actions to build and release the cli tool"; answers the same day: build on every push to main, publish a Release on tags; Release-type build + SHA256SUMS); approved 2026-10-08 (user "ok") as rev 1 (fully static binaries); rev 2 — user decision 2026-10-09 (no statically bundled wolfSSL in any published package, for licensing reasons — wolfSSL is linked dynamically and published as a separate release asset; libcurl stays pinned static; a full-dynamic variant and static packages on another library go to M12) — rev 2 approved 2026-10-09 (user "I accept new req"); rev 3 — user decision 2026-10-10 (`v<version>-rc<N>` tags publish a GitHub pre-release, so the never-run publishing job is proven before the real release; the release text = the tag annotation + checksums, annotated tags enforced) — rev 3 approved 2026-10-10 (user "I approve REQ-BUILD-005 rev 3"); ARCHITECTURE.md §1 (wolfSSL "may also serve as libcurl's TLS backend where we build libcurl ourselves"; "wolfSSL is never statically bundled into a published package"), §11 (M10), §12 risk 1 (wolfSSL licensing); REQ-BUILD-002 (the existing CI stays as is)
 depends_on: ["REQ-BUILD-001", "REQ-BUILD-002", "REQ-NET-003", "REQ-NET-005"]
 supersedes: null
 superseded_by: null
@@ -38,10 +38,13 @@ tag `v*`, publish the same archives, the wolfSSL companion assets and a
   (libgcc / libwinpthread) so `hem-tool.exe` imports Windows system DLLs
   and `libwolfssl.dll` only; the DLL itself is linked the same way, so it
   depends on system DLLs only.
-- **Archives.** `hem-tool-<version>-linux-x86_64.tar.gz` and
-  `hem-tool-<version>-windows-x86_64.zip`; `<version>` is the project
-  version (`ehem_version()`), suffixed `+g<shortsha>` for main-branch
-  builds. Each archive carries the binary, a short README (usage pointer,
+- **Archives.** `hem-tool-<version>-linux-x86_64-shared.tar.gz` and
+  `hem-tool-<version>-windows-x86_64-shared.zip` (rev 5: the `-shared`
+  suffix from 1.2.0 — 1.0 and 1.1 published this archive under the plain
+  name, which REQ-BUILD-009 gives to the one-file OpenSSL build; user
+  decision 2026-10-19); `<version>` is the project version
+  (`ehem_version()`), suffixed `+g<shortsha>` for main-branch builds.
+  Each archive carries the binary, a short README (usage pointer,
   checksum command, the run-time wolfSSL requirement and where to get it)
   and the license notices of everything compiled in (MIT for the SDK and
   the tool, curl's license, cJSON, the BIP39 wordlist, qrcodegen) — no
@@ -75,8 +78,12 @@ tag `v*`, publish the same archives, the wolfSSL companion assets and a
   Tags must be annotated: the release text is the tag annotation followed
   by the checksums, and a lightweight tag fails before publishing. Assets
   are the two hem-tool archives, the two companion assets, the source
-  tarball and `SHA256SUMS`. `workflow_dispatch` MAY build any ref into
-  artifacts.
+  tarball and `SHA256SUMS` *(the 1.1.0 set; from 1.2.0 REQ-BUILD-009 adds
+  the one-file hem-tool and the library packages to the same release —
+  the hem-tool archive is renamed `-shared`, the companion assets, the
+  source tarball and `SHA256SUMS` stay as they are)*. `workflow_dispatch`
+  MAY build any ref
+  into artifacts.
 
 **Rationale:** operators need the CLI without a toolchain, and no published
 package may bundle wolfSSL statically (licensing — ARCHITECTURE §1, §12
@@ -97,13 +104,24 @@ workflow is additional.
       *(Read as "unchanged by the release work": ci.yml's MSYS2
       environment moved MINGW64 → UCRT64 on 2026-10-10 by a separate user
       decision — ARCHITECTURE §1 — that applies to both workflows; the
-      release workflow still neither calls nor alters ci.yml.)*
+      release workflow still neither calls nor alters ci.yml. Rev 4: M12
+      adds ci.yml legs for the build switches and the OpenSSL backend —
+      REQ-BUILD-006/007 — for the same reason, independent of this
+      workflow.)*
       *(All three proven 2026-10-10: push to main 339af96 → run
       38051683181, artifacts; annotated v1.1.0-rc4 → run 38052272610,
       pre-release with six assets; Actions → Run workflow on main → run
       38058607548, both build jobs green, artifacts
       release-linux-x86_64 / release-windows-x86_64 uploaded, the
       publishing job skipped and no release created.)*
+      *(The rev 5 names proven 2026-10-19: the user's annotated
+      `v1.2.0-rc2` (8dd915f) → run 39320626797, both build jobs' dynamic
+      step — the same `package.sh` assertions and the drop-in smoke — and
+      the publishing job green; pre-release 417736562 carries
+      `hem-tool-1.2.0-rc2-linux-x86_64-shared.tar.gz` and
+      `hem-tool-1.2.0-rc2-windows-x86_64-shared.zip` beside the three
+      unchanged companion/source assets and `SHA256SUMS`; REQ-BUILD-009
+      rev 8 records the whole 12-asset set.)*
 - [x] Link mode proven in the job: Linux `readelf` RUNPATH == `$ORIGIN`,
       `ldd` shows `libwolfssl.so.<N>` resolved from the binary's own
       directory and no libcurl/libssl/libcrypto; Windows import table lists
@@ -130,8 +148,11 @@ workflow is additional.
       builds never saw.)*
 - [x] RESOLVED (STEP-M10-065, 2026-10-09): the classifier
       (`src/transport_curl.c`) now also accepts wolfSSL's verdict —
-      `ASN_AFTER_DATE_E` (-151 in 5.6.x/5.7.x, -150 older) via
-      CURLINFO_SSL_VERIFYRESULT, the texts "date error, current date
+      `ASN_AFTER_DATE_E` (-151) via CURLINFO_SSL_VERIFYRESULT *(rev 4
+      correction, 2026-10-12: this record said "-150 older" and the code
+      accepts -150 too; -150 is `ASN_BEFORE_DATE_E` — certificate not yet
+      valid — in 5.6.6 and 5.7.2 alike, so it must NOT classify as expired;
+      dropped by STEP-M12-030 under REQ-NET-005 rev 2)*, the texts "date error, current date
       after" / "ASN_AFTER_DATE", and CURLE_SSL_CONNECT_ERROR as the curl
       code — and `scripts/release/check-expired-classifier.sh` proves it:
       a valid local CA + an EXPIRED leaf served by `openssl s_server`

@@ -284,12 +284,16 @@ static bool mode_literal_ok(const char *m)
            strcmp(m, "ECDH,ExDSA") == 0;
 }
 
-/* A NIST-P/K family whose device default (ECDH-only) cannot sign — so the tool
- * defaults these to ECDH,ExDSA when --mode is omitted (python OQ-19). */
-static bool family_is_nist_ecc(ehem_key_family f)
+/* A NIST-P/K family's device default (ECDH-only) cannot sign — so the tool
+ * defaults these to HEM_KEYS_GEN_NIST_MODE when --mode is omitted (python
+ * OQ-19); every other family sends no mode. */
+const char *hem_keys_gen_default_mode(ehem_key_family f)
 {
-    return f == EHEM_KEY_FAMILY_SECP256R1 || f == EHEM_KEY_FAMILY_SECP384R1 ||
-           f == EHEM_KEY_FAMILY_SECP521R1 || f == EHEM_KEY_FAMILY_SECP256K1;
+    if (f == EHEM_KEY_FAMILY_SECP256R1 || f == EHEM_KEY_FAMILY_SECP384R1 ||
+        f == EHEM_KEY_FAMILY_SECP521R1 || f == EHEM_KEY_FAMILY_SECP256K1) {
+        return HEM_KEYS_GEN_NIST_MODE;
+    }
+    return NULL;
 }
 
 int hem_keys_gen_run(ehem_ctx *ctx, const hem_keys_gen_opts *o)
@@ -304,7 +308,8 @@ int hem_keys_gen_run(ehem_ctx *ctx, const hem_keys_gen_opts *o)
 
     if (o->type == NULL || o->type[0] == '\0') {
         fprintf(err, "error: 'keys gen' needs a key type "
-                     "(e.g. ED25519, SECP256R1, AES256)\n");
+                     "(e.g. ED25519, SECP256R1, AES256 - all of them: "
+                     "`hem-tool keys types`)\n");
         return HEM_KEYS_USAGE;
     }
     if (o->label == NULL || o->label[0] == '\0') {
@@ -323,11 +328,11 @@ int hem_keys_gen_run(ehem_ctx *ctx, const hem_keys_gen_opts *o)
     mode = o->mode;
     if (mode == NULL) {
         (void)ehem_key_type_parse(o->type, &info);
-        if (family_is_nist_ecc(info.family)) {
-            mode = "ECDH,ExDSA";
-            fprintf(err, "note: defaulting --mode to ECDH,ExDSA for %s "
+        mode = hem_keys_gen_default_mode(info.family);
+        if (mode != NULL) {
+            fprintf(err, "note: defaulting --mode to %s for %s "
                          "(the device default is ECDH-only and cannot sign; "
-                         "pass --mode to override)\n", o->type);
+                         "pass --mode to override)\n", mode, o->type);
         }
     }
 

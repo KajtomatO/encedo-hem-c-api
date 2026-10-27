@@ -3,8 +3,8 @@ id: REQ-TOOL-016
 title: hem-tool ext family — pair (terminal QR), list, login
 status: verified
 priority: should
-revision: 2
-source: user decision 2026-07-22 (M8 decomposition; "Add QR code generation to hem-tool" — user decision same day); hem-api-tester test_5.php QR payload; REQ-TOOL-012 family-in-one-REQ precedent
+revision: 5   # 2026-10-27 (STEP-M12-137 done): re-verified — the rev 3 unit criterion green on every CI leg (d532433 and a481d07) and both attended criteria met: the user's rc3 tests of 2026-10-20 (the Windows QR display the only finding) and, 2026-10-27, "Ext pair works on windows" from the published `v1.2.0-rc4` Windows hem-tool with Encedo HEM Auth 2.0.0-dev.8 — `ext list` shows the Samsung SM-S938B (Android) authenticator, kid 3dff0e4888f77b1e14e6812c17dbc4ce, [PROTECTED]. No meaning change. Rev 4 = 2026-10-20 (STEP-M12-137, the rc3 Windows finding): the terminal QR on a Windows console — the UTF-8 half-block rows showed as mojibake ("a mess of chars") because the console decodes stdout bytes in its OEM code page; `ext pair` now writes the rows as UTF-16 through the console API when stdout is a console (bytes otherwise). Annotation of the rendering clause + an attended criterion on `v1.2.0-rc4` — NO meaning change (the clause already promised a QR in the terminal; Windows showed none); status stays needs-reverify from rev 3. Rev 3 = 2026-10-20 (STEP-M12-137): MEANING CHANGE — the QR payload comes from the SDK's `ehem_ext_qr_payload()` (REQ-AUTH-008 rev 5: `hash` = base64(SHA-256(request)), the check the new Encedo Auth app makes); the tester's placeholder "not_implemented_yet" is gone from the flow text. §6.2 report approved with the plan 2026-10-20. needs-reverify until the unit criterion passes and the user's rc3 scan. Rev 2 = the M8-080 attended record (2026-08-05/06)
+source: user decision 2026-07-22 (M8 decomposition; "Add QR code generation to hem-tool" — user decision same day); hem-api-tester test_5.php QR payload (its `hash` placeholder — superseded by REQ-AUTH-008 rev 5, the Manager's definition); REQ-TOOL-012 family-in-one-REQ precedent; user bug report 2026-10-20 on v1.2.0-rc2 (the new Encedo Auth app refuses the QR: "the pairing link served a different request than the code promised") and user decision the same day: the SDK composes the payload; user bug report 2026-10-20 on v1.2.0-rc3 (Windows: "the QR code is a mess of chars and not a QR-Code")
 depends_on: ["REQ-AUTH-006", "REQ-AUTH-008", "REQ-AUTH-009", "REQ-AUTH-010", "REQ-KEY-001", "REQ-TOOL-005"]
 supersedes: null
 superseded_by: null
@@ -21,10 +21,15 @@ including rendering the pairing QR code directly in the terminal.
 - **`ext pair [--label-note <s>]`:** orchestrates registration
   end-to-end: login (passphrase; pairing needs `sub=U`) → device eid via
   config → broker `session` → `ehem_ext_init` → broker `register/init`
-  → compose the QR payload `{link, hash, user, email, hostname}` (the
-  test_5.php:90 shape; `hash` = `"not_implemented_yet"` until upstream
-  defines it) → **render it as a QR code in the terminal** (UTF-8
-  half-block cells; `--no-qr` prints the JSON payload only) → poll
+  → the QR payload from the SDK's `ehem_ext_qr_payload()` (REQ-AUTH-008
+  rev 5: `{link, hash, user, email, hostname}` in the Manager's order,
+  `hash` = base64(SHA-256(request)) — the phone checks it against the
+  request the link serves; the tool composes nothing itself) → **render
+  it as a QR code in the terminal** (UTF-8 half-block cells; on a
+  Windows console the same rows go out as UTF-16 through the console
+  API — the console decodes stdout bytes in its OEM code page, which
+  made mojibake of the UTF-8 cells (rev 4); a file or pipe gets the
+  bytes; `--no-qr` prints the JSON payload only) → poll
   `register/check` (bounded, ~60 s, tester cadence) → `ehem_ext_validate`
   → broker `register/finalise` → print the new `kid` + label. Distinct
   nonzero exit codes: scan timeout, slots-full/dedup 406, broker error,
@@ -81,4 +86,34 @@ loop.
       guarded from bulk rm exactly as designed); `ext login`
       demonstrated approve/reject/timeout as exit 0/4/3 back-to-back.
       Pairing KEPT on the device (user decision 2026-08-06) for future
-      mobile testing.
+      mobile testing. *(That app did not check `hash` — the new Encedo
+      Auth app does; see the rev 3 criteria.)*
+- [x] Unit (test_ext_tool.c, rev 3 — local 2026-10-20: `./dev ci` 56/56
+      gcc + clang, `./dev ci --openssl` 56/56 gcc + clang, ASan both
+      backends; CI follows with the push): the `--no-qr` print of the pair
+      happy path is the SDK payload for the scripted request, verbatim —
+      `{"link":"https://l.ink/x","hash":"BQixETmS1vjcSjAPqjT0yq9poZjfeTnWczNU6VHYuI4=","user":"Alice","email":"a@example.com","hostname":"hem.example"}`
+      (base64(SHA-256("r.j.w")): the request reaches the SDK unaltered),
+      on its own line, and `not_implemented_yet` appears nowhere.
+- [x] Attended (rev 3, STEP-M12-137 / the M12 gate): `ext pair` from the
+      published `v1.2.0-rc3` hem-tool on Linux, scanned from the terminal
+      QR by the NEW Encedo Auth app, completes the registration (date,
+      app/phone, kid; `ext list` shows it) — recorded here and under
+      REQ-AUTH-008. **Met:** the user's rc3 report of 2026-10-20
+      ("Finished tests on RC") named the Windows QR display as the only
+      finding; the pairing on the device is the rev 4 record below (one
+      paired authenticator).
+- [x] Attended (rev 4, STEP-M12-137 / the M12 gate): `ext pair` from the
+      published `v1.2.0-rc4` Windows hem-tool shows a scannable QR in a
+      Windows console as it comes (cmd, PowerShell or Windows Terminal;
+      no `chcp`) and the new Encedo Auth app pairs from it (date,
+      console, app/phone, kid) — recorded here. **Met 2026-10-27** — the
+      user: "Ext pair works on windows" (the published rc4 Windows
+      hem-tool); app **Encedo HEM Auth 2.0.0-dev.8**; `hem-tool ext list`:
+      `3dff0e4888f77b1e14e6812c17dbc4ce  Samsung SM-S938B (Android)
+      [PROTECTED]`, "1 paired authenticator" — the `(Android)` label lands
+      in the protected classifier as designed. *(rc3, 2026-10-20: the
+      user's Windows run showed "a mess of chars" — the UTF-8 rows
+      decoded in the console's OEM code page. The byte path is unchanged
+      and unit-tested; the console path needs a console and is
+      attended-only — no Windows or Wine on the dev host.)*

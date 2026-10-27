@@ -323,46 +323,6 @@ Discovered while building and attending the M8 mobile-auth milestone
    authenticator (tests) copies the authreq `exp` instead, so tests see
    the full lifetime.
 
-## OPEN — Release hem-tool with a foreign libwolfssl crashes ("stack smashing detected")
-
-**Status:** open; the fix is M12 scope (user decision 2026-10-10 — not
-M10). **Affected:** the REQ-BUILD-005 release binaries (1.1.0), and any
-consumer of the SDK built against one wolfSSL and run with another.
-
-### Symptom
-
-2026-10-10, v1.1.0-rc4 Linux archive: `hem-tool init-device` printed its
-first lines and aborted with `*** stack smashing detected ***`. The same
-binary works when the companion `libwolfssl.so.42` sits next to it.
-
-### Cause
-
-hem-tool looks for `libwolfssl.so.42` in its own directory first (RUNPATH
-`$ORIGIN`), then in the system library path. Without the companion file it
-loaded the host's Ubuntu wolfSSL 5.6.6, which has the same soname but a
-different version and build configuration. The SDK allocates wolfCrypt
-structs itself (`crypto_shim.c`), and their sizes depend on both: `Hmac`
-is 784 bytes in the 5.7.2 release build and 896 in 5.6.6 (`DecodedCert`
-1528 vs 2576, `Aes` 880 vs 1104, `ed25519_key` 112 vs 384, `ed448_key` 184
-vs 632). `wc_HmacInit` overran the stack `Hmac`. Reproduced offline: the
-release-built `test_crypto` passes 8/8 with the bundled library and aborts
-in `test_hmac_sha256` against the system one. A same-version library built
-with other options is just as unsafe. On Windows the same applies to a
-different `libwolfssl.dll` found on `PATH` (e.g. MSYS2's) when the
-companion DLL is not next to `hem-tool.exe`.
-
-### Workaround
-
-Put the library from the release's `wolfssl-<version>-<os>-x86_64` asset
-next to the binary (README.txt, docs/RELEASING.md). A system wolfSSL works
-only with the same soname AND build configuration (`BUILD-CONFIG.txt`).
-
-### Plan
-
-M12 (ARCHITECTURE §11): `ehem_global_init` refuses a wolfSSL other than
-the one the SDK was built against — a version check plus a known-answer
-self-test of the SDK's own wolfCrypt structs.
-
 ## OPEN — A wipe does not always remove the TLS material (fw v1.2.2)
 
 **Status:** open (observation, cause unknown). **Affected:** REQ-SYS-014,
@@ -380,6 +340,112 @@ build (DIAG vs production) or the unit's provisioning state makes the
 difference is not known. hem-tool no longer suggests `recovery` after init
 or wipe (REQ-TOOL-021 rev 3, REQ-TOOL-022 rev 2); run it only if HTTPS
 does not verify.
+
+## FIXED in 1.2.0 — 1.1.0 `ext pair`: the new Encedo Auth app rejects the QR
+
+**Status:** fixed in 1.2.0 (STEP-M12-137; found by the user on
+`v1.2.0-rc2`, 2026-10-20). **Affected:** `hem-tool ext pair` in 1.0.0 and
+1.1.0, and any consumer that composed the QR payload itself from the
+broker's `link` with a placeholder `hash`.
+
+**Symptom.** The new Encedo Auth app scans the terminal QR and refuses:
+"the pairing link served a different request than the code promised".
+The Manager's QR pairs. The older app paired from hem-tool's QR
+(2026-08-05).
+
+**Cause.** The payload's `hash` is a commitment the app verifies: it
+fetches `link`, hashes the `request` JWT the broker serves and compares.
+The Manager puts standard base64 of SHA-256 over the `request` string
+from `/api/auth/ext/init` there (`assets/build.js`, `pairdeviceNow`);
+hem-tool sent the literal `"not_implemented_yet"` from hem-api-tester's
+`test_5.php`, which the old app never checked.
+
+**Fix.** The SDK composes the payload — `ehem_ext_qr_payload()`
+(REQ-AUTH-008 rev 5), byte-identical to the Manager's: keys `link, hash,
+user, email, hostname` in that order, compact JSON — and `ext pair` uses
+it (REQ-TOOL-016 rev 3). 1.0/1.1 users pair from the Manager or upgrade
+hem-tool; SDK consumers that built the payload themselves call the new
+function.
+
+## FIXED in 1.2.0 — 1.1.0 `ext pair` on Windows: the terminal QR is "a mess of chars"
+
+**Status:** fixed in 1.2.0 (STEP-M12-137; found by the user on
+`v1.2.0-rc3`, 2026-10-20). **Affected:** `hem-tool.exe ext pair` in
+1.0.0, 1.1.0 and the 1.2.0 candidates up to rc3, in every Windows
+console — cmd, PowerShell, Windows Terminal — whose output code page is
+the default OEM one (not 65001).
+
+**Symptom.** Instead of a QR code the console shows rows of letters and
+symbols, three per QR cell (`Γûê` in code page 437, `Ôľł` in 852, …).
+Output redirected to a file, and every Linux terminal, is fine.
+
+**Cause.** The render writes UTF-8 half-block characters (`█ ▀ ▄`)
+through stdio. A Windows console decodes the bytes it receives in its
+OUTPUT code page — the OEM page of the system locale, never UTF-8 unless
+`chcp 65001` was run in that console — so each three-byte character
+turns into three glyphs of that page.
+
+**Fix.** When stdout is a console the rows are written as UTF-16 through
+the console API (`WriteConsoleW`), which no code page touches and which
+even the legacy raster fonts render — the three blocks exist in every
+OEM font; a file or pipe still receives the UTF-8 bytes (REQ-TOOL-016
+rev 4). 1.1.0 users: `chcp 65001` in the same console before `hem-tool
+ext pair` usually helps; or `ext pair --no-qr` and a LOCAL QR generator
+over the printed payload — never a web one, the payload carries `user`,
+`email` and `hostname`. Other device strings hem-tool prints (key labels,
+names) still go through the code page: BACKLOG item 12.
+
+## FIXED in 1.2.0 — 1.1.0 release hem-tool: a foreign libwolfssl crashes it, a missing libwolfssl.dll stops it before `main`
+
+**Status:** fixed in 1.2.0 (M12). **Affected:** the 1.1.0 release
+binaries (REQ-BUILD-005), and any consumer of the SDK built against one
+wolfSSL and run with another.
+
+- **Foreign library** — `ehem_global_init()` refuses a wolfSSL other than
+  the one the SDK was built against with `EHEM_ERR_BACKEND_MISMATCH`: the
+  exact version plus a guard-banded self-test of the six structs the SDK
+  allocates (REQ-API-010); the implicit init paths return the same code
+  instead of `EHEM_ERR_NOMEM`. hem-tool runs that check before any command
+  and answers a refusal with one message — the version built against, the
+  one loaded and the remedy — and exit 12 (REQ-TOOL-024); `hem-tool
+  --version` prints both versions (REQ-TOOL-025).
+- **Missing DLL on Windows** — 1.1.0's `hem-tool.exe` without
+  `libwolfssl.dll` beside it (or on `PATH`) never started: Windows ended
+  it with `0xC0000135` (STATUS_DLL_NOT_FOUND) before any of its code ran.
+  The 1.2.0 binary loads the DLL on first use (a delay-load import) and
+  reports what is missing and where to put it, exit 12 (REQ-TOOL-026).
+- **No companion at all** — the one-file hem-tool (OpenSSL and libcurl
+  linked in) needs no wolfSSL library; from 1.2.0 it is the plain
+  `hem-tool-<version>-<os>-x86_64` asset and the wolfSSL build is the
+  `-shared` one (REQ-BUILD-009).
+
+The 1.1.0 binaries keep the old behaviour; the workaround for them is the
+companion asset: put the library from the release's
+`wolfssl-<version>-<os>-x86_64` asset next to the binary. A system wolfSSL
+works only with the same soname AND build configuration
+(`BUILD-CONFIG.txt`) — which 1.2.0 now checks instead of crashing.
+
+### Symptom (1.1.0)
+
+2026-10-10, v1.1.0-rc4 Linux archive: `hem-tool init-device` printed its
+first lines and aborted with `*** stack smashing detected ***`. The same
+binary works when the companion `libwolfssl.so.42` sits next to it.
+
+### Cause (1.1.0)
+
+hem-tool looks for `libwolfssl.so.42` in its own directory first (RUNPATH
+`$ORIGIN`), then in the system library path. Without the companion file it
+loaded the host's Ubuntu wolfSSL 5.6.6, which has the same soname but a
+different version and build configuration. The SDK allocates wolfCrypt
+structs itself (`crypto_shim.c`), and their sizes depend on both: `Hmac`
+is 784 bytes in the 5.7.2 release build and 896 in 5.6.6 (`DecodedCert`
+1528 vs 2576, `Aes` 880 vs 1104, `ed25519_key` 112 vs 384, `ed448_key` 184
+vs 632). `wc_HmacInit` overran the stack `Hmac`. Reproduced offline: the
+release-built `test_crypto` passes 8/8 with the bundled library and aborts
+in `test_hmac_sha256` against the system one. A same-version library built
+with other options is just as unsafe. On Windows the same applies to a
+different `libwolfssl.dll` found on `PATH` (e.g. MSYS2's) when the
+companion DLL is not next to `hem-tool.exe`.
 
 ## RESOLVED — Windows (MinGW) X25519 crash: missing wolfCrypt_Init()
 
@@ -433,7 +499,8 @@ The SDK never called `wolfCrypt_Init()`. gdb named the full crash chain:
   though the DLL was built with it, so consumer-visible wolfSSL struct layouts
   (`curve25519_key`: 128 bytes in-DLL vs 112 per headers) diverge from the
   DLL's. Caller-allocated wolfSSL structs remain an ABI hazard with prebuilt
-  packages.
+  packages. That hazard is why 1.2.0's `ehem_global_init()` self-tests
+  the structs the SDK allocates (REQ-API-010; see the entry above).
 - That header/DLL config divergence is a reportable packaging/upstream issue
   (wolfSSL's CMake build enables blinding by default but omits the define from
   the generated `options.h`; MSYS2 ships the result).

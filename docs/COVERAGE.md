@@ -3,9 +3,17 @@
 Produced by STEP-M9-010 (1.0 conformance sweep, 2026-08-06). Reconciles
 every page of https://github.com/KajtomatO/encedo-hem-api-doc (local
 checkout, fw v1.2.2 era) against the SDK surface, field by field.
+**Updated for 1.1.0 (M10, 2026-10-10):** `auth/init` and the `wipeout`
+write of `POST /api/system/config` are BOUND; nothing is `DEFERRED-M10`
+any more. **Re-checked for 1.2.0 (M12, 2026-10-16):** no change — M12
+binds no endpoint. Its one new public function, `ehem_build_info_get`,
+reports how the SDK was built and makes no device call; hem-tool's
+`init-wizard` drives the existing `auth/init` binding and `keys types`
+is local.
 
 **Dispositions:** `BOUND` (SDK binding exists), `UNBOUND-DELIBERATE`
-(never planned, with reason), `DEFERRED-M10` (post-1.0 milestone),
+(never planned, with reason), `DEFERRED-M10` (post-1.0 milestone — none
+left: both items were bound in 1.1.0),
 `DEFERRED-BACKLOG` (parked in `BACKLOG.md`, no milestone — 2026-10-07),
 `ABSENT-IN-FW` (documented but not present in firmware v1.2.2).
 Precedence for conflicts is the standing rule (REQUIREMENTS-MANAGEMENT
@@ -119,12 +127,12 @@ Additional notes (recorded SDK-side; doc gaps, not SDK gaps):
   deliberately mapped to EHEM_ERR_DEVICE, never NOT_FOUND
   (REQ-OPS-001/003); no crypto page documents a 404.
 
-## auth/ — 7 pages: 6 bound, 1 deliberately unbound
+## auth/ — 7 pages, all bound (init since 1.1.0)
 
 | Page | Endpoint | Disposition | SDK symbol(s) |
 |---|---|---|---|
 | token.md | `GET/POST /api/auth/token` | BOUND | `ehem_login`/`ehem_logout`/`ehem_login_mobile` (lazy; internal `ehem_auth_ensure_token`) |
-| init.md | `GET/POST /api/auth/init` | DEFERRED-M10 | — one-shot device personalisation (re-init requires a wipeout first). Re-dispositioned from UNBOUND-DELIBERATE 2026-08-07 (user decision: the SDK should be able to initialise a wiped device) |
+| init.md | `GET/POST /api/auth/init` | BOUND (1.1.0) | `ehem_device_init` + `ehem_init_params_init` / `ehem_init_info_free`; master secret via `ehem_mnemonic_generate` / `ehem_master_secret_from_mnemonic` (REQ-AUTH-011/012). One-shot device personalisation (re-init requires a wipeout first); verified attended only (REQ-TEST-007). Was DEFERRED-M10 (re-dispositioned from UNBOUND-DELIBERATE 2026-08-07, user decision: the SDK should be able to initialise a wiped device) |
 | ext-init.md | `POST /api/auth/ext/init` | BOUND | `ehem_ext_init` |
 | ext-validate.md | `POST /api/auth/ext/validate` | BOUND | `ehem_ext_validate` |
 | ext-mac.md | `POST /api/auth/ext/mac` | BOUND | `ehem_ext_mac` |
@@ -176,7 +184,7 @@ Field-level notes:
 | version.md | `GET /api/system/version` | BOUND | `ehem_system_version` |
 | checkin.md | `GET+POST /api/system/checkin` | BOUND | `ehem_system_checkin` (3-leg relay) |
 | config.md | `GET /api/system/config` | BOUND | `ehem_system_config` |
-| config.md | `POST /api/system/config` | BOUND (tls only — see note) | `ehem_system_config_install_cert`, `ehem_tls_recover` |
+| config.md | `POST /api/system/config` | BOUND (tls + wipeout — see note) | `ehem_system_config_install_cert`, `ehem_tls_recover`, `ehem_system_wipeout` (1.1.0) |
 | config-attestation.md | `GET /api/system/config/attestation` | BOUND | `ehem_system_attestation` |
 | reboot.md | `GET /api/system/reboot` | BOUND | `ehem_system_reboot` |
 | selftest.md | `GET /api/system/selftest` | BOUND | `ehem_system_selftest` |
@@ -190,7 +198,8 @@ Field-level notes:
 
 Field-level notes:
 
-- **`POST /api/system/config` is bound for the `tls` sub-object only.**
+- **`POST /api/system/config` is bound for the `tls` sub-object and
+  (since 1.1.0) the `wipeout` write.**
   The SDK never sends the general config-write fields (`user`, `email`,
   `origin`, the option booleans, `storage_*`, `userkey*`, `gen_csr`) —
   and never sends **`wipeout`** (device factory reset). Disposition:
@@ -200,7 +209,8 @@ Field-level notes:
   this sweep. **Update 2026-10-07 (user decision):** the `wipeout` write
   is M10 scope — DEFERRED-M10, its own REQ drafted at M10 decomposition;
   the remaining writes (`userkey*`, `gen_csr`, …) are BACKLOG.md
-  candidates. POST-response `csr`/`genuine` unparsed (tolerant policy).
+  candidates. **Bound in 1.1.0:** `ehem_system_wipeout` sends exactly
+  `{"wipeout":true}` (REQ-SYS-014; verified attended only). POST-response `csr`/`genuine` unparsed (tolerant policy).
 - **status `tts` — doc type is wrong, SDK right (fw-source-verified at
   this sweep):** firmware emits `tts` as a JSON boolean
   (`cJSON_AddBoolToObject`, api_system.c:92); the doc types it Number.
@@ -319,7 +329,7 @@ mapped to where this project records the divergence:
   bound with full field coverage, deliberately unbound with a recorded
   reason (general config writes incl. wipeout, logger DELETE, storage
   /ro//rw variants, search's unauthenticated bypass), or deferred to a
-  milestone — M10: auth/init (the upgrade family, config-provisioning
+  milestone — M10: auth/init and wipeout, both BOUND in 1.1.0 (the upgrade family, config-provisioning
   and diag/* are parked in BACKLOG.md since 2026-10-07; M11 retired);
   MFW (firmware-pending, one generic
   bucket, user decision 2026-08-07): everything documented or shipped

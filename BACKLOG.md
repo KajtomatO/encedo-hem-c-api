@@ -49,6 +49,9 @@ either way.
 
 ### 5. Friendly message when `libwolfssl.dll` is missing (Windows)
 
+**Moved to M12** (user decision 2026-10-12, ARCHITECTURE.md §11 M12
+part A); kept here, with its number, for provenance.
+
 Added by user decision 2026-10-10, from the first Windows test of the
 release binary. hem-tool links wolfSSL dynamically (REQ-BUILD-005), and
 today Windows refuses to start `hem-tool.exe` without `libwolfssl.dll`
@@ -59,6 +62,57 @@ message would need the DLL to be loaded on demand instead of at startup
 (e.g. a delay-load import), so hem-tool itself could report what is
 missing and where to put it.
 
+### 6. `init-wizard` explains the fields it asks for
+
+User note 2026-10-19 (from the 1.2.0-rc1 test; not analysed): the wizard
+should explain some of the fields — what `origin` or `dnsd` is, why it is
+needed and how it affects the HEM.
+
+### 7. `init-wizard` readability
+
+User note 2026-10-19 (not analysed): the wizard should be more readable —
+colours, maybe a simple GUI.
+
+### 8. Backup words: scrollback and a file
+
+User note 2026-10-19 (not analysed): the backup words stay visible in the
+terminal history (scrolling up); there should be an option to save them to
+a file.
+
+### 9. A safer way to pass the passphrase
+
+User note 2026-10-19 (not analysed): the passphrase lands in the console
+history; consider sessions — a `hem-tool login` that takes the passphrase
+safely from the user — though how to store it is open. Related:
+`--passphrase` is deprecated since 1.2.0 (REQ-TOOL-020 rev 2) and will be
+removed; `EHEM_PASSPHRASE` stays until this item lands.
+
+### 10. [Important] Split hem-tool from the SDK
+
+User note 2026-10-19 (not analysed): hem-tool and the SDK should become
+separate deliverables.
+
+### 11. `hem-tool random` is slow
+
+User note 2026-10-19 (not analysed): `hem-tool random` takes a long time —
+investigate; update the help text or the algorithm. Does it create a key
+only for itself? Perhaps keep that key instead of removing it every time:
+by default create it only if absent, with options to clean up and to use
+another existing key.
+
+### 12. hem-tool on Windows: device strings in the console's OEM code page
+
+Found 2026-10-20 while fixing the `ext pair` QR display (STEP-M12-137;
+not analysed): hem-tool writes UTF-8 to stdout, and a Windows console
+decodes it in its OEM code page — a non-ASCII key label, user name or
+hostname from the device (the device and the Manager are UTF-8) shows as
+mojibake there, and what the wizard reads from the console comes back in
+that code page. The QR fix bypasses the code page for the QR rows only.
+Options: switch the console to UTF-8 for the process
+(`SetConsoleOutputCP(65001)` + `SetConsoleCP(65001)`, restored at exit —
+also on Ctrl-C, as prompt.c restores the echo), or a wide-char console
+path for all console I/O.
+
 ## Candidates (no decision taken)
 
 - General config/administration writes other than `wipeout` — `userkey*`
@@ -66,6 +120,11 @@ missing and where to put it.
   `docs/COVERAGE.md`): no HEM-SDK-1..9 consumer needs them. Listed here
   only so the "candidate if ever wanted" notes have a target. (`wipeout`
   itself became M10 scope by user decision 2026-10-07.)
+- macOS builds (arm64 / x86_64) — kept out of M12 (user decision
+  2026-10-12): no consumer needs them yet.
+- An MSVC-ABI Windows library package — kept out of M12 (user decision
+  2026-10-12); ARCHITECTURE.md §1 adds MSVC when a consumer needs
+  MSVC-ABI artifacts.
 
 ## Provenance
 

@@ -3,8 +3,8 @@ id: REQ-API-008
 title: 1.0 ABI freeze and versioning
 status: verified
 priority: must
-revision: 1
-source: user decision 2026-08-06 (M9 scope reshape, ARCHITECTURE.md §11 "ABI freeze and the 1.0 release"); ARCHITECTURE.md §4 (semver, size/version discipline decided before 1.0)
+revision: 3   # 2026-10-20 (STEP-M12-137): annotation only — `ehem_ext_qr_payload` exported, one more 1.2.0 minor-bump addition; no status change
+source: user decision 2026-08-06 (M9 scope reshape, ARCHITECTURE.md §11 "ABI freeze and the 1.0 release"); ARCHITECTURE.md §4 (semver, size/version discipline decided before 1.0); rev 2 — annotation 2026-10-12 (M12 decomposition, §6.2 approved in chat; no status change — the ABI promise is untouched): the 1.0 record "no .pc file is shipped" is reversed by REQ-BUILD-008 from 1.2.0, and 1.2.0's additions (`EHEM_ERR_BACKEND_MISMATCH` appended to `ehem_rc`, `ehem_build_info_get` exported, and — rev 3, 2026-10-20, STEP-M12-137 — `ehem_ext_qr_payload` exported) are the minor-bump additions this REQ permits
 depends_on: ["REQ-API-003", "REQ-API-006"]
 supersedes: null
 superseded_by: null
@@ -51,7 +51,10 @@ hidden visibility + export macro) — the release makes them normative.
       the project version); CMake package version file carries 1.0.0;
       shared lib builds as libencedo-hem.so.1.0.0 with SONAME
       libencedo-hem.so.1. (No separate pkg-config .pc file is shipped —
-      the CMake package config is the consumption path.)
+      the CMake package config is the consumption path. *Rev 2,
+      2026-10-12: a 1.0 fact — REQ-BUILD-008 ships `encedo-hem.pc` from
+      1.2.0 beside the CMake config; the versioning contract here is
+      unchanged.*)
 - [x] The 1.x ABI promise is documented at ehem_version() in ehem.h
       and in docs/API-GUIDE.md (abi_size conventions section);
       ARCHITECTURE §4 reworded to "decided and shipped" — a recording

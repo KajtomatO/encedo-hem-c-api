@@ -1,6 +1,10 @@
 # Release — hem-tool binaries for Linux and Windows that link libcurl STATICALLY
 # and wolfSSL DYNAMICALLY, plus the shared wolfSSL as its own asset
-# (REQ-BUILD-005). implements: REQ-BUILD-005
+# (REQ-BUILD-005), the SDK library package — the shared library, wolfSSL
+# flavour — and the OpenSSL variants: the one-file hem-tool and the static SDK
+# library package, published under the plain names (the wolfSSL builds carry
+# -shared; user decision 2026-10-19) (REQ-BUILD-009).
+# implements: REQ-BUILD-005, REQ-BUILD-009
 #
 # Every push to `main` (and a manual run on any ref) builds the archives and
 # uploads them as workflow artifacts; a version tag `v*` additionally publishes
@@ -17,9 +21,22 @@
 # that build, the link mode is asserted (wolfSSL dynamic, nothing else),
 # scripts/release/package-wolfssl.sh packages the library with its
 # GPLv2-or-later COPYING, build configuration and corresponding source, and the
-# two archives are smoke-tested side by side. The Linux job also proves the
-# REQ-NET-005 expired-certificate classifier under the wolfSSL backend against a
-# local expired-cert endpoint (scripts/release/check-expired-classifier.sh).
+# two archives are smoke-tested side by side. On Windows hem-tool delay-loads
+# libwolfssl.dll (REQ-TOOL-026): package.sh asserts the delay import and runs
+# hem-tool WITHOUT the DLL first — it must report the DLL itself and exit 12.
+# package-lib.sh builds the shared library alone, packages it and builds + runs
+# the REQ-BUILD-008 sample consumer against the unpacked package and the
+# companion asset (find_package + pkg-config). Each job also builds the second,
+# all-static prefix deps-openssl (pinned OpenSSL 3.5 LTS + libcurl on OpenSSL),
+# cached on its own key, and from it the OpenSSL variants (package.sh … static
+# → package-static.sh): hem-tool with every third-party library linked in — the
+# unit suite on that build, glibc / Windows system DLLs only, no wolfSSL symbol
+# or name, --version reporting the pinned OpenSSL, the OpenSSL configuration
+# check (Windows reads none, Linux /etc/ssl) — and the static SDK package, whose
+# consumer links the all-static pkg-config closure (package-lib.sh static).
+# The Linux job also proves the REQ-NET-005 expired-certificate classifier
+# against local expired and not-yet-valid endpoints under both TLS backends
+# (scripts/release/check-expired-classifier.sh).
 # ci.yml (REQ-BUILD-002) is untouched by this workflow.
 
 name: Release
@@ -56,13 +73,30 @@ jobs:
       - name: Build shared wolfSSL + static libcurl
         run: scripts/release/build-deps.sh deps
 
-      - name: Build, test, package (hem-tool + wolfSSL asset), smoke-test
+      - name: Cache deps-openssl (pinned static OpenSSL + static libcurl)
+        uses: actions/cache@v5
+        with:
+          path: deps-openssl
+          key: deps-openssl-${{ runner.os }}-${{ hashFiles('scripts/release/build-deps.sh') }}
+
+      - name: Build static OpenSSL + static libcurl (deps-openssl)
+        run: scripts/release/build-deps.sh deps-openssl openssl
+
+      - name: Build, test, package (hem-tool, wolfSSL asset, SDK library), smoke-test
         env:
           RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
         run: scripts/release/package.sh deps linux dist
 
       - name: Prove the expired-certificate classifier (wolfSSL backend)
         run: scripts/release/check-expired-classifier.sh build-release/hem-tool 8443
+
+      - name: Build, test, package the OpenSSL variants (one-file hem-tool, static SDK library), smoke-test
+        env:
+          RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+        run: scripts/release/package.sh deps-openssl linux dist static
+
+      - name: Prove the expired-certificate classifier (one-file hem-tool, OpenSSL backend)
+        run: scripts/release/check-expired-classifier.sh build-release-static/hem-tool 8445
 
       - uses: actions/upload-artifact@v6
         with:
@@ -89,8 +123,9 @@ jobs:
         with:
           msystem: UCRT64
           update: true
+          # make + perl: OpenSSL's own build (deps-openssl).
           install: >-
-            zip unzip git
+            zip unzip git make perl
           pacboy: >-
             toolchain:p
             cmake:p
@@ -110,10 +145,24 @@ jobs:
       - name: Build shared wolfSSL + static libcurl
         run: scripts/release/build-deps.sh deps
 
-      - name: Build, test, package (hem-tool + wolfSSL asset), smoke-test
+      - name: Cache deps-openssl (pinned static OpenSSL + static libcurl)
+        uses: actions/cache@v5
+        with:
+          path: deps-openssl
+          key: deps-openssl-${{ runner.os }}-ucrt64-${{ hashFiles('scripts/release/build-deps.sh') }}
+
+      - name: Build static OpenSSL + static libcurl (deps-openssl)
+        run: scripts/release/build-deps.sh deps-openssl openssl
+
+      - name: Build, test, package (hem-tool, wolfSSL asset, SDK library), smoke-test
         env:
           RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
         run: scripts/release/package.sh deps windows dist
+
+      - name: Build, test, package the OpenSSL variants (one-file hem-tool, static SDK library), smoke-test
+        env:
+          RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+        run: scripts/release/package.sh deps-openssl windows dist static
 
       - uses: actions/upload-artifact@v6
         with:

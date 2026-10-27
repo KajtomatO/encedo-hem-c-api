@@ -8,6 +8,21 @@ ehem_add_unit_test(test_json SOURCES test_json.c)
 # REQ-API-001..004: context lifecycle, options, error enum, last-error.
 ehem_add_unit_test(test_context SOURCES test_context.c)
 
+# REQ-API-010: crypto-backend compatibility check at ehem_global_init — the
+# seam-forced refusals, implicit-init propagation, idempotency across a refusal.
+ehem_add_unit_test(test_backend_compat SOURCES test_backend_compat.c)
+
+# REQ-API-011: build information. The expected values come from the build's
+# own dependency discovery (pkg-config / FindOpenSSL, FindCURL, the link-mode
+# detection in the top-level CMakeLists.txt) — no test includes a backend header.
+ehem_add_unit_test(test_build_info SOURCES test_build_info.c)
+target_compile_definitions(test_build_info PRIVATE
+  EHEM_TEST_CRYPTO_BACKEND="${EHEM_CRYPTO_NAME}"
+  EHEM_TEST_CRYPTO_VERSION="${EHEM_CRYPTO_VERSION}"
+  EHEM_TEST_CRYPTO_LINK="${EHEM_CRYPTO_LINK}"
+  EHEM_TEST_TRANSPORT_VERSION="${EHEM_CURL_VERSION}"
+  EHEM_TEST_TRANSPORT_LINK="${EHEM_TRANSPORT_LINK}")
+
 # REQ-NET-001, REQ-TEST-001: transport vtable seam via the injected fake.
 ehem_add_unit_test(test_transport SOURCES test_transport.c)
 
@@ -82,6 +97,14 @@ if(TARGET hem-tool-core)
   ehem_add_unit_test(test_init_tool SOURCES test_init_tool.c)
   target_link_libraries(test_init_tool PRIVATE hem-tool-core)
 
+  # REQ-TOOL-028: `init-wizard` — scripted dialogues over the fake transport
+  # (byte-identical init body to init-device), and the no-echo prompt helper
+  # (plain lines off a terminal; a pseudo-terminal for echo off/restore).
+  ehem_add_unit_test(test_wizard SOURCES test_wizard.c)
+  target_link_libraries(test_wizard PRIVATE hem-tool-core)
+  ehem_add_unit_test(test_prompt SOURCES test_prompt.c)
+  target_link_libraries(test_prompt PRIVATE hem-tool-core)
+
   # REQ-TOOL-023: `recovery` — the five diagnoses and their remediations (M10).
   ehem_add_unit_test(test_recovery SOURCES test_recovery.c)
   target_link_libraries(test_recovery PRIVATE hem-tool-core)
@@ -97,6 +120,31 @@ if(TARGET hem-tool-core)
   # REQ-TOOL-017/019/020: command registry, help rendering, URL resolution.
   ehem_add_unit_test(test_registry SOURCES test_registry.c)
   target_link_libraries(test_registry PRIVATE hem-tool-core)
+
+  # REQ-TOOL-027: the key-type table behind `keys gen -h` / `keys types`,
+  # checked against the SDK classifier (REQ-KEY-006).
+  ehem_add_unit_test(test_keytypes SOURCES test_keytypes.c)
+  target_link_libraries(test_keytypes PRIVATE hem-tool-core)
+
+  # REQ-TOOL-024/025: the start of run — explicit SDK init with its refusal
+  # message + exit 12, and the --version report (hem-tool-core).
+  ehem_add_unit_test(test_tool_startup SOURCES test_tool_startup.c)
+  target_link_libraries(test_tool_startup PRIVATE hem-tool-core)
+
+  # REQ-TOOL-024/025 on the REAL main.c: a test build of hem-tool whose
+  # constructor forces the REQ-API-010 refusal named by
+  # EHEM_TEST_FORCE_MISMATCH; the script drives the command line.
+  add_executable(hem-tool-forced-mismatch
+    ${PROJECT_SOURCE_DIR}/src/tools/hem-tool/main.c tool_force_mismatch.c)
+  target_link_libraries(hem-tool-forced-mismatch PRIVATE
+    hem-tool-core ehem_test_support)
+  target_compile_options(hem-tool-forced-mismatch PRIVATE ${EHEM_WARNING_FLAGS})
+  add_test(NAME tool_startup_cli
+    COMMAND ${CMAKE_COMMAND}
+      -DEHEM_TOOL=$<TARGET_FILE:hem-tool-forced-mismatch>
+      -DEHEM_VERSION=${PROJECT_VERSION}
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/check_tool_startup.cmake)
+  set_tests_properties(tool_startup_cli PROPERTIES LABELS unit)
 endif()
 
 # REQ-SYS-004, REQ-SYS-005: config GET / cert install / reboot bindings.
@@ -145,21 +193,33 @@ ehem_add_unit_test(test_bip39 SOURCES test_bip39.c)
 # REQ-AUTH-011: device initialisation binding via the fake transport (M10).
 ehem_add_unit_test(test_init SOURCES test_init.c)
 
-# REQ-NET-002 + REQ-AUTH-001: public headers must not reference libcurl/wolfSSL.
+# REQ-NET-002 + REQ-AUTH-001 + REQ-BUILD-007: public headers must not reference
+# libcurl, wolfSSL or OpenSSL.
 add_test(NAME public_headers_dep_free
   COMMAND ${CMAKE_COMMAND}
     -DEHEM_INCLUDE_DIR=${PROJECT_SOURCE_DIR}/include
     -P ${CMAKE_CURRENT_SOURCE_DIR}/check_public_headers.cmake)
 set_tests_properties(public_headers_dep_free PROPERTIES LABELS unit)
 
-# REQ-API-006: the shared library must export only ehem_* symbols.
-# Scripted nm/objdump check, run as a CTest with the `unit` label.
-add_test(NAME export_symbols
+# REQ-BUILD-007: no test knows the crypto backend — only the per-backend
+# tests/support/crypto_ref_<backend>.c includes a wolfSSL or OpenSSL header.
+add_test(NAME tests_backend_free
   COMMAND ${CMAKE_COMMAND}
-    -DEHEM_SHARED_LIB=$<TARGET_FILE:encedo-hem>
-    -DEHEM_EXPORTS_BASELINE=${CMAKE_CURRENT_SOURCE_DIR}/exports_baseline_1.0.txt
-    -P ${CMAKE_CURRENT_SOURCE_DIR}/check_exports.cmake)
-set_tests_properties(export_symbols PROPERTIES LABELS unit)
+    -DEHEM_TESTS_DIR=${PROJECT_SOURCE_DIR}/tests
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/check_tests_backend_free.cmake)
+set_tests_properties(tests_backend_free PROPERTIES LABELS unit)
+
+# REQ-API-006: the shared library must export only ehem_* symbols.
+# Scripted nm/objdump check, run as a CTest with the `unit` label — wherever a
+# shared library is built (EHEM_BUILD_SHARED, REQ-BUILD-006).
+if(TARGET encedo-hem)
+  add_test(NAME export_symbols
+    COMMAND ${CMAKE_COMMAND}
+      -DEHEM_SHARED_LIB=$<TARGET_FILE:encedo-hem>
+      -DEHEM_EXPORTS_BASELINE=${CMAKE_CURRENT_SOURCE_DIR}/exports_baseline_1.0.txt
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/check_exports.cmake)
+  set_tests_properties(export_symbols PROPERTIES LABELS unit)
+endif()
 
 # REQ-API-007: docs/API-GUIDE.md must index every public symbol (the
 # headers are the per-symbol reference; the guide is the map to them).

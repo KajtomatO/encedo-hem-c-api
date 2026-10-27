@@ -23,6 +23,8 @@
 #include <string.h>
 
 #include "context.h"
+#include "crypto_shim.h"   /* ehem_sha256 — the QR payload's hash */
+#include "ejwt.h"          /* ehem_b64_std_encode */
 #include "json.h"
 #include "proto_common.h"
 #include "transport.h"
@@ -521,6 +523,70 @@ void ehem_notify_event_result_free(ehem_notify_event_result *r)
     }
     free(r->authreply);
     free(r);
+}
+
+/* -------------------------------------------------------------------------- */
+/* the QR payload                                                             */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * {"link","hash","user","email","hostname"} in that order, compact — the
+ * Manager's JSON.stringify of its `result` object (assets/build.js,
+ * pairdeviceNow). `hash` = base64(SHA-256(request)): the phone fetches `link`,
+ * hashes the request the broker serves and compares (hem-sdk-js does the same;
+ * hem-api-tester's "not_implemented_yet" placeholder is what the new Encedo
+ * Auth app refuses). cJSON's unformatted printer escapes what JSON.stringify
+ * escapes and nothing more — '/' stays bare.
+ */
+ehem_rc ehem_ext_qr_payload(const char *link, const char *request_jwt,
+                            const char *user, const char *email,
+                            const char *hostname, char **json_out)
+{
+    uint8_t digest[EHEM_SHA256_SIZE];
+    char hash_b64[48];            /* 44 chars + NUL */
+    ehem_json *obj;
+    char *printed = NULL, *copy;
+    ehem_rc rc;
+
+    if (json_out == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    *json_out = NULL;
+    if (link == NULL || request_jwt == NULL) {
+        return EHEM_ERR_ARG;
+    }
+    rc = ehem_sha256((const uint8_t *)request_jwt, strlen(request_jwt), digest);
+    if (rc != EHEM_OK) {
+        return rc;
+    }
+    if (ehem_b64_std_encode(digest, sizeof digest, hash_b64,
+                            sizeof hash_b64) == (size_t)-1) {
+        return EHEM_ERR_PROTOCOL; /* cannot happen: the buffer fits 44 + NUL */
+    }
+
+    obj = ehem_json_new_object();
+    if (obj != NULL &&
+        ehem_json_add_string(obj, "link", link) &&
+        ehem_json_add_string(obj, "hash", hash_b64) &&
+        ehem_json_add_string(obj, "user", user != NULL ? user : "") &&
+        ehem_json_add_string(obj, "email", email != NULL ? email : "") &&
+        ehem_json_add_string(obj, "hostname",
+                             hostname != NULL ? hostname : "")) {
+        printed = ehem_json_print(obj);
+    }
+    ehem_json_free(obj);
+    if (printed == NULL) {
+        return EHEM_ERR_NOMEM;
+    }
+    /* Plain malloc copy: ehem_notify_string_free() is free(), the printed
+     * string is cJSON's. */
+    copy = dup_str(printed);
+    ehem_json_string_free(printed);
+    if (copy == NULL) {
+        return EHEM_ERR_NOMEM;
+    }
+    *json_out = copy;
+    return EHEM_OK;
 }
 
 void ehem_notify_string_free(char *s)

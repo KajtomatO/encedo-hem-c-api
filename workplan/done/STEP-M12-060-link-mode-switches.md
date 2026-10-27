@@ -1,0 +1,131 @@
+---
+id: STEP-M12-060
+title: "CMake switches — EHEM_BUILD_SHARED / EHEM_BUILD_STATIC / EHEM_TOOL_LINK / EHEM_DEPS_LINK, static-wolfSSL licensing WARNING, private test archive, ./dev flags, ci.yml legs"
+milestone: M12
+implements: ["REQ-BUILD-006"]
+traces:
+  architecture: ["ARCHITECTURE.md#1-decisions-fixed", "ARCHITECTURE.md#11-milestones", "ARCHITECTURE.md#12-risks--open-questions"]
+depends_on: []
+evidence:
+  commits: ["20dd93c", "fca7425", "d2d219d", "50ca2a7"]   # start; implementation; evidence; CI-run evidence — the done commit follows
+  tests:
+    - "Default configure before vs after (scratch dirs, dev host): install listing (16 files), hem-tool NEEDED, hem-tool link line, libencedo-hem.so link line — all identical; exported shared target gains INTERFACE_COMPILE_DEFINITIONS EHEM_USING_SHARED (intended)"
+    - "Switch builds, Linux gcc: shared-only + EHEM_TOOL_LINK=shared → hem-tool NEEDED libencedo-hem.so.1, install = .so only, unit 54/54; static-only → install = libencedo-hem.a only, unit 53/53 (no export gate without a shared lib); shared-only (tool static) → private libencedo-hem-internal.a, not installed, unit 54/54"
+    - "Negative configures: both variants OFF; tool shared without shared variant; bad EHEM_TOOL_LINK / EHEM_DEPS_LINK values; EHEM_DEPS_LINK=static on Ubuntu (libnghttp2 has no archive) and against the release prefix (libwolfssl has no archive); EHEM_DEPS_LINK=shared against the release prefix (libcurl static) — each a FATAL_ERROR naming the option/dependency"
+    - "Static-wolfSSL WARNING: fires with an archive-only wolfssl.pc prefix (default deps link, status 'wolfSSL 5.6.6 (static)'), absent on the default configure"
+    - "ci.yml: matrix expansion emulated (Linux: gcc, clang + 2 switch legs; Windows: default + 2 switch legs, default check names unchanged); the assertion scripts run locally — pass on the matching build, fail on the default build"
+    - "./dev ci 54/54 gcc + clang; ./dev test asan 54/54; shellcheck dev clean; ./dev build --static-only builds in build-static-only"
+    - "CI run 38400370544 (push f52b02c, 2026-10-13): Linux 4/4 green — gcc, clang, 'gcc, shared-only, hem-tool on the shared SDK' and 'gcc, static-only', each Build + Unit tests + (switch legs) 'Assert the link result' success. Windows 3/3 failed at Build (3 s in): STEP-M12-010's probe message array, rejected by MSYS2's GCC 16.2 — fixed b00620d (see STEP-M12-010 evidence), not a switch defect"
+    - "Before the re-run, locally: MinGW cross-builds (posix-thread GCC 13 against MSYS2 wolfSSL 5.9.4 / curl 8.22.0 / cmocka 1.1.8) of the three Windows legs compile and link; the ci.yml assertions hold on them — shared-only: hem-tool.exe imports libencedo-hem.dll, no libencedo-hem.a installed; static-only: no libencedo-hem.dll* built or installed, libencedo-hem.a installed"
+    - "CI run 38403218107 (push 50ca2a7, 2026-10-13): ALL 7 legs green — Linux gcc, clang, 'gcc, shared-only, hem-tool on the shared SDK', 'gcc, static-only'; Windows (MinGW), '(MinGW, shared-only, hem-tool on the shared SDK)', '(MinGW, static-only)'. On the four switch legs Build + Unit tests + 'Assert the link result' success; on the three default legs the assertion step is skipped by design. The last DoD box closes here"
+  notes: |
+    DONE 2026-10-13 with CI run 38403218107 (all 7 legs green, both
+    platforms' switch legs asserted). The first run (38400370544) had the
+    Linux legs green and the Windows build broken by STEP-M12-010's probe
+    message under MSYS2's GCC 16.2 (fixed b00620d) — no switch defect.
+    Settled at start (REQ-BUILD-006 rev 2): Ubuntu ships libwolfssl.a and
+    libcurl.a but libcurl's static closure lacks 10 archives; MSYS2 UCRT64
+    ships both (+ closure ssh2/idn2/OpenSSL/zlib/brotli/zstd/nghttp*/psl).
+    No EHEM_DEPS_LINK=static CI leg: Linux cannot, MSYS2 would put wolfSSL
+    inside the binaries (§1) — the static deps link is release.yml's
+    OpenSSL build (STEP-M12-120).
+    Design: the static archive target is the installed variant
+    (encedo-hem-static) or, with EHEM_BUILD_STATIC=OFF, a private
+    encedo-hem-internal (OUTPUT_NAME libencedo-hem-internal.a, never
+    installed) built when tests or a static-linked hem-tool need it;
+    EHEM_STATIC_TARGET names it for in-tree consumers (test support,
+    hem-tool-core). hem-tool-core always sits on the static SDK (the unit
+    tests use the hidden seams); EHEM_TOOL_LINK=shared builds a second copy,
+    hem-tool-core-shared, linked to encedo-hem::encedo-hem for the exe — the
+    tool code is public-API-only, so it compiles against either. The shared
+    target gets INTERFACE EHEM_USING_SHARED. Integration tests link the
+    static SDK when no shared one exists; the export gate is registered only
+    with a shared library. include(CTest) moved up (BUILD_TESTING decides
+    the private archive). EHEM_DEPS_LINK: lookup suffixes switched around the
+    two dependency lookups only (restored before the tests find cmocka);
+    static = CURL_USE_STATIC_LIBS + archive-only closures from pkg-config
+    --static (glibc and Windows system import libs pass through by name);
+    a package's own library is looked up ONLY in its own pkg-config libdir
+    (fix: the first try mixed the prefix's 5.7.2 headers with the system's
+    5.6.6 archive); a preference the lookups could not honour is a
+    FATAL_ERROR, never a fall-back. The crypto link word (STEP-M12-020's
+    EHEM_CRYPTO_LINK_STATIC) comes from the same classification.
+    ./dev build: --shared-only / --static-only / --tool-link X / --deps X,
+    own build dir per non-default set (REQ-BUILD-004 rev 2 note).
+    ci.yml gotchas caught before pushing: (1) an `include` entry that
+    overwrites no original matrix value is MERGED into the existing combo —
+    without the explicit `variant: ['']` dimension the default gcc leg would
+    have become a switch leg; (2) `! cmd` never trips `set -e` in bash — the
+    assertions use explicit `if ...; then fail; fi`.
+reopened: []
+cancelled: null
+---
+
+**Goal:** the build offers `EHEM_BUILD_SHARED` (ON), `EHEM_BUILD_STATIC`
+(ON), `EHEM_TOOL_LINK=static|shared`, `EHEM_DEPS_LINK=default|static|shared`
+with today's behaviour as every default; invalid combinations fail at
+configure naming the option; a wolfSSL that resolves to a static archive
+triggers a `message(WARNING)` naming the licensing consequence (§12 risk
+1); the unit suite builds under every combination; `./dev build` exposes
+the switches; `ci.yml` runs the non-default legs.
+
+**Notes:** Today (CMakeLists.txt): both `encedo-hem` SHARED and
+`encedo-hem-static` unconditional, `hem-tool-core` STATIC →
+`encedo-hem::encedo-hem-static`, `find_package(CURL)`,
+`pkg_check_modules(WOLFSSL REQUIRED IMPORTED_TARGET wolfssl)`,
+`-Wl,--exclude-libs,ALL`, options `EHEM_SANITIZE`, `EHEM_BUILD_TOOL`.
+Plan: an OBJECT library feeds both variants and a private, non-installed
+static target the tests link when `EHEM_BUILD_STATIC=OFF` (the tests
+reach hidden seams, so they cannot link the shared library alone);
+`EHEM_TOOL_LINK=shared` links hem-tool-core/hem-tool to `encedo-hem` — on
+Windows that needs `EHEM_USING_SHARED` on the consumer, so land the
+shared target's `INTERFACE` compile definition here (STEP-M12-070 then
+asserts it in the installed export). `EHEM_DEPS_LINK=static`:
+`CMAKE_FIND_LIBRARY_SUFFIXES` archives first, `pkg_check_modules` static
+flags (`WOLFSSL_STATIC_LIBRARIES`/`_LDFLAGS`), `CURL_USE_STATIC_LIBS`
+(check the project's `cmake_minimum_required` supports it, else set the
+suffix list before `find_package(CURL)`); a dependency with no archive is
+a configure error naming it — never a silent fall-back. Archive
+detection for the warning: inspect the resolved wolfSSL library path's
+extension (`.a`/`.lib`), any `EHEM_DEPS_LINK`; the WARNING text names
+§12 risk 1 and says no published package of this project does this; the
+release scripts' refusal (REQ-BUILD-005 link-mode assertion) stays. Also
+emit a compile definition for the resolved crypto link mode
+(`EHEM_CRYPTO_LINK_STATIC`) — STEP-M12-020's `--version` prints the word.
+`./dev build` flags (names at the step, e.g. `--shared-only`,
+`--static-only`, `--tool-link shared`, `--deps static`). `ci.yml` legs:
+shared-only + `EHEM_TOOL_LINK=shared`; static-only — Linux, and Windows
+where MSYS2 packages allow. Resolve the REQ's OPEN criterion first:
+whether Ubuntu `libwolfssl-dev`/`libcurl4-*-dev` and MSYS2 `wolfssl`/
+`curl` ship static archives at all (`dpkg -L` on the dev host, the MSYS2
+package listing) — decides whether an `EHEM_DEPS_LINK=static` leg can run
+in `ci.yml` or only against the release prefix (`release.yml`,
+STEP-M12-120); record in the REQ (rev bump). Gotcha: on the dev host
+`EHEM_TOOL_LINK=shared` resolves libwolfssl from the system — fine for
+development, but no release conclusions from it (memory: the system
+wolfSSL masks clean-runner failures). The default configure must produce
+exactly today's targets, install set and link lines — record the
+before/after diff of `cmake --install` listings and `ldd`/`objdump -p
+hem-tool`.
+
+**Definition of done**
+- [x] Four options with the documented defaults; default configure
+      unchanged (install listing + hem-tool `ldd`/`objdump -p` diffs
+      recorded in the REQ or notes).
+- [x] Negative configures recorded: both variants OFF; tool shared without
+      the shared variant; `EHEM_DEPS_LINK=static` with a dependency lacking
+      an archive — each fails naming the option.
+- [x] `EHEM_TOOL_LINK=shared`: hem-tool links `libencedo-hem` (ldd/import
+      table), suite green; `EHEM_BUILD_SHARED=OFF` and `EHEM_BUILD_STATIC=OFF`
+      each build + pass the suite (private test archive) — ci.yml legs
+      green on both platforms where the distro packages allow.
+      (CI run 38403218107.)
+- [x] Static-wolfSSL WARNING fires against the REQ-BUILD-005 release prefix
+      with `EHEM_DEPS_LINK=static` and is absent otherwise (recorded).
+- [x] `./dev build` exposes the switches (REQ-BUILD-004 doc updated);
+      shared target carries `INTERFACE EHEM_USING_SHARED`;
+      `EHEM_CRYPTO_LINK_STATIC` definition emitted.
+- [x] REQ-BUILD-006 OPEN criterion (distro static archives) resolved and
+      recorded (rev bump); `implements: REQ-BUILD-006` tag in
+      CMakeLists.txt / ci.yml; `./dev ci` gcc + clang + ASan green on the
+      default configure.

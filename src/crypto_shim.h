@@ -236,8 +236,42 @@ ehem_rc ehem_aes128_cbc_decrypt(const uint8_t key[EHEM_AES128_KEY_SIZE],
  * path runs the wolfCrypt RNG (curve25519 blinding, default-on since wolfSSL
  * 5.8.2), and locking its uninitialized global mutex crashes. pthread builds
  * initialize those mutexes statically, which masks a missing init on Linux.
+ *
+ * Init is also the backend compatibility check (REQ-API-010): the library
+ * loaded at run time must be the exact version the SDK was compiled against
+ * AND pass a guard-banded known-answer probe of every wolfCrypt struct the
+ * shim allocates itself (Hmac, WC_RNG, DecodedCert, Aes, ed25519_key,
+ * ed448_key). Anything else is EHEM_ERR_BACKEND_MISMATCH, and the refusal
+ * leaves wolfCrypt's global state as it found it. EHEM_ERR_NOMEM if a probe
+ * could not allocate its box (never reported as a mismatch); EHEM_ERR_PROTOCOL
+ * if wolfCrypt_Init itself fails.
  */
 ehem_rc ehem_crypto_backend_global_init(void);
 void ehem_crypto_backend_global_cleanup(void);
+
+/*
+ * The crypto half of ehem_build_info_get() (REQ-API-011): fills the four
+ * crypto_* fields of *out with static strings — the backend name, the version
+ * from its headers, the version the loaded library reports, and the link mode
+ * the build resolved ("static" when configured with EHEM_CRYPTO_LINK_STATIC).
+ * Asks the library only for a version string, so it is safe on any library,
+ * before ehem_crypto_backend_global_init() and after a refused one.
+ */
+void ehem_crypto_backend_describe(ehem_build_info *out);
+
+/*
+ * Test-only seam for the compatibility check (never exported; hidden
+ * visibility). EHEM_CRYPTO_FORCE_VERSION makes the version comparison see a
+ * foreign library (the refusal happens before wolfCrypt_Init — no wolfCrypt
+ * call runs); EHEM_CRYPTO_FORCE_PROBE corrupts the first probe's known answer
+ * so the probe path refuses (wolfCrypt_Init + that probe + wolfCrypt_Cleanup
+ * run, nothing else). EHEM_CRYPTO_FORCE_NONE restores the real check. Not
+ * thread-safe — unit-test use only; the global init must not be "ready" when
+ * forcing, or the (idempotent) wrapper never reaches the check.
+ */
+#define EHEM_CRYPTO_FORCE_NONE    0
+#define EHEM_CRYPTO_FORCE_VERSION 1
+#define EHEM_CRYPTO_FORCE_PROBE   2
+void ehem_crypto_test_force_mismatch(int mode);
 
 #endif /* EHEM_CRYPTO_SHIM_H */

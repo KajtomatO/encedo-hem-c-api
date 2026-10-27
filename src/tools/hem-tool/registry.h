@@ -52,6 +52,9 @@ typedef struct {
     const hem_cmd_option *options;   /* this command's own options */
     size_t option_count;
     hem_cmd_section section;         /* listing section; zero = MAIN */
+    void (*more)(FILE *f);           /* renders extra per-command help after
+                                      * the details (keys gen: the type list,
+                                      * REQ-TOOL-027); NULL = none */
 } hem_command;
 
 /* The full command table (REQ-TOOL-019/020 completeness walks). */
@@ -85,8 +88,11 @@ int hem_help_command(FILE *f, const char *cmd, const char *subcmd);
  * convention (the provisioning cloud registers devices under the `my`
  * domain: api.encedo.com/domain/register/my), not a user-specific address.
  * Tool-side ONLY: the SDK itself takes URLs as explicit parameters.
+ * REQ-TOOL-028 rev 3: init-wizard offers the same hostname as its default
+ * (user decision 2026-10-19), so both come from one definition.
  */
-#define HEM_TOOL_DEFAULT_URL "https://my.ence.do"
+#define HEM_TOOL_DEFAULT_HOSTNAME "my.ence.do"
+#define HEM_TOOL_DEFAULT_URL "https://" HEM_TOOL_DEFAULT_HOSTNAME
 
 /*
  * Resolve the effective device URL: --url flag > EHEM_URL environment >
