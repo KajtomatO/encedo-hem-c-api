@@ -23,7 +23,10 @@ module.
 > switches for the library variants and link modes; an installed
 > `encedo-hem.pc`; hem-tool `--version`, `keys types` and `init-wizard`,
 > and a message instead of a crash or a silent stop when its wolfSSL is
-> wrong or missing (exit 12). Releases now carry the **one-file hem-tool**
+> wrong or missing (exit 12). `ext pair` pairs with the **new Encedo Auth
+> app** — the SDK composes the QR payload with the hash the app checks
+> (`ehem_ext_qr_payload`) — and its QR shows up in Windows consoles
+> (1.1.0 printed mojibake there). Releases now carry the **one-file hem-tool**
 > (OpenSSL linked in, no companion library) as the plain asset — the
 > wolfSSL build is the `-shared` one — and **SDK library packages**; see
 > [Download](#download).
