@@ -1,9 +1,9 @@
 ---
 id: REQ-TOOL-026
 title: hem-tool on Windows reports a missing libwolfssl.dll itself (delay-load import) instead of failing before main
-status: implemented
+status: verified
 priority: should
-revision: 4   # 2026-10-15 (STEP-M12-110 done): record only — the release .def came from gendef until 46be9d3, now from the link alone; re-proven by release run 38719457329. No meaning change. Rev 3 = 2026-10-13 (STEP-M12-100 done): the release-job criteria ticked and the OPEN criterion closed by release run 38407235207 (Windows job); rev 2 = --version without the DLL settled (tolerant hook, 'not found'), cross-build evidence. No meaning change — status set by the §4.3 regeneration
+revision: 5   # 2026-10-27 (STEP-M12-140, the M12 gate): verified — the attended Windows check met on the published `v1.2.0-rc4` assets (the user's report "all is working": the `-shared` zip without libwolfssl.dll → the message and exit 12, working again with the DLL back); every criterion closed; status set by hand (the generator only reports). No meaning change. Rev 4 = 2026-10-15 (STEP-M12-110 done): record only — the release .def came from gendef until 46be9d3, now from the link alone; re-proven by release run 38719457329. No meaning change. Rev 3 = 2026-10-13 (STEP-M12-100 done): the release-job criteria ticked and the OPEN criterion closed by release run 38407235207 (Windows job); rev 2 = --version without the DLL settled (tolerant hook, 'not found'), cross-build evidence. No meaning change — status set by the §4.3 regeneration
 source: user decision 2026-10-10 (BACKLOG item 5, from the first Windows test of the release binary — Windows refuses to start hem-tool.exe without libwolfssl.dll, exit -1073741515 / 0xC0000135, often with no message); moved into M12 by user decision 2026-10-12 (ARCHITECTURE.md §11 M12 part A: "the MinGW mechanism is proven at decomposition"); mechanism proven to link 2026-10-12 with the Debian x86_64-w64-mingw32 toolchain (GCC 13): `dlltool --output-delaylib` + mingw-w64 `libdelayimp.a` / `delayimp.h` (`__pfnDliFailureHook2`, `dliFailLoadLib`) — the PoC exe's static import table lists system DLLs only; run-time proof pending the Windows release job (no wine on the dev host); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-BUILD-005", "REQ-TOOL-024"]
 supersedes: null
@@ -97,8 +97,15 @@ executable or launcher is needed.
       present (same negative smoke).
       *(Same job: `help` and `keys types` exit 0 without the DLL, and
       `--version` reads "not found (loaded)".)*
-- [ ] Attended on Windows at the M12 gate: the published zip, DLL
+- [x] Attended on Windows at the M12 gate: the published zip, DLL
       removed → the message; DLL restored → `status` works (recorded).
+      *(Met — the user, 2026-10-27, on the published `v1.2.0-rc4` assets,
+      answering the gate's checklist (the `-shared` zip without
+      `libwolfssl.dll` → the message and exit 12; DLL back → `status`
+      works): "all is working". A one-line report — no transcript; the
+      rc1 run of 2026-10-19 (REQ-BUILD-009) saw the same message on the
+      then-dynamic binary. The release job's negative smoke proves the
+      mechanism on every build.)*
 - [x] RESOLVED at STEP-M12-100 (2026-10-13) — was OPEN (needs
       verification at the step): interplay of the delay-load
       helper with the `-static` (libgcc/winpthread) release link and the

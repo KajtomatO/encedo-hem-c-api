@@ -7,14 +7,16 @@ traces:
   architecture: ["ARCHITECTURE.md#11-milestones"]
 depends_on: ["STEP-M12-130", "STEP-M12-135", "STEP-M12-137"]
 evidence:
-  commits: ["67ffd14"]   # start; the evidence commits follow
+  commits: ["67ffd14", "9572bb6", "f8c943d"]   # start; the local gate suite; rc3/rc4 runs + README Status + the stalled re-run; the done commit follows
   tests:
     - "CI (box 1), 2026-10-19: ci.yml run 39320511927 on development (8dd915f) — all 10 legs green: Linux gcc, clang, gcc OpenSSL, clang OpenSSL, static-only, shared-only (hem-tool on the shared SDK); Windows MinGW, OpenSSL, static-only, shared-only. The rc tag's own CI run 39320626785: 10/10. Release run 39320626797 (the user's annotated v1.2.0-rc2 on 8dd915f): both build jobs green with every package step — the dynamic variants (package.sh, package-wolfssl.sh, package-lib.sh: link-mode, delay-load, no-DLL and drop-in smoke assertions), the OpenSSL variants (package-static.sh, package-lib.sh static: glibc-only / system-DLL-only imports, no wolfSSL symbol or string, the null-provider OPENSSL_CONF control, the static consumer gate), both Linux classifier steps; the publishing job's assemble (sha256sum -c, duplicate-name check) and publish green; release 417736562 with the 12 assets of REQ-BUILD-009 rev 8."
     - "CI (box 1) for the replacement candidates, 2026-10-20 (STEP-M12-137's two fixes): ci.yml 39401189070 on development (d532433, rc3) and 39439574020 (a481d07, rc4) — 10/10 legs each; the tags' own CI runs 39401247238 and 39439585486 — 10/10 each; release runs 39401247243 (rc3: Linux 2:26, Windows 9:07, publish 0:15) and 39439585466 (rc4: Linux 3:17, Windows 13:41, publish 0:17) — every build, package, smoke and classifier step green, the publishing job's assemble and publish green; pre-releases 418234162 (rc3) and 418511519 (rc4), 12 assets each under the final names, SHA256SUMS read back (11 archives) — REQ-BUILD-009 rev 9 / rev 10. rc4 (a481d07) is the tested candidate: the Linux binaries' behaviour is unchanged since rc3 (the rc4 diff is Windows-only console code), the Windows ones carry the QR render fix."
     - "Linux checks on the PUBLISHED rc2 binaries, 2026-10-19 (run on the dev host from the release assets, checksums verified against SHA256SUMS; the transcript reported to the user): one-file hem-tool-1.2.0-rc2-linux-x86_64 — ldd glibc only, no RUNPATH, --version 'OpenSSL 3.5.9 (compiled) / 3.5.9 (loaded), static' — `env -i ./hem-tool --url https://my.ence.do status` from a directory with no other file → device data, exit 0 (REQ-BUILD-009 attended criterion, Linux half). hem-tool-1.2.0-rc2-linux-x86_64-shared ALONE on this host (system libwolfssl.so.42 = 5.6.6) → --version '5.7.2 (compiled) / 5.6.6 (loaded)', `status` → exit 12, empty stdout, the REQ-TOOL-024 message naming the companion asset and the one-file asset, no crash (REQ-API-010 / REQ-TOOL-024 gate criteria); with the companion libwolfssl.so.42 beside it → resolved from $ORIGIN, 5.7.2 loaded, `status` exit 0. init-wizard on the one-file binary shows `hostname [my.ence.do]:` and cancels with exit 6 at end of input; `--passphrase x keys types` → exit 0 and one warning line; `--help` is 45 lines."
     - "Local gate suite (box 2), 2026-10-19 23:02–23:10 on ce1dddb's tree (log: scratchpad gate-local.log): ./dev ci 56/56 gcc + 56/56 clang (wolfSSL); ./dev ci --openssl 56/56 gcc + 56/56 clang; ./dev test asan 56/56 and ./dev test asan --openssl 56/56 (ASan/LSan clean); ./dev check 2/2 (export symbols, public headers). ./dev test it on the wolfSSL gcc build: 23/23 passed in 424.74 s — test_sign_live needed the third attempt of ctest's --repeat until-pass:3 (the dev helper's stall mitigation): attempts 1 and 2 hit EHEM_ERR_UNREACHABLE / EHEM_ERR_NETWORK on /api/auth/token ('Failed to connect to my.ence.do port 443', 'SSL connection timeout') for about a minute — the KNOWN-ISSUES sustained-load stall; the device recovered on its own, no power-cycle; the eight later tests passed first time. Device left clean afterwards: `hem-tool keys list` → 5 keys, the 3 protected ones (TLS PrivateKey, the paired phone, TLS Certificate) intact, 0 EHEMTEST labels (the key whose cleanup failed during the stalled attempt is gone)."
     - "Live sweep RE-RUN on the final code (box 2; HEAD df94d65 = rc4's a481d07 plus records), 2026-10-27 13:20–13:29 (log: scratchpad it140b.log): ./dev test it on the wolfSSL gcc build — 14/23 passed first time (keymgmt, update/import, wrap, notify session, ext pair/login live, logger, derive …), then the KNOWN-ISSUES sustained-load stall at test_sign_live, as on 2026-10-19: EHEM_ERR_UNREACHABLE on /api/auth/token ('Failed to connect to my.ence.do port 443 … Timeout was reached', then 'Couldn't connect to server'), all three --repeat attempts; the eight tests after it failed the same way (9 failed, exit 8). Unlike 2026-10-19 the device did NOT recover on its own: at 13:37 the USB network link (192.168.7.1 on enx0050c29af800) shows ARP INCOMPLETE, no ping, ports 443 and 80 closed — the device is off the link (hung hard, unplugged, or moved for the user's Windows test). One EHEMTEST key may be left: e6e5ee7eceadcde387aba90b594964f9 (its cleanup failed in the stalled attempt) — `hem-tool keys rm --all` for the EHEMTEST set once the device is back, and the sweep re-run (the box stays ticked on the 2026-10-19 23/23 run; the re-run's result is recorded here either way)."
-  notes: null
+    - "Attended (boxes 3, 5, 6 — the user, 2026-10-27, on the published v1.2.0-rc4 assets, answering the gate's four-point checklist put to them in chat): (1) the device is up again (it had been off the USB link after the 13:29 stall); (2) 'all is working' — `status` under system trust with each of the four hem-tool variants (Linux and Windows, one-file alone, -shared with the companion library / DLL beside it); the Windows -shared zip without libwolfssl.dll → the message and exit 12, working again with the DLL back; init-wizard end to end on the second unit on Linux and Windows (echo hidden and restored), then status + login. A one-line report, no transcript — recorded as such under REQ-BUILD-009 rev 11, REQ-TOOL-026 rev 5 (→ verified) and REQ-TOOL-028 rev 5. Which rc4 Windows hem-tool variant did the ext pair of REQ-TOOL-016 rev 5 was not named."
+    - "Live sweep on the final code, second run (box 2), 2026-10-27 13:58–14:04 after the user power-cycled the device (log: scratchpad it140c.log): the leftover EHEMTEST-100639-1 key removed first (`keys rm --label-prefix EHEMTEST-100639-1 --yes` → 1 deleted, 0 protected skipped); ./dev test it on the wolfSSL gcc build — 23/23 passed, every test on its first attempt, 338.81 s, exit 0. Device afterwards: `status` → fw v1.2.2-DIAG, uptime 675 s; `keys list` → 5 keys, the 3 protected (TLS PrivateKey, TLS Certificate, the Samsung SM-S938B (Android) pairing of 2026-10-27) intact, the user's two Onchato keys untouched, 0 EHEMTEST labels."
+  notes: "Gate passed 2026-10-27. Tested candidate v1.2.0-rc4 (a481d07). Every DoD box ticked; the one open M12 criterion is REQ-BUILD-009's push-to-main run — the release itself (merge development → main, the user's annotated v1.2.0 tag from the scratchpad release-notes-1.2.0.md). Attended records are the user's one-line report ('all is working') — no transcripts; the Linux status half also ran here on rc2. The 2026-10-27 13:29 stall of the first re-run is the KNOWN-ISSUES sustained-load hang (device off the USB link until the user's power-cycle)."
 reopened: []
 cancelled: null
 ---
@@ -83,17 +85,21 @@ without asking).
       recorded).
 - [x] Fresh local `./dev ci` gcc + clang + ASan + gates green on both
       backends; `./dev test it` green on the wolfSSL build; device clean.
-- [ ] Attended: `status` under system trust for all four published
+- [x] Attended: `status` under system trust for all four published
       hem-tool binaries (the one-file ones without a companion library) —
-      recorded in REQ-BUILD-009.
+      recorded in REQ-BUILD-009. *(The user, 2026-10-27, rc4 assets: "all
+      is working" — REQ-BUILD-009 rev 11.)*
 - [x] Attended: foreign-library refusal demo on this host (release dynamic
       Linux hem-tool, no companion, system 5.6.6 → message, exit 12, no
       crash) — recorded in REQ-API-010 and REQ-TOOL-024.
-- [ ] Attended: Windows missing-DLL message (zip without DLL → message +
-      exit 12; DLL restored → works) — recorded in REQ-TOOL-026.
-- [ ] Attended: `init-wizard` end to end on the second unit on Linux and
+- [x] Attended: Windows missing-DLL message (zip without DLL → message +
+      exit 12; DLL restored → works) — recorded in REQ-TOOL-026. *(The
+      user, 2026-10-27, rc4: "all is working" — REQ-TOOL-026 rev 5,
+      verified.)*
+- [x] Attended: `init-wizard` end to end on the second unit on Linux and
       Windows (echo-off and restoration checked), then `status` + login —
-      recorded in REQ-TOOL-028.
+      recorded in REQ-TOOL-028. *(The user, 2026-10-27, rc4: "all is
+      working" — REQ-TOOL-028 rev 5.)*
 - [x] Attended: `ext pair` from the published rc3 hem-tool (Linux) scanned
       by the new Encedo Auth app → paired, and from the published rc4
       hem-tool on Windows the QR renders in the console and pairs (the
@@ -102,12 +108,34 @@ without asking).
       Windows display as the only finding; "Ext pair works on windows"
       from rc4; Encedo HEM Auth 2.0.0-dev.8, Samsung SM-S938B (Android),
       kid 3dff0e4888f77b1e14e6812c17dbc4ce listed `[PROTECTED]`.)*
-- [ ] Docs checklist re-verified against the shipped behaviour: README
+- [x] Docs checklist re-verified against the shipped behaviour: README
       Status block / commands / APIs / Documentation / Layout,
-      docs/COVERAGE.md, KNOWN-ISSUES.md, docs/RELEASING.md.
-- [ ] TRACE.md regenerated (§4.3): all M12 REQs transitioned, REQ-NET-005
+      docs/COVERAGE.md, KNOWN-ISSUES.md, docs/RELEASING.md. *(2026-10-27:
+      README — Status block now "1.2.0 (2026-10-27)" with the M12 scope
+      including the two `ext pair` fixes, the Download table and the
+      "Names changed in 1.2.0" note match the published rc4 asset set,
+      the hem-tool section lists `--version`, `keys types`, `init-wizard`,
+      the deprecation and exit 12, the Layout names cmake/encedo-hem.pc
+      and scripts/release; docs/COVERAGE.md — no endpoint changed in M12
+      (its 2026-10-16 re-check stands); KNOWN-ISSUES.md — the two "FIXED
+      in 1.2.0" sections (ext pair with the new app, the Windows QR
+      display; the foreign-library crash / missing DLL) and the OPEN
+      device issues unchanged; docs/RELEASING.md — the variant table and
+      the rc procedure match, the cold-build timings carry rc1–rc4;
+      docs/API-GUIDE.md complete by the docs_coverage gate.)*
+- [x] TRACE.md regenerated (§4.3): all M12 REQs transitioned, REQ-NET-005
       verified again, no orphans/broken anchors, zero deliberately open
-      criteria or each one named with its reason.
-- [ ] ARCHITECTURE §11 M12 marked gate-passed; KNOWN-ISSUES and BACKLOG
+      criteria or each one named with its reason. *(2026-10-27, the done
+      commit: REQ-TOOL-026 verified (rev 5); REQ-BUILD-009 stays
+      implemented with ONE open criterion — the run of the push to `main`,
+      which is the release itself; the live-only/manual-only set
+      (BUILD-002/004/005/006, TOOL-001/002/014) as before.)*
+- [x] ARCHITECTURE §11 M12 marked gate-passed; KNOWN-ISSUES and BACKLOG
       reviewed; `v1.2.0` release per RELEASING "Final release" suggested
       to the user (merge `development` → `main`, annotated tag — user tags).
+      *(2026-10-27: §11 "Gate PASSED" paragraph; KNOWN-ISSUES' upstream
+      filing piles unchanged since the M10 gate (firmware still v1.2.2;
+      nothing new to file — the M12 findings were all SDK/tool-side and
+      are the FIXED sections); BACKLOG: items 6–12 parked (12 added by
+      STEP-M12-137), the macOS / MSVC candidates stay; the final notes are
+      the scratchpad `release-notes-1.2.0.md`.)*

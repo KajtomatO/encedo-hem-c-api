@@ -5,9 +5,10 @@ A portable **C99 client library** (the *Encedo HEM C SDK*, symbol prefix
 device over its REST/HTTPS API. Its first consumer is the `encedo-pkcs11`
 module.
 
-> **Status: 1.2.0 release candidate (2026-10-16)** — the latest release is
-> [1.1.0](https://github.com/KajtomatO/encedo-hem-c-api/releases/latest)
-> (2026-10-10). The SDK covers the device API end to end: the full eJWT
+> **Status: 1.2.0 (2026-10-27)** — the latest release is
+> [1.2.0](https://github.com/KajtomatO/encedo-hem-c-api/releases/latest)
+> (M12 gate passed 2026-10-27; tested as `v1.2.0-rc1` to `-rc4`). The SDK
+> covers the device API end to end: the full eJWT
 > auth flow (passphrase and mobile push-confirmation), device
 > initialisation and factory reset, key management
 > (list/search/get/create/delete/update/import/derive), every crypto

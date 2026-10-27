@@ -3,7 +3,7 @@ id: REQ-TOOL-028
 title: hem-tool init-wizard — attended, prompt-driven device initialisation over the init-device flow
 status: verified
 priority: should
-revision: 4   # 2026-10-19 (STEP-M12-135 done): re-verified — the rev 3 criterion checked (test_wizard, green on all 10 legs of CI run 39320511927 and in both release jobs' unit suites, run 39320626797 / `v1.2.0-rc2`); verified again. No meaning change. Rev 3 = 2026-10-19 (STEP-M12-135, §6.2 approved in chat): `hostname` defaults to `my.ence.do` — REQ-TOOL-017's product convention (user decision 2026-10-19 after the rc1 test); `user` and `email` keep no default; a unit criterion added; needs-reverify until test_wizard is green again. Rev 2 = 2026-10-13 (STEP-M12-050): OPEN criterion (environment pre-fill) settled — only --url / EHEM_URL; unit criteria recorded. No meaning change — approved status kept
+revision: 5   # 2026-10-27 (STEP-M12-140, the M12 gate): record only — the attended criterion met on the published `v1.2.0-rc4` assets (the user: the wizard end to end on the second unit on Linux and Windows, echo hidden and restored, then `status` + login — "all is working"); every criterion closed. No meaning change. Rev 4 = 2026-10-19 (STEP-M12-135 done): re-verified — the rev 3 criterion checked (test_wizard, green on all 10 legs of CI run 39320511927 and in both release jobs' unit suites, run 39320626797 / `v1.2.0-rc2`); verified again. No meaning change. Rev 3 = 2026-10-19 (STEP-M12-135, §6.2 approved in chat): `hostname` defaults to `my.ence.do` — REQ-TOOL-017's product convention (user decision 2026-10-19 after the rc1 test); `user` and `email` keep no default; a unit criterion added; needs-reverify until test_wizard is green again. Rev 2 = 2026-10-13 (STEP-M12-050): OPEN criterion (environment pre-fill) settled — only --url / EHEM_URL; unit criteria recorded. No meaning change — approved status kept
 source: user note 2026-10-10 ("initialisation creator" — hand-hold the user through init; NOT designed then); shape decided by the user 2026-10-12 (M12 planning: a SEPARATE wizard command, `init-device` stays purely scripted; explains and prompts for every field with its default, passphrase hidden and twice, generates the 24 words and confirms the backup by re-typing a few, summary behind a typed confirmation, then the existing init flow incl. the reboot; needs a shared no-echo prompt helper); ARCHITECTURE.md §11 M12 part E (command name settled at decomposition: `init-wizard`); REQ-TOOL-021 (the flow it drives), REQ-AUTH-012 (the words), REQ-TEST-007 (attended-only); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-TOOL-021", "REQ-AUTH-012", "REQ-TEST-007", "REQ-TOOL-020"]
 supersedes: null
@@ -130,9 +130,17 @@ makes the backup of the 24 words a step that cannot be skipped. Keeping
       help (test_registry_complete); top-level help ≤ 45 lines.
       *(Listed under "commands needing NO credentials" after init-device; the
       top page is exactly 45 lines — test_top_page_shape's cap.)*
-- [ ] Attended (REQ-TEST-007), recorded here: date, device, the wizard
+- [x] Attended (REQ-TEST-007), recorded here: date, device, the wizard
       run end to end on Linux and on Windows (the console echo-off
       behaviour included), then `status` + passphrase login.
+      *(Met — the user, 2026-10-27, on the published `v1.2.0-rc4` assets,
+      the second (uninitialised) unit, answering the gate's checklist
+      (the wizard end to end on Linux and on Windows, the passphrase
+      prompt hiding the typing and restoring the echo, then `status` and
+      a passphrase login): "all is working". A one-line report — no
+      transcript. The rc1 run of 2026-10-19 (REQ-BUILD-009) had already
+      taken the one-file binary's wizard through init, a key, a signature
+      and a wipe.)*
 - [x] RESOLVED at STEP-M12-050 (2026-10-13) — the step plan's
       recommendation: `--url` / `EHEM_URL` is the wizard's ONLY pre-fill.
       Secrets never come from the environment in this interactive flow:

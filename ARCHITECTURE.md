@@ -1029,13 +1029,40 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
     REQ-API-003 rev 2, REQ-API-008 rev 2, REQ-BUILD-005 rev 4 (record
     correction: `-150`), REQ-TOOL-009 rev 2 — wording/record bumps,
     statuses kept.
+
+  **Gate PASSED (2026-10-27, STEP-M12-140):** all fourteen steps done
+  (010 … 130, the inserted 135 and 137, the gate). Verified: REQ-API-010,
+  REQ-API-011, REQ-TOOL-024, REQ-TOOL-025, REQ-TOOL-026 (the attended
+  Windows missing-DLL check), REQ-TOOL-027, REQ-TOOL-028, REQ-BUILD-007,
+  REQ-BUILD-008; verified again: REQ-NET-005, REQ-TOOL-020, REQ-AUTH-008
+  and REQ-TOOL-016 (STEP-M12-137). Implemented, proven by the workflow
+  runs: REQ-BUILD-006, REQ-BUILD-009 (its push-to-`main` criterion closes
+  with the release itself), REQ-BUILD-005 again. Version **1.2.0**
+  (minor: a new error code, two functions, CMake options, hem-tool
+  commands; SONAME `.so.1`). The tested candidate is the user's annotated
+  `v1.2.0-rc4` (a481d07; release run 39439585466, release 418511519, 12
+  assets) — the fourth: rc1 → rc2 renamed the assets (STEP-M12-135), rc2
+  → rc3 fixed the `ext pair` QR hash, rc3 → rc4 its Windows display
+  (STEP-M12-137). CI 39439574020 / 39439585486 (10/10 legs each); the
+  local suite green on both backends (gcc, clang, ASan, gates); the live
+  sweep 23/23 (2026-10-19; the re-run on the final code is in the step's
+  record). Attended by the user on the rc4 assets (2026-10-27): `status`
+  under system trust with the four hem-tool variants, the Windows
+  missing-DLL message, the wizard on the second unit on Linux and
+  Windows, `ext pair` with the new Encedo Auth app; on this host
+  (2026-10-19): the foreign-library refusal. Docs checklist re-verified;
+  README Status = 1.2.0. The release — merge `development` → `main`, the
+  annotated `v1.2.0` tag from the drafted notes — is the user's
+  (docs/RELEASING.md "Final release"). Next milestone: none planned;
+  candidates in BACKLOG.md (items 6–12: hem-tool/SDK split, `random`
+  speed, the Windows code page for device strings, …).
 - **MFW — firmware-pending** *(created by user decision 2026-08-07: one
   generic future milestone for every feature that is documented — or
   shipped dormant — but MISSING from the running firmware; nothing here
   can be built or verified until upstream routes it; re-swept on every
   firmware upgrade, items promote to a numbered milestone when they go
-  live; re-checked at the M10 gate 2026-10-10 — firmware still v1.2.2,
-  list unchanged)*:
+  live; re-checked at the M10 gate 2026-10-10 and at the M12 gate
+  2026-10-27 — firmware still v1.2.2, list unchanged)*:
   - `DELETE /api/logger/{id}` — documented, handler exists, dispatch
     commented out (`/* not available in CC mode */`), every request
     404s (REQ-SYS-009 hook);
