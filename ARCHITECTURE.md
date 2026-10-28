@@ -1064,6 +1064,59 @@ REQUIREMENTS-MANAGEMENT.md §4.2.
   verified. The published Linux hem-tool assets smoke-tested on this
   host (REQ-BUILD-009 rev 12). M12 closed; the four rc pre-releases and
   tags are the user's to delete.
+- **M13 — hem-tool leaves the SDK: `encedo-hem-c-api` 1.2.1 ships the
+  libraries only** *(planned and approved 2026-10-27 together with the
+  hem-tool split — the plan of that date, whose tool half is recorded in
+  encedo-hem-tool's ARCHITECTURE.md §1 and §7; **decomposed 2026-10-28**:
+  REQ-BUILD-010/011 drafted and approved with the plan; the 27 REQ-TOOL
+  requirements, REQ-TOOL-026 and REQ-BUILD-005/009 superseded; the §6.2
+  revisions of REQ-BUILD-001/004/006, REQ-API-007 and REQ-NET-005 applied;
+  STEP-M13-010 … 060 created). hem-tool 1.3.0 is published from
+  [encedo-hem-tool](https://github.com/KajtomatO/encedo-hem-tool)
+  (`c-v1.3.0`, 2026-10-28), built on this SDK's published 1.2.0 package, so
+  the tool leaves this repository with no gap in its availability.*
+  - **A. The tool leaves** — `src/tools/hem-tool/` (the vendored qrcodegen
+    and the Windows delay-load import included), its CMake targets and
+    options (`EHEM_BUILD_TOOL`, `EHEM_TOOL_LINK`), `./dev tool`, the 19
+    tool unit tests and the tool's two integration and one disruptive
+    tests; the 27 REQ-TOOL requirements (001–025, 027, 028) are superseded
+    by the same ids in encedo-hem-tool (their text frozen here),
+    REQ-TOOL-026 by the tool repository's REQ-PKG-003 (the one-file
+    hem-tool has no companion DLL to miss) (STEP-M13-010).
+  - **B. SDK release without hem-tool** — `release.yml` publishes 8 assets
+    (the two library packages per OS, the wolfSSL companion per OS, the
+    wolfSSL source, `SHA256SUMS`); the unit suite still runs on both
+    Release builds; the REQ-NET-005 classifier check is driven by a small
+    `tls-probe` program instead of `hem-tool recovery`; `package-static.sh`
+    goes (REQ-BUILD-010 supersedes REQ-BUILD-005/009; STEP-M13-020).
+  - **C. Consumability for the tool repository** — `add_subdirectory(<sdk>)`
+    with the tests and the shared variant switched off is a supported,
+    gated shape; `tests/support/` becomes the target `ehem::test-support`;
+    a `subdir_consumer` gate proves the out-of-tree consumer
+    (REQ-BUILD-011; STEP-M13-030).
+  - **D. Runnable examples** — `examples/status.c` and `examples/sign.c`,
+    compiled in CI (`EHEM_BUILD_EXAMPLES`); REQ-API-007's "hem-tool remains
+    the runnable examples" becomes these plus a pointer (STEP-M13-040).
+  - **E. Docs and process** — README, docs/API-GUIDE.md, docs/RELEASING.md,
+    tests/README.md, KNOWN-ISSUES.md, BACKLOG.md (item 10 done, 6–9/11/12
+    moved), this document (TLDR, §3, §8 → a summary and the link, §9, §10,
+    §12), REQUIREMENTS-MANAGEMENT.md §8 (the tool repository as the
+    authority for hem-tool behaviour and the REQ-TOOL ids);
+    `project(VERSION 1.2.1)` (STEP-M13-050).
+  - *Out of scope:* any hem-tool behaviour change (encedo-hem-tool's);
+    macOS / MSVC; the ABI — 1.2.1 is a **patch** (user decision 2026-10-28):
+    CMake options and targets leave with the tool, nothing in `include/`
+    changes.
+  - **Gate (draft):** ci.yml's 10 legs green on `development`; a release
+    dispatch on `development` → 8 assets, the consumer gates and the
+    `tls-probe` classifier check green under both backends; encedo-hem-tool
+    `c-v1.3.0` published with `--version` showing `sdk: encedo-hem 1.2.0`
+    (met 2026-10-28, before this decomposition); docs checklist
+    (docs/RELEASING.md "Final release"); TRACE with no `needs-reverify`
+    and no orphan tag; README Status 1.2.1; then `v1.2.1-rc1` (the user
+    tags) and `v1.2.1` (STEP-M13-060).
+  - *Decomposition (2026-10-28):* STEP-M13-010 … 060 in order; 020, 030
+    and 040 depend on 010 only and may interleave within the WIP limit.
 - **MFW — firmware-pending** *(created by user decision 2026-08-07: one
   generic future milestone for every feature that is documented — or
   shipped dormant — but MISSING from the running firmware; nothing here

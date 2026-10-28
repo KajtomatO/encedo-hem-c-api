@@ -1,18 +1,25 @@
 ---
 id: REQ-BUILD-005
 title: Release builds of hem-tool — dynamic-wolfSSL binaries from CI, artifacts on main, GitHub Releases on tags
-status: implemented
+status: superseded
 priority: should
-revision: 6   # 2026-10-19 (STEP-M12-135 done): re-verified — release run 39320626797 (the user's annotated `v1.2.0-rc2` on 8dd915f) built, asserted and published `hem-tool-1.2.0-rc2-{linux,windows}-x86_64-shared.*` with the companion assets, the source tarball and `SHA256SUMS` (pre-release 417736562); implemented again. No meaning change. Rev 5 = 2026-10-19 (STEP-M12-135, §6.2 approved in chat): the hem-tool archive is `hem-tool-<version>-<os>-x86_64-shared` from 1.2.0 — the plain name goes to REQ-BUILD-009's one-file build (user decision 2026-10-19 after the rc1 test); contents, assertions and the companion assets unchanged; needs-reverify until the v1.2.0-rc2 release run. Rev 4 = the M12 decomposition record below (`source`)
+revision: 7   # 2026-10-28 (M13 decomposition, §6.2 approved with the hem-tool split plan 2026-10-27): superseded by REQ-BUILD-010 — the SDK releases its library packages only (8 assets); the hem-tool half of this requirement is encedo-hem-tool's REQ-PKG-003. Text frozen at rev 6. Rev 6 = 2026-10-19 (STEP-M12-135 done): re-verified — release run 39320626797 (the user's annotated `v1.2.0-rc2` on 8dd915f) built, asserted and published `hem-tool-1.2.0-rc2-{linux,windows}-x86_64-shared.*` with the companion assets, the source tarball and `SHA256SUMS` (pre-release 417736562); implemented again. No meaning change. Rev 5 = 2026-10-19 (STEP-M12-135, §6.2 approved in chat): the hem-tool archive is `hem-tool-<version>-<os>-x86_64-shared` from 1.2.0 — the plain name goes to REQ-BUILD-009's one-file build (user decision 2026-10-19 after the rc1 test); contents, assertions and the companion assets unchanged; needs-reverify until the v1.2.0-rc2 release run. Rev 4 = the M12 decomposition record below (`source`)
 source: rev 4 — M12 decomposition 2026-10-12 (§6.2 report approved in chat; record and wording only, no behaviour change, status kept): the resolved-criterion record "-150 older" was wrong — wolfSSL `-150` is `ASN_BEFORE_DATE_E` (not yet valid) in 5.6.6 and 5.7.2 alike, "expired" is `-151` only (REQ-NET-005 rev 2, STEP-M12-030); REQ-BUILD-009 adds the 1.2.0 variants to the same release and `ci.yml` gains legs by REQ-BUILD-006/007 — this REQ's assets and the release workflow's relationship to ci.yml are unchanged; user decision 2026-10-07 ("github ci actions to build and release the cli tool"; answers the same day: build on every push to main, publish a Release on tags; Release-type build + SHA256SUMS); approved 2026-10-08 (user "ok") as rev 1 (fully static binaries); rev 2 — user decision 2026-10-09 (no statically bundled wolfSSL in any published package, for licensing reasons — wolfSSL is linked dynamically and published as a separate release asset; libcurl stays pinned static; a full-dynamic variant and static packages on another library go to M12) — rev 2 approved 2026-10-09 (user "I accept new req"); rev 3 — user decision 2026-10-10 (`v<version>-rc<N>` tags publish a GitHub pre-release, so the never-run publishing job is proven before the real release; the release text = the tag annotation + checksums, annotated tags enforced) — rev 3 approved 2026-10-10 (user "I approve REQ-BUILD-005 rev 3"); ARCHITECTURE.md §1 (wolfSSL "may also serve as libcurl's TLS backend where we build libcurl ourselves"; "wolfSSL is never statically bundled into a published package"), §11 (M10), §12 risk 1 (wolfSSL licensing); REQ-BUILD-002 (the existing CI stays as is)
 depends_on: ["REQ-BUILD-001", "REQ-BUILD-002", "REQ-NET-003", "REQ-NET-005"]
 supersedes: null
-superseded_by: null
+superseded_by: "REQ-BUILD-010"
 traces:
   architecture: ["ARCHITECTURE.md#1-decisions-fixed", "ARCHITECTURE.md#11-milestones", "ARCHITECTURE.md#12-risks--open-questions"]
 ---
 
 # Release builds of hem-tool — dynamic-wolfSSL binaries from CI, artifacts on main, GitHub Releases on tags
+
+> **Superseded 2026-10-28 (M13 decomposition) by REQ-BUILD-010.** The SDK
+> releases its library packages only (8 assets, the library half of this
+> matrix carried over unchanged); the hem-tool half moved to
+> [encedo-hem-tool](https://github.com/KajtomatO/encedo-hem-tool) (its REQ-PKG-003; one-file hem-tool,
+> tags `c-v<version>`). Text frozen at rev 6; the 1.2.0 release it
+> describes stays as published.
 
 A GitHub Actions workflow (`.github/workflows/release.yml`, separate from
 `ci.yml`) SHALL, on every push to `main`, build hem-tool as a Release-type

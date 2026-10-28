@@ -1,18 +1,25 @@
 ---
 id: REQ-TOOL-026
 title: hem-tool on Windows reports a missing libwolfssl.dll itself (delay-load import) instead of failing before main
-status: verified
+status: superseded
 priority: should
-revision: 5   # 2026-10-27 (STEP-M12-140, the M12 gate): verified — the attended Windows check met on the published `v1.2.0-rc4` assets (the user's report "all is working": the `-shared` zip without libwolfssl.dll → the message and exit 12, working again with the DLL back); every criterion closed; status set by hand (the generator only reports). No meaning change. Rev 4 = 2026-10-15 (STEP-M12-110 done): record only — the release .def came from gendef until 46be9d3, now from the link alone; re-proven by release run 38719457329. No meaning change. Rev 3 = 2026-10-13 (STEP-M12-100 done): the release-job criteria ticked and the OPEN criterion closed by release run 38407235207 (Windows job); rev 2 = --version without the DLL settled (tolerant hook, 'not found'), cross-build evidence. No meaning change — status set by the §4.3 regeneration
+revision: 6   # 2026-10-28 (M13 decomposition, §6.2 approved with the hem-tool split plan 2026-10-27): superseded — the one-file hem-tool is the only released hem-tool (user decision 2026-10-27); with no companion DLL to miss, the delay-load import and this requirement go; encedo-hem-tool's REQ-PKG-003 (the one-file release) owns the concern. Text frozen at rev 5. Rev 5 = 2026-10-27 (STEP-M12-140, the M12 gate): verified — the attended Windows check met on the published `v1.2.0-rc4` assets (the user's report "all is working": the `-shared` zip without libwolfssl.dll → the message and exit 12, working again with the DLL back); every criterion closed; status set by hand (the generator only reports). No meaning change. Rev 4 = 2026-10-15 (STEP-M12-110 done): record only — the release .def came from gendef until 46be9d3, now from the link alone; re-proven by release run 38719457329. No meaning change. Rev 3 = 2026-10-13 (STEP-M12-100 done): the release-job criteria ticked and the OPEN criterion closed by release run 38407235207 (Windows job); rev 2 = --version without the DLL settled (tolerant hook, 'not found'), cross-build evidence. No meaning change — status set by the §4.3 regeneration
 source: user decision 2026-10-10 (BACKLOG item 5, from the first Windows test of the release binary — Windows refuses to start hem-tool.exe without libwolfssl.dll, exit -1073741515 / 0xC0000135, often with no message); moved into M12 by user decision 2026-10-12 (ARCHITECTURE.md §11 M12 part A: "the MinGW mechanism is proven at decomposition"); mechanism proven to link 2026-10-12 with the Debian x86_64-w64-mingw32 toolchain (GCC 13): `dlltool --output-delaylib` + mingw-w64 `libdelayimp.a` / `delayimp.h` (`__pfnDliFailureHook2`, `dliFailLoadLib`) — the PoC exe's static import table lists system DLLs only; run-time proof pending the Windows release job (no wine on the dev host); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-BUILD-005", "REQ-TOOL-024"]
 supersedes: null
-superseded_by: null
+superseded_by: "KajtomatO/encedo-hem-tool requirements/REQ-PKG-003"
 traces:
   architecture: ["ARCHITECTURE.md#8-hem-tool-cli", "ARCHITECTURE.md#11-milestones"]
 ---
 
 # hem-tool on Windows reports a missing libwolfssl.dll itself
+
+> **Superseded 2026-10-28 (M13 decomposition).** The only released hem-tool is
+> the one-file build of [encedo-hem-tool](https://github.com/KajtomatO/encedo-hem-tool) (user decision
+> 2026-10-27: no `-shared` hem-tool, no companion library), so there is no DLL
+> to miss; the delay-load import leaves with the tool (STEP-M13-010) and the
+> tool repository's REQ-PKG-003 owns the one-file release. Text frozen at
+> rev 5; the 1.2.0 release it describes stays as published.
 
 The released Windows `hem-tool.exe` (the dynamic-wolfSSL variant,
 REQ-BUILD-005) SHALL import `libwolfssl.dll` through a **delay-load

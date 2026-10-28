@@ -1,18 +1,25 @@
 ---
 id: REQ-TOOL-028
 title: hem-tool init-wizard — attended, prompt-driven device initialisation over the init-device flow
-status: verified
+status: superseded
 priority: should
-revision: 5   # 2026-10-27 (STEP-M12-140, the M12 gate): record only — the attended criterion met on the published `v1.2.0-rc4` assets (the user: the wizard end to end on the second unit on Linux and Windows, echo hidden and restored, then `status` + login — "all is working"); every criterion closed. No meaning change. Rev 4 = 2026-10-19 (STEP-M12-135 done): re-verified — the rev 3 criterion checked (test_wizard, green on all 10 legs of CI run 39320511927 and in both release jobs' unit suites, run 39320626797 / `v1.2.0-rc2`); verified again. No meaning change. Rev 3 = 2026-10-19 (STEP-M12-135, §6.2 approved in chat): `hostname` defaults to `my.ence.do` — REQ-TOOL-017's product convention (user decision 2026-10-19 after the rc1 test); `user` and `email` keep no default; a unit criterion added; needs-reverify until test_wizard is green again. Rev 2 = 2026-10-13 (STEP-M12-050): OPEN criterion (environment pre-fill) settled — only --url / EHEM_URL; unit criteria recorded. No meaning change — approved status kept
+revision: 6   # 2026-10-28 (M13 decomposition, §6.2 approved with the hem-tool split plan 2026-10-27): superseded — hem-tool moved to encedo-hem-tool at 1.2.0; the same id there is authoritative; text frozen at rev 5. Rev 5 = 2026-10-27 (STEP-M12-140, the M12 gate): record only — the attended criterion met on the published `v1.2.0-rc4` assets (the user: the wizard end to end on the second unit on Linux and Windows, echo hidden and restored, then `status` + login — "all is working"); every criterion closed. No meaning change. Rev 4 = 2026-10-19 (STEP-M12-135 done): re-verified — the rev 3 criterion checked (test_wizard, green on all 10 legs of CI run 39320511927 and in both release jobs' unit suites, run 39320626797 / `v1.2.0-rc2`); verified again. No meaning change. Rev 3 = 2026-10-19 (STEP-M12-135, §6.2 approved in chat): `hostname` defaults to `my.ence.do` — REQ-TOOL-017's product convention (user decision 2026-10-19 after the rc1 test); `user` and `email` keep no default; a unit criterion added; needs-reverify until test_wizard is green again. Rev 2 = 2026-10-13 (STEP-M12-050): OPEN criterion (environment pre-fill) settled — only --url / EHEM_URL; unit criteria recorded. No meaning change — approved status kept
 source: user note 2026-10-10 ("initialisation creator" — hand-hold the user through init; NOT designed then); shape decided by the user 2026-10-12 (M12 planning: a SEPARATE wizard command, `init-device` stays purely scripted; explains and prompts for every field with its default, passphrase hidden and twice, generates the 24 words and confirms the backup by re-typing a few, summary behind a typed confirmation, then the existing init flow incl. the reboot; needs a shared no-echo prompt helper); ARCHITECTURE.md §11 M12 part E (command name settled at decomposition: `init-wizard`); REQ-TOOL-021 (the flow it drives), REQ-AUTH-012 (the words), REQ-TEST-007 (attended-only); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-TOOL-021", "REQ-AUTH-012", "REQ-TEST-007", "REQ-TOOL-020"]
 supersedes: null
-superseded_by: null
+superseded_by: "KajtomatO/encedo-hem-tool requirements/REQ-TOOL-028"
 traces:
   architecture: ["ARCHITECTURE.md#8-hem-tool-cli", "ARCHITECTURE.md#9-testing-policy", "ARCHITECTURE.md#11-milestones"]
 ---
 
 # hem-tool init-wizard
+
+> **Superseded 2026-10-28 (M13 decomposition).** hem-tool moved to
+> [encedo-hem-tool](https://github.com/KajtomatO/encedo-hem-tool) at the SDK's 1.2.0 (user decision
+> 2026-10-27); this requirement continues there under the same id and is
+> maintained there. The text below is frozen at the revision it had when it
+> left (rev 5); the code and tests that implemented it leave this repository
+> in STEP-M13-010.
 
 hem-tool SHALL provide `init-wizard`, an interactive command that
 collects every `init-device` input through explained prompts and then

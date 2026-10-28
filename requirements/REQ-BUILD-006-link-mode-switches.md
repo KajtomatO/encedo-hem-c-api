@@ -1,9 +1,9 @@
 ---
 id: REQ-BUILD-006
-title: Build configuration switches — library variants, hem-tool link mode, dependency link mode, static-wolfSSL warning
-status: implemented
+title: Build configuration switches — library variants, dependency link mode, static-wolfSSL warning (the hem-tool link mode until M13)
+status: needs-reverify
 priority: must
-revision: 4   # 2026-10-16 (STEP-M12-120 done): the EHEM_DEPS_LINK=static criterion checked (release run 38894733780). No meaning change. Rev 3 = 2026-10-13 (STEP-M12-060 done): the CI-legs criterion ticked (run 38403218107, both platforms green); rev 2 = OPEN criterion (distro static archives) resolved, local evidence. No meaning change — status set by the §4.3 regeneration
+revision: 5   # 2026-10-28 (M13 decomposition, §6.2 approved with the hem-tool split plan 2026-10-27): meaning change — `EHEM_TOOL_LINK` and `EHEM_BUILD_TOOL` leave with hem-tool; the CI leg "shared-only + EHEM_TOOL_LINK=shared" becomes "shared-only"; the three remaining options and the warning are unchanged; needs-reverify until STEP-M13-010 ticks the new criterion. Rev 4 = 2026-10-16 (STEP-M12-120 done): the EHEM_DEPS_LINK=static criterion checked (release run 38894733780). No meaning change. Rev 3 = 2026-10-13 (STEP-M12-060 done): the CI-legs criterion ticked (run 38403218107, both platforms green); rev 2 = OPEN criterion (distro static archives) resolved, local evidence. No meaning change — status set by the §4.3 regeneration
 source: ARCHITECTURE.md §11 M12 part B (early draft 2026-10-09, planned 2026-10-12: "link-mode switches — none exist today"; candidate names settled here); §1 (wolfSSL is never statically bundled into a published package — user decision 2026-10-09); §12 risk 1; REQ-BUILD-001 (both variants, one configure); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-BUILD-001", "REQ-BUILD-002", "REQ-API-006"]
 supersedes: null
@@ -15,19 +15,19 @@ traces:
 # Build configuration switches
 
 The CMake build SHALL offer options that choose which SDK variants are
-built, how hem-tool links the SDK, and how third-party dependencies are
-linked — with today's behaviour as every default:
+built and how third-party dependencies are linked — with today's behaviour
+as every default (until M13 a third choice, how hem-tool links the SDK,
+sat beside them):
 
 | Option | Values (default first) | Meaning |
 |---|---|---|
 | `EHEM_BUILD_SHARED` | `ON` / `OFF` | build + install `libencedo-hem.so` / `.dll` (`encedo-hem::encedo-hem`) |
 | `EHEM_BUILD_STATIC` | `ON` / `OFF` | build + install `libencedo-hem.a` (`encedo-hem::encedo-hem-static`) |
-| `EHEM_TOOL_LINK` | `static` / `shared` | hem-tool (and hem-tool-core) link the static SDK, or the shared one |
+| ~~`EHEM_TOOL_LINK`~~ | ~~`static` / `shared`~~ | removed in M13 (2026-10-28) with hem-tool, together with `EHEM_BUILD_TOOL`; until then: hem-tool (and hem-tool-core) link the static SDK, or the shared one |
 | `EHEM_DEPS_LINK` | `default` / `static` / `shared` | third-party libraries (libcurl, the crypto library) resolve as the toolchain finds them (today), or prefer static archives, or prefer shared libraries |
 
-- Both variants `OFF` is a configure error; `EHEM_TOOL_LINK=shared` with
-  `EHEM_BUILD_SHARED=OFF` likewise. `EHEM_BUILD_TOOL` (existing) is
-  unchanged.
+- Both variants `OFF` is a configure error. *(Until M13: `EHEM_TOOL_LINK=shared`
+  with `EHEM_BUILD_SHARED=OFF` likewise, and `EHEM_BUILD_TOOL` unchanged.)*
 - `EHEM_DEPS_LINK=static` prefers `.a` archives (`CMAKE_FIND_LIBRARY_
   SUFFIXES`, `pkg-config --static`); a dependency without a static
   archive is a configure error naming it, never a silent fall-back.
@@ -44,7 +44,8 @@ linked — with today's behaviour as every default:
   private, non-installed static build of the SDK objects.
 - `./dev build` exposes the switches (REQ-BUILD-004); `ci.yml` gains legs
   that configure non-default combinations and run the unit suite +
-  gates (at least: shared-only + `EHEM_TOOL_LINK=shared`; static-only).
+  gates (at least: shared-only; static-only — the shared-only leg carried
+  `EHEM_TOOL_LINK=shared` until M13).
 
 **Rationale:** today both variants are always built, hem-tool always
 links the static SDK, and the dependencies link however pkg-config /
@@ -152,3 +153,8 @@ packaging time only.
       inside the binaries, the configuration §1 forbids publishing; the
       static dependency link is exercised by `release.yml`'s OpenSSL builds
       (criterion above, STEP-M12-120). Recorded in ci.yml's header.
+- [ ] M13 (rev 5): `cmake -LA` lists neither `EHEM_TOOL_LINK` nor
+      `EHEM_BUILD_TOOL`; the three remaining options keep their defaults and
+      a default configure yields the library targets and install set only;
+      the shared-only and static-only ci.yml legs green (run id;
+      STEP-M13-010).

@@ -1,9 +1,9 @@
 ---
 id: REQ-BUILD-001
 title: CMake build producing static and shared libraries on Linux and Windows (MinGW)
-status: verified
+status: needs-reverify
 priority: must
-revision: 1
+revision: 2   # 2026-10-28 (M13 decomposition, §6.2 approved with the hem-tool split plan 2026-10-27): meaning change — the build no longer produces the hem-tool executable (hem-tool lives in encedo-hem-tool from the SDK's 1.2.1 on); needs-reverify until STEP-M13-010 ticks the new criterion
 source: ARCHITECTURE.md §1 (CMake ≥3.20; artifact name, user decision 2026-07-15; MinGW/MSYS2, user decision 2026-07-15)
 depends_on: []
 supersedes: null
@@ -16,7 +16,11 @@ traces:
 
 The project SHALL build with CMake (≥ 3.20) on Linux (GCC/Clang) and
 Windows (MinGW/MSYS2), producing both static and shared variants of the
-`encedo-hem` library plus the `hem-tool` executable.
+`encedo-hem` library. *(Until the SDK's 1.2.1 the build also produced the
+`hem-tool` executable; hem-tool lives in
+[encedo-hem-tool](https://github.com/KajtomatO/encedo-hem-tool) since the
+split of 2026-10-27 and builds this SDK from a submodule or links its
+published package.)*
 
 **Rationale:** One cross-platform build system for all targets. The static
 variant with hidden internal symbols is the safe path for embedding in a
@@ -39,3 +43,7 @@ applications. Artifact naming is fixed: `libencedo-hem.so` /
       `integration` label + `ehem_add_integration_test` helper in place)*
 - [x] A MinGW toolchain file (or documented MSYS2 invocation) lives in
       `cmake/`. *(cmake/toolchain-mingw-w64.cmake)*
+- [ ] M13 (rev 2): a default configure defines no `hem-tool` target and
+      `cmake --install` lists the library set only (headers, both
+      variants, CMake config, `.pc`) — listing recorded here; CI green on
+      both platforms after the removal (STEP-M13-010).

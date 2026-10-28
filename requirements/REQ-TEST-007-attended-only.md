@@ -3,7 +3,7 @@ id: REQ-TEST-007
 title: Attended-only verification class — no live CTest for device init and wipe
 status: verified
 priority: must
-revision: 1
+revision: 2   # 2026-10-28 (M13 decomposition): annotation only — hem-tool and the REQ-TOOL ids it cites live in encedo-hem-tool since the split (user decision 2026-10-27); no meaning change, status kept.
 source: user decision 2026-10-07 ("both init and wipe can be tested only manually"); ARCHITECTURE.md §9 (attended-only bullet); approved 2026-10-07 (M10 decomposition, user go-ahead)
 depends_on: ["REQ-TEST-002"]
 supersedes: null
@@ -14,9 +14,10 @@ traces:
 
 # Attended-only verification class — no live CTest for device init and wipe
 
-Bindings and hem-tool commands classified **attended-only** in
-ARCHITECTURE.md §9 — device initialisation (REQ-AUTH-011, REQ-TOOL-021)
-and device wipe (REQ-SYS-014, REQ-TOOL-022) — SHALL have no live test in
+Bindings classified **attended-only** in ARCHITECTURE.md §9 — device
+initialisation (REQ-AUTH-011) and device wipe (REQ-SYS-014); until the
+SDK's 1.2.1 also the hem-tool commands driving them, now encedo-hem-tool's
+REQ-TOOL-021/022 — SHALL have no live test in
 the CTest tree at all: not under `integration`, not under `disruptive`.
 Their live verification is an attended run whose date, device and
 outcome are recorded in the owning REQ's acceptance criteria and in the

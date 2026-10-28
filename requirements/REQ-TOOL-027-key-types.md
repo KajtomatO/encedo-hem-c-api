@@ -1,18 +1,25 @@
 ---
 id: REQ-TOOL-027
 title: hem-tool key-type documentation — keys gen -h lists every creatable type, keys types explains each, from one table checked against the classifier
-status: verified
+status: superseded
 priority: should
-revision: 2   # 2026-10-13 (STEP-M12-040): criteria recorded; output shape settled. No meaning change — approved status kept
+revision: 3   # 2026-10-28 (M13 decomposition, §6.2 approved with the hem-tool split plan 2026-10-27): superseded — hem-tool moved to encedo-hem-tool at 1.2.0; the same id there is authoritative; text frozen at rev 2. Rev 2 = 2026-10-13 (STEP-M12-040): criteria recorded; output shape settled. No meaning change — approved status kept
 source: user request 2026-10-10 ("key types in hem-tool": keys gen -h lists all types + a separate command explaining them), moved into M12 the same day; ARCHITECTURE.md §11 M12 part E (command name settled at decomposition: `keys types`); REQ-TEST-004 (the 23 fw v1.2.2 create types), REQ-KEY-006 (classifier + size table), REQ-TOOL-009 (keys gen; its NIST default); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-TOOL-009", "REQ-KEY-006", "REQ-TOOL-020"]
 supersedes: null
-superseded_by: null
+superseded_by: "KajtomatO/encedo-hem-tool requirements/REQ-TOOL-027"
 traces:
   architecture: ["ARCHITECTURE.md#8-hem-tool-cli", "ARCHITECTURE.md#11-milestones"]
 ---
 
 # hem-tool key-type documentation
+
+> **Superseded 2026-10-28 (M13 decomposition).** hem-tool moved to
+> [encedo-hem-tool](https://github.com/KajtomatO/encedo-hem-tool) at the SDK's 1.2.0 (user decision
+> 2026-10-27); this requirement continues there under the same id and is
+> maintained there. The text below is frozen at the revision it had when it
+> left (rev 2); the code and tests that implemented it leave this repository
+> in STEP-M13-010.
 
 hem-tool SHALL document the device's key types from **one table in
 hem-tool-core**: `keys gen -h` lists every type the firmware creates (the

@@ -1,9 +1,9 @@
 ---
 id: REQ-API-007
 title: API reference documentation for the 1.0 surface
-status: verified
+status: needs-reverify
 priority: must
-revision: 2
+revision: 3   # 2026-10-28 (M13 decomposition, §6.2 approved with the hem-tool split plan 2026-10-27): meaning change — "hem-tool remains the runnable examples" becomes `examples/` (two programs compiled in CI) plus a pointer to encedo-hem-tool; needs-reverify until STEP-M13-040 ticks the new criterion. Rev 2 = format decided (user decision 2026-08-06)
 source: user decision 2026-08-06 (M9 scope reshape, ARCHITECTURE.md §11 "API reference docs"); rev 2 = format decided (user decision 2026-08-06): headers stay the per-symbol reference + hand-written docs/ guide + scripted completeness gate
 depends_on: []
 supersedes: null
@@ -30,8 +30,14 @@ symbol (functions, structs, enums, macros) declared in
 - Whatever the shape, a completeness check is part of the deliverable:
   every `EHEM_API` symbol and public type is reachable from the docs
   (script-checkable, in the spirit of the export/header gates).
-- The README points at the reference; hem-tool remains the runnable
-  examples (ARCHITECTURE §8 "living documentation").
+- The README points at the reference; `examples/` holds the runnable
+  examples — `status.c` (status under system trust, error detail) and
+  `sign.c` (passphrase login, key lookup, a signature), compiled in CI
+  (`EHEM_BUILD_EXAMPLES`) and explained in the guide — with a pointer to
+  [encedo-hem-tool](https://github.com/KajtomatO/encedo-hem-tool), the
+  full-featured client. *(Until the SDK's 1.2.1 hem-tool, then in this
+  repository, was the runnable example — ARCHITECTURE §8 "living
+  documentation"; rev 3.)*
 
 **Rationale:** 1.0 means third parties (first among them
 encedo-pkcs11) build against this SDK without reading its source; the
@@ -58,3 +64,7 @@ reference docs a 1.0 deliverable (2026-08-06).
 - [x] README updated to the 1.0 surface (status, docs section,
       hem-tool auth model incl. --mobile and the default URL, stale
       M1/Argon2 text removed) and linking the reference (2026-08-06).
+- [ ] M13 (rev 3): `examples/status.c` and `examples/sign.c` compile on every
+      ci.yml leg (`EHEM_BUILD_EXAMPLES`, default ON when top level) and are
+      explained in docs/API-GUIDE.md "Examples and hem-tool" beside the pointer
+      to encedo-hem-tool; `docs_coverage` stays green (STEP-M13-040).

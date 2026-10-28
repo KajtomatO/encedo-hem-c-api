@@ -1,18 +1,25 @@
 ---
 id: REQ-TOOL-007
 title: hem-tool keys pub — print a key's public material and typed metadata
-status: verified
+status: superseded
 priority: should
-revision: 1
+revision: 2   # 2026-10-28 (M13 decomposition, §6.2 approved with the hem-tool split plan 2026-10-27): superseded — hem-tool moved to encedo-hem-tool at 1.2.0; the same id there is authoritative; text frozen at rev 1.
 source: user decision 2026-07-16 (M4 decomposition: add hem-tool sign and keys pub); ARCHITECTURE.md §8 (thin consumer, subcommands grow with milestones); HEM-SDK-5 (public-key read, living documentation); approved 2026-07-16
 depends_on: ["REQ-TOOL-001", "REQ-KEY-003", "REQ-KEY-006"]
 supersedes: null
-superseded_by: null
+superseded_by: "KajtomatO/encedo-hem-tool requirements/REQ-TOOL-007"
 traces:
   architecture: ["ARCHITECTURE.md#8-hem-tool-cli"]
 ---
 
 # hem-tool keys pub — print a key's public material and typed metadata
+
+> **Superseded 2026-10-28 (M13 decomposition).** hem-tool moved to
+> [encedo-hem-tool](https://github.com/KajtomatO/encedo-hem-tool) at the SDK's 1.2.0 (user decision
+> 2026-10-27); this requirement continues there under the same id and is
+> maintained there. The text below is frozen at the revision it had when it
+> left (rev 1); the code and tests that implemented it leave this repository
+> in STEP-M13-010.
 
 hem-tool SHALL provide a `keys pub <kid>` subcommand that fetches the key
 via `ehem_key_get` (REQ-KEY-003) and prints a human-readable summary —

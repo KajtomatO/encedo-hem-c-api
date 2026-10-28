@@ -1,9 +1,9 @@
 ---
 id: REQ-NET-005
 title: Automatic certificate recovery via check-in on expired-cert failure
-status: verified
+status: needs-reverify
 priority: must
-revision: 3   # 2026-10-13 (STEP-M12-030): rework done — the classifier no longer accepts -150; criteria recorded against the tests (no meaning change)
+revision: 4   # 2026-10-28 (M13 decomposition, §6.2 approved with the hem-tool split plan 2026-10-27): the end-to-end proof driver changes — `hem-tool recovery` leaves with hem-tool; `tls-probe` (tests/release/tls_probe.c, public API only) drives scripts/release/check-expired-classifier.sh instead; the classification contract is unchanged; needs-reverify until the release job's classifier step is green under both backends (STEP-M13-020, the new criterion). Rev 3 = 2026-10-13 (STEP-M12-030): rework done — the classifier no longer accepts -150; criteria recorded against the tests (no meaning change)
 source: user decision 2026-07-15 ("Lib should run check-in automatically when needed, e.g. when TLS is expired"); M1 gate finding (device cert expired 2026-04-18); rev 2 — M12 decomposition 2026-10-12 (§6.2 report approved in chat): the classifier of STEP-M10-065 also accepts wolfSSL verify result `-150`, which is `ASN_BEFORE_DATE_E` (certificate NOT YET valid) in wolfSSL 5.6.6 and 5.7.2 alike — not an older spelling of "expired" as REQ-BUILD-005's record claimed — so the "only expired" criterion is violated; an explicit not-yet-valid criterion is added, status → needs-reverify, rework = STEP-M12-030 (user decision 2026-10-12, ARCHITECTURE.md §11 M12 part A)
 depends_on: ["REQ-SYS-003", "REQ-NET-002", "REQ-NET-003", "REQ-API-004"]
 supersedes: null
@@ -125,3 +125,8 @@ refresh the cert, set the RTC, and discover updates):
       installed manually via `POST /api/system/config` `{"tls":{"crt":…}}`
       + reboot (after which the trigger no longer reproduces until the next
       expiry).
+- [ ] M13 (rev 4): `scripts/release/check-expired-classifier.sh` drives
+      `tls-probe` (`tests/release/tls_probe.c`, public API only): the expired
+      leaf → `tls_expired=1`, the not-yet-valid leaf → `tls_expired=0` with the
+      date text — green locally on both backends and in the release job's
+      classifier steps under both backends (run id; STEP-M13-020).

@@ -1,9 +1,9 @@
 ---
 id: REQ-BUILD-004
 title: Developer assist tool `./dev` — build, test, and environment runner
-status: implemented
+status: needs-reverify
 priority: should
-revision: 3   # 2026-10-13 (STEP-M12-080): note — `--openssl` on build / test / ci (REQ-BUILD-007); rev 2 (STEP-M12-060): `./dev build` takes the REQ-BUILD-006 switches. Additions the other REQs require; every obligation here unchanged, status kept
+revision: 4   # 2026-10-28 (M13 decomposition, §6.2 approved with the hem-tool split plan 2026-10-27): meaning change — `./dev tool` and `--tool-link` leave with hem-tool (encedo-hem-tool has its own `c/dev tool`); needs-reverify until STEP-M13-010 ticks the new criterion. Rev 3 = 2026-10-13 (STEP-M12-080): note — `--openssl` on build / test / ci (REQ-BUILD-007); rev 2 (STEP-M12-060): `./dev build` takes the REQ-BUILD-006 switches. Additions the other REQs require; every obligation here unchanged, status kept
 source: user decision 2026-07-16 (commissioned with usage spec; name/runtime/extras/compiler-default chosen via Q&A same day; approved 2026-07-16)
 depends_on: ["REQ-BUILD-001", "REQ-TEST-002"]
 supersedes: null
@@ -31,7 +31,7 @@ or CMake (both keep working without it).
 | `./dev test asan` | ASan/LSan unit run (GCC — Clang's ASan runtime is absent on the dev machine, M1 finding) |
 | `./dev check` | static gates only: export-symbols + public-header checks |
 | `./dev ci` | mirror the CI matrix locally: gcc + clang unit builds + checks |
-| `./dev tool <args…>` | run the built hem-tool with the device environment loaded, e.g. `./dev tool status` |
+| ~~`./dev tool <args…>`~~ | removed in M13 (2026-10-28) with hem-tool — encedo-hem-tool's `c/dev tool` runs the built tool with the device environment loaded |
 | `./dev install-dependencies [--yes]` | install build deps; detects apt (Linux) / pacman (MSYS2); prints the package list and asks before installing |
 | `./dev completions` | print the bash completion script (`source <(./dev completions)`) |
 | `./dev help` / no args | usage |
@@ -43,7 +43,8 @@ switches `EHEM_BUILD_STATIC=OFF`, `EHEM_BUILD_SHARED=OFF`, `EHEM_TOOL_LINK`,
 `EHEM_DEPS_LINK`; a non-default set builds in its own directory
 (`build[-clang]-<tags>`, e.g. `build-static-only`) so the default
 directories stay default. Usage text and completion cover them;
-shellcheck clean.*
+shellcheck clean. M13 (2026-10-28): `--tool-link` and `EHEM_TOOL_LINK` went
+with hem-tool; the other three switches stay.*
 
 *Extension (rev 3, 2026-10-13, STEP-M12-080 — required by REQ-BUILD-007):
 `--openssl` selects `EHEM_CRYPTO_BACKEND=openssl` for `./dev build`, `./dev
@@ -52,7 +53,7 @@ directory (`build-openssl`, `build-clang-openssl`, `build-asan-openssl`).
 Usage text and completion cover it; shellcheck clean.*
 
 **Environment fallback:** commands that need device credentials
-(`test it`, `test all`, `tool`) use the `EHEM_*` variables when already
+(`test it`, `test all`; until M13 also `tool`) use the `EHEM_*` variables when already
 set; otherwise they auto-source `./hem.env` (git-ignored, user decision
 2026-07-16) and say so on stderr. Missing both → a clear error naming the
 variables (integration tests then skip per REQ-TEST-002 if run anyway).
@@ -77,3 +78,6 @@ variables (integration tests then skip per REQ-TEST-002 if run anyway).
       session; noted if so).
 - [ ] CI and plain CMake/CTest remain fully usable without `./dev`
       (no build logic moves exclusively into the script).
+- [ ] M13 (rev 4): `./dev tool` and `--tool-link` are gone from the dispatch,
+      usage text and completion; `./dev ci` green on gcc and clang under both
+      backends after the removal; `shellcheck` clean (STEP-M13-010).

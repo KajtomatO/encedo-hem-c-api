@@ -1,18 +1,25 @@
 ---
 id: REQ-TOOL-020
 title: hem-tool per-command help
-status: verified
+status: superseded
 priority: should
-revision: 3   # 2026-10-19 (STEP-M12-135 done): re-verified — the rev 2 criterion checked (test_registry + tool_startup_cli, green on all 10 legs of CI run 39320511927 and in both release jobs' unit suites, run 39320626797 / `v1.2.0-rc2`); verified again. No meaning change. Rev 2 = 2026-10-19 (STEP-M12-135, §6.2 approved in chat): `--passphrase` is deprecated (user decision 2026-10-19 after the rc1 test — a passphrase on the command line stays in the shell history and shows in the process list; the flag will be removed in a later release, `EHEM_PASSPHRASE` stays): the shared options render it DEPRECATED and hem-tool warns once on stderr when the flag is used; a criterion added; needs-reverify until test_registry and tool_startup_cli are green again
+revision: 4   # 2026-10-28 (M13 decomposition, §6.2 approved with the hem-tool split plan 2026-10-27): superseded — hem-tool moved to encedo-hem-tool at 1.2.0; the same id there is authoritative; text frozen at rev 3. Rev 3 = 2026-10-19 (STEP-M12-135 done): re-verified — the rev 2 criterion checked (test_registry + tool_startup_cli, green on all 10 legs of CI run 39320511927 and in both release jobs' unit suites, run 39320626797 / `v1.2.0-rc2`); verified again. No meaning change. Rev 2 = 2026-10-19 (STEP-M12-135, §6.2 approved in chat): `--passphrase` is deprecated (user decision 2026-10-19 after the rc1 test — a passphrase on the command line stays in the shell history and shows in the process list; the flag will be removed in a later release, `EHEM_PASSPHRASE` stays): the shared options render it DEPRECATED and hem-tool warns once on stderr when the flag is used; a criterion added; needs-reverify until test_registry and tool_startup_cli are green again
 source: user decision 2026-08-06 (M9 scope reshape, ARCHITECTURE.md §11)
 depends_on: ["REQ-TOOL-019"]
 supersedes: null
-superseded_by: null
+superseded_by: "KajtomatO/encedo-hem-tool requirements/REQ-TOOL-020"
 traces:
   architecture: ["ARCHITECTURE.md#8-hem-tool-cli", "ARCHITECTURE.md#11-milestones"]
 ---
 
 # hem-tool per-command help
+
+> **Superseded 2026-10-28 (M13 decomposition).** hem-tool moved to
+> [encedo-hem-tool](https://github.com/KajtomatO/encedo-hem-tool) at the SDK's 1.2.0 (user decision
+> 2026-10-27); this requirement continues there under the same id and is
+> maintained there. The text below is frozen at the revision it had when it
+> left (rev 3); the code and tests that implemented it leave this repository
+> in STEP-M13-010.
 
 hem-tool SHALL provide per-command help — `hem-tool <command> --help`
 and `hem-tool help <command>` — showing that command's synopsis,

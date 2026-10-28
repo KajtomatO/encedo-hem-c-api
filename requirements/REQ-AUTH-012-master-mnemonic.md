@@ -3,7 +3,7 @@ id: REQ-AUTH-012
 title: Master-secret derivation from a BIP39 mnemonic — Manager-compatible helpers
 status: verified
 priority: should
-revision: 1
+revision: 2   # 2026-10-28 (M13 decomposition): annotation only — hem-tool and the REQ-TOOL ids it cites live in encedo-hem-tool since the split (user decision 2026-10-27); no meaning change, status kept.
 source: user decision 2026-10-07 (master-secret format = Manager-compatible BIP39, derivation in the SDK — after the explanation in chat); Encedo Manager assets/build.js initFinal (:685-697, generate 256-bit mnemonic → toSeed → `seedM.substr(1, 64)`) and handleMasterPassphrase (:6819-6829, same derivation at login with scope system:config); Manager assets/jsbip39_v1.js (:31 PBKDF2_ROUNDS 2048; :131-139 toSeed = PBKDF2-HMAC-SHA512(NFKD(mnemonic), "mnemonic"+passphrase, 2048, 512 bits); :99 check) and assets/wordlist_english_v1.js (the standard 2048-word BIP39 English list); encedo_firmware (the master role is admin-only: api_keymgmt.c:76/301/782/1040/1166 and api_crypto.c:87/283/… reject sub "M"; api_system.c:1066/1188 accept U or M); approved 2026-10-07 (user "ok")
 depends_on: ["REQ-AUTH-011", "REQ-API-005", "REQ-API-006"]
 supersedes: null
@@ -59,7 +59,7 @@ Manager-initialised device's words could not be used by hem-tool — the
 two reference clients would diverge at the recovery moment. Putting the
 derivation in the SDK (not the tool) keeps the quirk in one tested
 place and gives every consumer the same bytes. `--master-secret-hex` in
-hem-tool stays as a scripted escape hatch (REQ-TOOL-021).
+hem-tool stays as a scripted escape hatch (encedo-hem-tool, REQ-TOOL-021).
 
 **Acceptance criteria:**
 - [x] Unit: for a fixed 24-word mnemonic the derived 32 bytes equal the
