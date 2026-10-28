@@ -35,7 +35,8 @@ ehem_add_unit_test(test_system SOURCES test_system.c)
 # REQ-SYS-003, REQ-NET-005: check-in flow + automatic certificate recovery.
 ehem_add_unit_test(test_checkin SOURCES test_checkin.c)
 
-# REQ-SYS-006, REQ-TOOL-003: public cert-inspection helper (serial + validity).
+# REQ-SYS-006: public cert-inspection helper (serial + validity) — what
+# hem-tool's cert-install skip-if-current builds on (encedo-hem-tool).
 ehem_add_unit_test(test_cert SOURCES test_cert.c)
 
 # REQ-TEST-006: simulated ExtAuth authenticator — shim AES-128-CBC vector,
@@ -55,97 +56,8 @@ ehem_add_unit_test(test_confirm SOURCES test_confirm.c)
 # REQ-AUTH-010: mobile login mode via the ensure-token chokepoint (M8).
 ehem_add_unit_test(test_mobile SOURCES test_mobile.c)
 
-# REQ-TOOL-003: hem-tool cert-install orchestration via the fake transport.
-# Links hem-tool-core (the shared tool code) alongside the test support lib.
-if(TARGET hem-tool-core)
-  ehem_add_unit_test(test_cert_install SOURCES test_cert_install.c)
-  target_link_libraries(test_cert_install PRIVATE hem-tool-core)
-
-  # REQ-TOOL-004/005: protected-key classifier + `keys list` (hem-tool-core).
-  ehem_add_unit_test(test_keys SOURCES test_keys.c)
-  target_link_libraries(test_keys PRIVATE hem-tool-core)
-
-  # REQ-TOOL-007: `keys pub` — material formats, classification, exit codes.
-  ehem_add_unit_test(test_keys_pub SOURCES test_keys_pub.c)
-  target_link_libraries(test_keys_pub PRIVATE hem-tool-core)
-
-  # REQ-TOOL-008: `sign` — inputs, default-alg lookup, formats, exit codes.
-  ehem_add_unit_test(test_sign_tool SOURCES test_sign_tool.c)
-  target_link_libraries(test_sign_tool PRIVATE hem-tool-core)
-
-  # REQ-TOOL-009: `keys gen` — body bytes, NIST mode default, exit codes.
-  ehem_add_unit_test(test_keys_gen SOURCES test_keys_gen.c)
-  target_link_libraries(test_keys_gen PRIVATE hem-tool-core)
-
-  # REQ-TOOL-010: `random` — transient-key lifecycle, formats, exit codes.
-  ehem_add_unit_test(test_random_tool SOURCES test_random_tool.c)
-  target_link_libraries(test_random_tool PRIVATE hem-tool-core)
-
-  # REQ-TOOL-011/012/013: `keys update` / `logs` / `selftest` (M7).
-  ehem_add_unit_test(test_tool_m7 SOURCES test_tool_m7.c)
-  target_link_libraries(test_tool_m7 PRIVATE hem-tool-core)
-
-  # REQ-TOOL-015: `tls-recover` orchestration (M7).
-  ehem_add_unit_test(test_recover SOURCES test_recover.c)
-  target_link_libraries(test_recover PRIVATE hem-tool-core)
-
-  # REQ-TOOL-022: `wipe-device` — typed-hostname confirmation, --wait (M10).
-  ehem_add_unit_test(test_wipe SOURCES test_wipe.c)
-  target_link_libraries(test_wipe PRIVATE hem-tool-core)
-
-  # REQ-TOOL-021: `init-device` — master-secret sources, cfg defaults, exits (M10).
-  ehem_add_unit_test(test_init_tool SOURCES test_init_tool.c)
-  target_link_libraries(test_init_tool PRIVATE hem-tool-core)
-
-  # REQ-TOOL-028: `init-wizard` — scripted dialogues over the fake transport
-  # (byte-identical init body to init-device), and the no-echo prompt helper
-  # (plain lines off a terminal; a pseudo-terminal for echo off/restore).
-  ehem_add_unit_test(test_wizard SOURCES test_wizard.c)
-  target_link_libraries(test_wizard PRIVATE hem-tool-core)
-  ehem_add_unit_test(test_prompt SOURCES test_prompt.c)
-  target_link_libraries(test_prompt PRIVATE hem-tool-core)
-
-  # REQ-TOOL-023: `recovery` — the five diagnoses and their remediations (M10).
-  ehem_add_unit_test(test_recovery SOURCES test_recovery.c)
-  target_link_libraries(test_recovery PRIVATE hem-tool-core)
-
-  # REQ-TOOL-016: `ext` pair/list/login + terminal QR (M8).
-  ehem_add_unit_test(test_ext_tool SOURCES test_ext_tool.c)
-  target_link_libraries(test_ext_tool PRIVATE hem-tool-core)
-
-  # REQ-TOOL-018: the shared login chokepoint + --mobile outcome exits.
-  ehem_add_unit_test(test_tool_auth SOURCES test_tool_auth.c)
-  target_link_libraries(test_tool_auth PRIVATE hem-tool-core)
-
-  # REQ-TOOL-017/019/020: command registry, help rendering, URL resolution.
-  ehem_add_unit_test(test_registry SOURCES test_registry.c)
-  target_link_libraries(test_registry PRIVATE hem-tool-core)
-
-  # REQ-TOOL-027: the key-type table behind `keys gen -h` / `keys types`,
-  # checked against the SDK classifier (REQ-KEY-006).
-  ehem_add_unit_test(test_keytypes SOURCES test_keytypes.c)
-  target_link_libraries(test_keytypes PRIVATE hem-tool-core)
-
-  # REQ-TOOL-024/025: the start of run — explicit SDK init with its refusal
-  # message + exit 12, and the --version report (hem-tool-core).
-  ehem_add_unit_test(test_tool_startup SOURCES test_tool_startup.c)
-  target_link_libraries(test_tool_startup PRIVATE hem-tool-core)
-
-  # REQ-TOOL-024/025 on the REAL main.c: a test build of hem-tool whose
-  # constructor forces the REQ-API-010 refusal named by
-  # EHEM_TEST_FORCE_MISMATCH; the script drives the command line.
-  add_executable(hem-tool-forced-mismatch
-    ${PROJECT_SOURCE_DIR}/src/tools/hem-tool/main.c tool_force_mismatch.c)
-  target_link_libraries(hem-tool-forced-mismatch PRIVATE
-    hem-tool-core ehem_test_support)
-  target_compile_options(hem-tool-forced-mismatch PRIVATE ${EHEM_WARNING_FLAGS})
-  add_test(NAME tool_startup_cli
-    COMMAND ${CMAKE_COMMAND}
-      -DEHEM_TOOL=$<TARGET_FILE:hem-tool-forced-mismatch>
-      -DEHEM_VERSION=${PROJECT_VERSION}
-      -P ${CMAKE_CURRENT_SOURCE_DIR}/check_tool_startup.cmake)
-  set_tests_properties(tool_startup_cli PROPERTIES LABELS unit)
-endif()
+# The 18 hem-tool unit tests, the forced-mismatch CLI run and their helpers
+# moved to encedo-hem-tool (c/tests/unit) with the tool — M13, 2026-10-28.
 
 # REQ-SYS-004, REQ-SYS-005: config GET / cert install / reboot bindings.
 ehem_add_unit_test(test_config SOURCES test_config.c)
@@ -230,7 +142,7 @@ add_test(NAME docs_coverage
     -P ${CMAKE_CURRENT_SOURCE_DIR}/check_docs_coverage.cmake)
 set_tests_properties(docs_coverage PROPERTIES LABELS unit)
 
-# REQ-API-009: every string/character literal in the SDK and hem-tool sources
+# REQ-API-009: every string/character literal in the SDK sources
 # is ASCII (a small lexer — comments keep their typography; vendored code is
 # third-party and excluded).
 file(GLOB_RECURSE EHEM_ASCII_SOURCES CONFIGURE_DEPENDS

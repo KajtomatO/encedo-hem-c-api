@@ -104,7 +104,8 @@ ehem_rc ehem_sha256(const uint8_t *in, size_t in_len,
 ehem_rc ehem_random_bytes(uint8_t *out, size_t n);
 
 /* --------------------------------------------------------------------------
- * X.509 leaf inspection — REQ-SYS-006 harvest / REQ-TOOL-003 skip-if-current.
+ * X.509 leaf inspection — REQ-SYS-006 harvest / hem-tool's cert-install
+ * skip-if-current (encedo-hem-tool).
  *
  * The check-in cert-install path needs three facts about the cloud-delivered
  * certificate: its serial (to compare with the device's currently-loaded one),
@@ -143,7 +144,7 @@ ehem_rc ehem_cert_parse_leaf(const uint8_t *der, size_t der_len,
  * so the two producers of a serial (this shim's cert parse, and the device's
  * base64 `csn` claim decoded by the caller) yield the SAME string for the same
  * certificate regardless of sign-byte convention — that equality is what
- * skip-if-current relies on (REQ-TOOL-003).
+ * skip-if-current relies on (hem-tool cert-install, encedo-hem-tool).
  */
 void ehem_serial_hex(const uint8_t *serial, size_t len, char *out, size_t cap);
 

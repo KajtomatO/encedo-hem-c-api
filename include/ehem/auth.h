@@ -424,7 +424,8 @@ typedef struct ehem_notify_register_info {
  * `eid` and `request` (from ehem_ext_init) and the broker `epk` (from
  * ehem_notify_session). The returned `link` goes into the QR payload the
  * phone scans — ehem_ext_qr_payload() composes it; rendering it is the
- * caller's (REQ-TOOL-016 puts it behind a terminal QR).
+ * caller's (hem-tool's `ext pair` puts it behind a terminal QR — encedo-hem-tool,
+ * its REQ-TOOL-016).
  */
 EHEM_API ehem_rc ehem_notify_register_init(ehem_ctx *ctx,
                                            const char *notify_url,

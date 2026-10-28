@@ -2,7 +2,8 @@
 # implements: REQ-BUILD-001
 #
 # Cross-platform build (Linux GCC/Clang, Windows MinGW/MSYS2) producing static
-# and shared `encedo-hem` libraries plus, later, the hem-tool executable.
+# and shared `encedo-hem` libraries. (hem-tool, built here until 1.2.0, lives in
+# encedo-hem-tool since the split of 2026-10-27 — M13.)
 # See ARCHITECTURE.md §1 (fixed decisions) and §10 (directory layout).
 
 cmake_minimum_required(VERSION 3.20)
@@ -41,20 +42,16 @@ if(EHEM_SANITIZE AND NOT MSVC)
 endif()
 
 # --- build configuration switches (REQ-BUILD-006) --------------------------
-# implements: REQ-BUILD-006 — which SDK variants are built, how hem-tool links
-# the SDK, how the third-party libraries link. Every default is the pre-M12
-# behaviour. Changing EHEM_DEPS_LINK in an existing build directory keeps
-# CMake's cached library lookups — use a fresh one (./dev keeps one per set).
+# implements: REQ-BUILD-006 — which SDK variants are built and how the
+# third-party libraries link. Every default is the pre-M12 behaviour. Changing
+# EHEM_DEPS_LINK in an existing build directory keeps CMake's cached library
+# lookups — use a fresh one (./dev keeps one per set). EHEM_TOOL_LINK and
+# EHEM_BUILD_TOOL left with hem-tool (M13, 2026-10-28).
 option(EHEM_BUILD_SHARED "Build and install the shared SDK (libencedo-hem.so/.dll)" ON)
 option(EHEM_BUILD_STATIC "Build and install the static SDK (libencedo-hem.a)" ON)
-set(EHEM_TOOL_LINK "static" CACHE STRING
-  "How hem-tool links the SDK: static (it carries the SDK) | shared")
-set_property(CACHE EHEM_TOOL_LINK PROPERTY STRINGS static shared)
 set(EHEM_DEPS_LINK "default" CACHE STRING
   "How libcurl and the crypto library link: default (as found) | static | shared")
 set_property(CACHE EHEM_DEPS_LINK PROPERTY STRINGS default static shared)
-# hem-tool can be turned off for a library-only consumer.
-option(EHEM_BUILD_TOOL "Build the hem-tool CLI" ON)
 # implements: REQ-BUILD-007 — the crypto library behind src/crypto_shim.h:
 # wolfSSL (the default) or OpenSSL 3; exactly one shim source per configure.
 set(EHEM_CRYPTO_BACKEND "wolfssl" CACHE STRING
@@ -64,19 +61,12 @@ set_property(CACHE EHEM_CRYPTO_BACKEND PROPERTY STRINGS wolfssl openssl)
 if(NOT EHEM_CRYPTO_BACKEND MATCHES "^(wolfssl|openssl)$")
   message(FATAL_ERROR "EHEM_CRYPTO_BACKEND must be wolfssl or openssl, not '${EHEM_CRYPTO_BACKEND}'")
 endif()
-if(NOT EHEM_TOOL_LINK MATCHES "^(static|shared)$")
-  message(FATAL_ERROR "EHEM_TOOL_LINK must be static or shared, not '${EHEM_TOOL_LINK}'")
-endif()
 if(NOT EHEM_DEPS_LINK MATCHES "^(default|static|shared)$")
   message(FATAL_ERROR "EHEM_DEPS_LINK must be default, static or shared, not '${EHEM_DEPS_LINK}'")
 endif()
 if(NOT EHEM_BUILD_SHARED AND NOT EHEM_BUILD_STATIC)
   message(FATAL_ERROR "EHEM_BUILD_SHARED and EHEM_BUILD_STATIC are both OFF - "
                       "nothing would be built; turn at least one on")
-endif()
-if(EHEM_BUILD_TOOL AND EHEM_TOOL_LINK STREQUAL "shared" AND NOT EHEM_BUILD_SHARED)
-  message(FATAL_ERROR "EHEM_TOOL_LINK=shared needs the shared SDK, but "
-                      "EHEM_BUILD_SHARED is OFF")
 endif()
 
 include(GNUInstallDirs)
@@ -218,7 +208,7 @@ endif()
 set(CMAKE_FIND_LIBRARY_SUFFIXES "${_ehem_saved_suffixes}")
 
 # How the resolved dependencies link — a build fact ehem_build_info_get()
-# reports (REQ-API-011) and `hem-tool --version` prints (REQ-TOOL-025): a static
+# reports (REQ-API-011) and a consumer such as hem-tool's `--version` prints: a static
 # archive (.a / .lib — but not a MinGW .dll.a import library) or a shared
 # library. `lib` is a library path or an imported target.
 function(ehem_link_mode lib out)
@@ -285,68 +275,15 @@ if(NOT EHEM_DEPS_LINK STREQUAL "default")
 endif()
 # The licensing tripwire (ARCHITECTURE.md §1 and §12 risk 1): any build whose
 # wolfSSL is an archive puts wolfSSL inside every binary it links. (OpenSSL 3
-# is Apache-2.0: a static OpenSSL is the design of the one-file hem-tool and
-# the static SDK package, REQ-BUILD-009.)
+# is Apache-2.0: a static OpenSSL is the design of the static SDK package,
+# REQ-BUILD-010, and of the one-file hem-tool encedo-hem-tool builds on it.)
 if(EHEM_CRYPTO_BACKEND STREQUAL "wolfssl" AND EHEM_CRYPTO_LINK STREQUAL "static")
   message(WARNING "wolfSSL resolves to a STATIC archive in this configuration: "
     "every binary built from it carries wolfSSL, which is licensed GPLv2-or-later "
     "(or commercially by wolfSSL Inc.) - distributing such a binary means "
     "complying with that licence or holding a commercial one (ARCHITECTURE.md "
     "§12 risk 1). No published package of this project links wolfSSL statically, "
-    "and the release scripts refuse to package such a build (REQ-BUILD-005).")
-endif()
-# --- Windows release: hem-tool delay-loads libwolfssl.dll (REQ-TOOL-026) ---
-# implements: REQ-TOOL-026 — the delay-load import library of libwolfssl.dll
-# (scripts/release/build-deps.sh makes it). When set, hem-tool — and only
-# hem-tool — links it plus mingw-w64's delay-load helper instead of the
-# ordinary import library and carries the failure hook
-# (src/tools/hem-tool/delayload_win.c): a missing DLL becomes hem-tool's own
-# message and exit 12 instead of 0xC0000135 before main(). Every other target
-# (the SDK DLL, the tests) keeps the ordinary import.
-set(EHEM_WOLFSSL_DELAYLOAD_LIB "" CACHE FILEPATH
-  "Windows release build: delay-load import library of libwolfssl.dll for hem-tool")
-if(EHEM_WOLFSSL_DELAYLOAD_LIB)
-  if(NOT EHEM_CRYPTO_BACKEND STREQUAL "wolfssl")
-    message(FATAL_ERROR "EHEM_WOLFSSL_DELAYLOAD_LIB needs EHEM_CRYPTO_BACKEND=wolfssl")
-  endif()
-  if(NOT WIN32)
-    message(FATAL_ERROR "EHEM_WOLFSSL_DELAYLOAD_LIB applies to Windows builds only")
-  endif()
-  if(NOT EXISTS "${EHEM_WOLFSSL_DELAYLOAD_LIB}")
-    message(FATAL_ERROR "EHEM_WOLFSSL_DELAYLOAD_LIB: no such file ${EHEM_WOLFSSL_DELAYLOAD_LIB}")
-  endif()
-  if(NOT EHEM_BUILD_TOOL OR NOT EHEM_TOOL_LINK STREQUAL "static" OR
-     EHEM_CRYPTO_LINK STREQUAL "static")
-    message(FATAL_ERROR "EHEM_WOLFSSL_DELAYLOAD_LIB needs hem-tool carrying the "
-                        "SDK (EHEM_TOOL_LINK=static) and a dynamic wolfSSL")
-  endif()
-  # Resolved per consuming target: one with the EHEM_WOLFSSL_DELAYLOAD
-  # property (hem-tool) gets the delay-load library + the helper library,
-  # every other one the ordinary import library.
-  set(_ehem_delay "$<BOOL:$<TARGET_PROPERTY:EHEM_WOLFSSL_DELAYLOAD>>")
-  set(EHEM_CRYPTO_LINK_LIBS
-    "$<${_ehem_delay}:${EHEM_WOLFSSL_DELAYLOAD_LIB}>"
-    "$<${_ehem_delay}:delayimp>"
-    "$<$<NOT:${_ehem_delay}>:PkgConfig::WOLFSSL>")
-  # libcurl (static, wolfSSL TLS backend) names the import library in its own
-  # link interface — the package records it by path; the same switch there.
-  get_target_property(_ehem_curl_real CURL::libcurl ALIASED_TARGET)
-  if(NOT _ehem_curl_real)
-    set(_ehem_curl_real CURL::libcurl)
-  endif()
-  get_target_property(_ehem_curl_libs ${_ehem_curl_real} INTERFACE_LINK_LIBRARIES)
-  if(_ehem_curl_libs)
-    set(_ehem_curl_new "")
-    foreach(_l IN LISTS _ehem_curl_libs)
-      if(_l MATCHES "(^|[/\\])libwolfssl(\\.dll)?\\.a$" OR _l MATCHES "^(-l)?wolfssl$")
-        list(APPEND _ehem_curl_new ${EHEM_CRYPTO_LINK_LIBS})
-      else()
-        list(APPEND _ehem_curl_new "${_l}")
-      endif()
-    endforeach()
-    set_property(TARGET ${_ehem_curl_real} PROPERTY INTERFACE_LINK_LIBRARIES "${_ehem_curl_new}")
-  endif()
-  message(STATUS "encedo-hem: hem-tool delay-loads libwolfssl.dll (${EHEM_WOLFSSL_DELAYLOAD_LIB})")
+    "and the release scripts refuse to package such a build (REQ-BUILD-010).")
 endif()
 
 set(EHEM_LINK_DEFINITIONS "")
@@ -394,12 +331,11 @@ set(EHEM_SOURCES
 
 # The static archive is the installed static variant (EHEM_BUILD_STATIC=ON);
 # with the variant off it is still built — privately, never installed, as
-# encedo-hem-internal — whenever hem-tool carries the SDK (EHEM_TOOL_LINK=static)
-# or the unit tests need the hidden seams. EHEM_STATIC_TARGET names it for the
-# in-tree consumers.
+# encedo-hem-internal — whenever the unit tests need the hidden seams.
+# EHEM_STATIC_TARGET names it for the in-tree consumers.
 if(EHEM_BUILD_STATIC)
   set(EHEM_STATIC_TARGET encedo-hem-static)
-elseif(BUILD_TESTING OR (EHEM_BUILD_TOOL AND EHEM_TOOL_LINK STREQUAL "static"))
+elseif(BUILD_TESTING)
   set(EHEM_STATIC_TARGET encedo-hem-internal)
 else()
   set(EHEM_STATIC_TARGET "")
@@ -597,72 +533,10 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/cmake/encedo-hem.pc.in
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/encedo-hem.pc
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
 
-# --- hem-tool CLI ---------------------------------------------------------
-# Thin consumer of the PUBLIC API only (REQ-TOOL-001). By default it links the
-# static SDK so the tool carries the SDK itself (no libencedo-hem.so lookup at
-# run time); EHEM_TOOL_LINK=shared links libencedo-hem instead (REQ-BUILD-006).
-# The SDK's own dependencies, curl and wolfSSL, come through the SDK target's
-# link interface and are dynamic or not per the build — the release build links
-# wolfSSL dynamically (REQ-BUILD-005).
-if(EHEM_BUILD_TOOL)
-  # The tool's command code lives in a small static lib so the tool binary and
-  # the unit/disruptive tests share ONE copy of it. Like the rest of the tool it
-  # uses only the public API. hem-tool-core always sits on the static SDK — the
-  # unit tests drive it through the hidden seams; with EHEM_TOOL_LINK=shared the
-  # executable gets its own copy built against the shared SDK.
-  set(HEM_TOOL_CORE_SOURCES
-    src/tools/hem-tool/cert_install.c
-    src/tools/hem-tool/ext_cmd.c
-    src/tools/hem-tool/init_cmd.c
-    src/tools/hem-tool/keys.c
-    src/tools/hem-tool/keytypes.c
-    src/tools/hem-tool/logs.c
-    src/tools/hem-tool/prompt.c
-    src/tools/hem-tool/random.c
-    src/tools/hem-tool/recover.c
-    src/tools/hem-tool/recovery.c
-    src/tools/hem-tool/registry.c
-    src/tools/hem-tool/selftest.c
-    src/tools/hem-tool/sign.c
-    src/tools/hem-tool/startup.c
-    src/tools/hem-tool/tool_auth.c
-    src/tools/hem-tool/wipe.c
-    src/tools/hem-tool/wizard.c
-    # Vendored qrcodegen (REQ-TOOL-016): TOOL-ONLY — never part of the SDK
-    # library; the export/header gates prove the containment.
-    src/tools/hem-tool/vendor/qrcodegen/qrcodegen.c)
-  set(_ehem_tool_cores "")
-  if(EHEM_STATIC_TARGET)
-    add_library(hem-tool-core STATIC ${HEM_TOOL_CORE_SOURCES})
-    target_link_libraries(hem-tool-core PUBLIC ${EHEM_STATIC_TARGET})
-    list(APPEND _ehem_tool_cores hem-tool-core)
-  endif()
-  if(EHEM_TOOL_LINK STREQUAL "shared")
-    add_library(hem-tool-core-shared STATIC ${HEM_TOOL_CORE_SOURCES})
-    target_link_libraries(hem-tool-core-shared PUBLIC encedo-hem::encedo-hem)
-    list(APPEND _ehem_tool_cores hem-tool-core-shared)
-    set(_ehem_tool_core hem-tool-core-shared)
-  else()
-    set(_ehem_tool_core hem-tool-core)
-  endif()
-  foreach(_t IN LISTS _ehem_tool_cores)
-    target_include_directories(${_t} PUBLIC
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/tools/hem-tool)
-    target_compile_options(${_t} PRIVATE ${EHEM_WARNING_FLAGS})
-  endforeach()
-
-  add_executable(hem-tool src/tools/hem-tool/main.c)
-  target_link_libraries(hem-tool PRIVATE ${_ehem_tool_core})
-  target_compile_options(hem-tool PRIVATE ${EHEM_WARNING_FLAGS})
-  if(EHEM_WOLFSSL_DELAYLOAD_LIB)
-    # REQ-TOOL-026: the delay-load import + its failure hook, hem-tool only.
-    set_property(TARGET hem-tool PROPERTY EHEM_WOLFSSL_DELAYLOAD ON)
-    target_sources(hem-tool PRIVATE src/tools/hem-tool/delayload_win.c)
-    target_compile_definitions(hem-tool PRIVATE HEM_TOOL_DELAYLOAD
-      EHEM_WOLFSSL_COMPANION_VERSION="${WOLFSSL_VERSION}")
-  endif()
-  install(TARGETS hem-tool RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-endif()
+# hem-tool — the CLI built here until 1.2.0 — lives in encedo-hem-tool since
+# the split of 2026-10-27 (M13): it consumes this SDK as a git submodule for
+# its tests and links the installed package for its release binary, public API
+# only. Its 27 REQ-TOOL requirements are superseded by the same ids there.
 
 # --- tests ----------------------------------------------------------------
 if(BUILD_TESTING)

@@ -6,7 +6,7 @@
  * The key repository is the M3 foundation (ARCHITECTURE.md §6, §11): every key
  * the device holds — including its own TLS material and paired-authenticator
  * public keys — is enumerable here; filtering/protection is the caller's job
- * (REQ-TOOL-005). This header covers the paginated inventory:
+ * (hem-tool's REQ-TOOL-005, encedo-hem-tool). This header covers the paginated inventory:
  *
  *   - ehem_key_list()      one page over GET /api/keymgmt/list[/{offset}[/{limit}]]
  *   - ehem_key_list_all()  the whole repository, walked into one merged page
@@ -155,7 +155,8 @@ EHEM_API ehem_rc ehem_key_create(ehem_ctx *ctx,
  * network I/O). Deletion is immediate and irreversible. Returns EHEM_OK on the
  * device's empty 200; a kid the device does not hold is HTTP 406 →
  * EHEM_ERR_NOT_FOUND; 401/403 map per REQ-AUTH-003. The SDK applies no
- * protected-key policy — that safeguard lives in hem-tool (REQ-TOOL-005/006).
+ * protected-key policy — that safeguard lives in hem-tool (encedo-hem-tool,
+ * its REQ-TOOL-005/006).
  */
 EHEM_API ehem_rc ehem_key_delete(ehem_ctx *ctx, const char *kid);
 
@@ -281,7 +282,7 @@ EHEM_API void ehem_key_details_free(ehem_key_details *details);
  * policy, or descr_len > 64. A kid the device does not hold is HTTP 406 →
  * EHEM_ERR_NOT_FOUND; 400 → EHEM_ERR_DEVICE with payload; 401/403 map per
  * REQ-AUTH-003. NOTE for hem-tool-style consumers: renaming a key can add or
- * remove its protected-set classification (REQ-TOOL-005) — the SDK applies no
+ * remove its protected-set classification (hem-tool's REQ-TOOL-005) — the SDK applies no
  * such policy itself.
  */
 EHEM_API ehem_rc ehem_key_update(ehem_ctx *ctx, const char *kid,
