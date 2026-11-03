@@ -1,9 +1,9 @@
 ---
 id: REQ-API-007
 title: API reference documentation for the 1.0 surface
-status: needs-reverify
+status: verified
 priority: must
-revision: 3   # 2026-10-28 (M13 decomposition, §6.2 approved with the hem-tool split plan 2026-10-27): meaning change — "hem-tool remains the runnable examples" becomes `examples/` (two programs compiled in CI) plus a pointer to encedo-hem-tool; needs-reverify until STEP-M13-040 ticks the new criterion. Rev 2 = format decided (user decision 2026-08-06)
+revision: 4   # 2026-11-03 (STEP-M13-040 done): the M13 criterion ticked — examples/ compiled on all 10 ci.yml legs (run 41681675157), explained in the guide beside the encedo-hem-tool pointer, docs_coverage green, both examples run attended against the dev device; needs-reverify → verified (record only, no meaning change). Rev 3 = 2026-10-28 (M13 decomposition, §6.2 approved with the hem-tool split plan 2026-10-27): meaning change — "hem-tool remains the runnable examples" becomes `examples/` (two programs compiled in CI) plus a pointer to encedo-hem-tool; needs-reverify until STEP-M13-040 ticks the new criterion. Rev 2 = format decided (user decision 2026-08-06)
 source: user decision 2026-08-06 (M9 scope reshape, ARCHITECTURE.md §11 "API reference docs"); rev 2 = format decided (user decision 2026-08-06): headers stay the per-symbol reference + hand-written docs/ guide + scripted completeness gate
 depends_on: []
 supersedes: null
@@ -64,7 +64,21 @@ reference docs a 1.0 deliverable (2026-08-06).
 - [x] README updated to the 1.0 surface (status, docs section,
       hem-tool auth model incl. --mobile and the default URL, stale
       M1/Argon2 text removed) and linking the reference (2026-08-06).
-- [ ] M13 (rev 3): `examples/status.c` and `examples/sign.c` compile on every
+- [x] M13 (rev 3): `examples/status.c` and `examples/sign.c` compile on every
       ci.yml leg (`EHEM_BUILD_EXAMPLES`, default ON when top level) and are
       explained in docs/API-GUIDE.md "Examples and hem-tool" beside the pointer
       to encedo-hem-tool; `docs_coverage` stays green (STEP-M13-040).
+      *(2026-11-03, 4f22e22: examples/CMakeLists.txt builds `ehem-example-status`
+      and `ehem-example-sign` (public API only; the shared SDK when built, else
+      the static alias); EHEM_BUILD_EXAMPLES defaults ON when CMAKE_SOURCE_DIR
+      is the SDK, OFF for an add_subdirectory consumer — the subdir_consumer
+      gate refuses example targets. CI run 41681675157 (push of 4f22e22):
+      10/10 legs green with both examples compiled on each, MinGW included;
+      docs_coverage green on every leg. The guide's "Examples and hem-tool"
+      explains each example by the shape it shows and the symbols it uses, the
+      build/run commands, then hem-tool's pointer; the intro names examples/
+      and encedo-hem-tool instead of src/tools/hem-tool. Attended the same day
+      from this host: `status` under system trust exit 0 with the device's
+      fields; `sign` with a temporary EHEMTEST Ed25519 key → a 64-byte
+      signature, the key deleted afterwards; the wrong-passphrase and
+      unknown-label paths report as documented.)*
