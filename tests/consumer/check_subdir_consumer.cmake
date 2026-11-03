@@ -96,13 +96,14 @@ if("${_out}${_err}" MATCHES "Test +#[0-9]+:")
   message(FATAL_ERROR "the consumer's build carries tests of the SDK:\n${_out}${_err}")
 endif()
 # No program target: the generator lists every target it wrote. hem-tool left
-# with M13; the probe and the test/check executables belong to BUILD_TESTING.
+# with M13; the probe and the test/check executables belong to BUILD_TESTING;
+# the examples default off below the top level (EHEM_BUILD_EXAMPLES).
 set(_tdirs "${_build}/CMakeFiles/TargetDirectories.txt")
 if(NOT EXISTS "${_tdirs}")
   message(FATAL_ERROR "no ${_tdirs} — a generator this gate does not know")
 endif()
 file(READ "${_tdirs}" _targets)
-if(_targets MATCHES "/CMakeFiles/(hem-tool|tls-probe|test_[a-z]|check_[a-z])")
+if(_targets MATCHES "/CMakeFiles/(hem-tool|tls-probe|ehem-example|test_[a-z]|check_[a-z])")
   message(FATAL_ERROR "the SDK brought a test or program target into the consumer's build:\n${_targets}")
 endif()
 string(REGEX MATCHALL "/CMakeFiles/[^/\n]+\\.dir" _names "${_targets}")

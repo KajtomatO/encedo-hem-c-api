@@ -82,6 +82,16 @@ include(CTest)               # defines BUILD_TESTING (default ON), enables CTest
 # before add_subdirectory() while leaving BUILD_TESTING off.
 option(EHEM_BUILD_TEST_SUPPORT
   "Build ehem::test-support (tests/support) for tests in and out of tree" ${BUILD_TESTING})
+# REQ-API-007: the runnable examples (examples/status.c, examples/sign.c) —
+# public-API consumers compiled with the SDK; on by default in a top-level
+# build (every CI leg compiles them), off for a consumer that adds the SDK as
+# a subdirectory (REQ-BUILD-011).
+if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
+  set(_ehem_examples_default ON)
+else()
+  set(_ehem_examples_default OFF)
+endif()
+option(EHEM_BUILD_EXAMPLES "Build examples/ (status, sign)" ${_ehem_examples_default})
 
 # Third-party libraries the link closure may name that are never archived here:
 # glibc stays dynamic (a static glibc breaks NSS/getaddrinfo), and Windows'
@@ -550,6 +560,9 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/encedo-hem.pc
 # only. Its 27 REQ-TOOL requirements are superseded by the same ids there.
 
 # --- tests ----------------------------------------------------------------
+if(EHEM_BUILD_EXAMPLES)
+  add_subdirectory(examples)           # the runnable examples (REQ-API-007)
+endif()
 if(EHEM_BUILD_TEST_SUPPORT)
   add_subdirectory(tests/support)      # ehem::test-support (REQ-BUILD-011)
 endif()
