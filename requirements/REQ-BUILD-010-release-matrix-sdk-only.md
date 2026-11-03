@@ -1,9 +1,9 @@
 ---
 id: REQ-BUILD-010
 title: Release matrix without hem-tool — the SDK library packages per OS (OpenSSL static as the plain assets, wolfSSL shared as -shared), the wolfSSL companion and source, SHA256SUMS; 8 assets
-status: approved
+status: implemented
 priority: must
-revision: 1   # 2026-10-28 (M13 decomposition): drafted with the hem-tool split plan of 2026-10-27 and approved with it (the plan's §6.2 table: supersedes REQ-BUILD-005 and REQ-BUILD-009, whose hem-tool halves are encedo-hem-tool's REQ-PKG-003)
+revision: 2   # 2026-11-03 (STEP-M13-020 done): criteria 1–4 ticked (the local Release dry run on both backends; release run 41670085883 on development); approved → implemented — proven by the workflow run, no `verifies:` test by nature (as REQ-BUILD-005/009 were); the tag-path criteria 5–6 wait for STEP-M13-060 and the release. Record only, no meaning change. Rev 1 = 2026-10-28 (M13 decomposition): drafted with the hem-tool split plan of 2026-10-27 and approved with it (the plan's §6.2 table: supersedes REQ-BUILD-005 and REQ-BUILD-009, whose hem-tool halves are encedo-hem-tool's REQ-PKG-003)
 source: user decisions 2026-10-27 (the hem-tool split — clean split: SDK releases carry no hem-tool from 1.2.1 on; the one-file hem-tool is released from encedo-hem-tool, built against this repository's published static package); REQ-BUILD-009 rev 12 (the library-package half of the 1.2.0 matrix — carried over unchanged: names, contents, link asserts, consumer gates); REQ-BUILD-005 rev 6 (the workflow's triggers, the annotated-tag rule and release text); ARCHITECTURE.md §1 (wolfSSL is never statically bundled into a published package), §11 M13 part B; user decision 2026-10-14 (the wolfSSL library package is shared-only)
 depends_on: ["REQ-BUILD-001", "REQ-BUILD-002", "REQ-BUILD-006", "REQ-BUILD-007", "REQ-BUILD-008", "REQ-NET-005", "REQ-API-010"]
 supersedes: ["REQ-BUILD-005", "REQ-BUILD-009"]
@@ -70,19 +70,50 @@ carried over verbatim so that encedo-hem-tool, which pins and downloads the
 plain package, sees no change in what it consumes.
 
 **Acceptance criteria:**
-- [ ] `package-static.sh` deleted; `package.sh` builds, tests, checks and
+- [x] `package-static.sh` deleted; `package.sh` builds, tests, checks and
       packages the libraries only; `grep -rn hem-tool scripts/release
       .github/workflows/release.yml` → none but the pointer texts
       (STEP-M13-020).
-- [ ] `tls-probe` exists and `check-expired-classifier.sh` drives it:
+      *(2026-11-03, cfec1ae: package.sh orchestrates both variants — the
+      prefix stamp check, a Release configure with the tests, `ctest -L
+      unit`, the classifier on Linux, then package-wolfssl.sh + package-lib.sh
+      shared, or package-lib.sh static, then SHA256SUMS; the grep yields 19
+      lines, every one a README paragraph or a header comment pointing at
+      encedo-hem-tool or naming the pre-M13 driver.)*
+- [x] `tls-probe` exists and `check-expired-classifier.sh` drives it:
       expired leaf → `tls_expired=1`; not-yet-valid leaf → `tls_expired=0`
       and the date text; green locally on both backends (STEP-M13-020).
-- [ ] A release dispatch on `development` yields the 8 assets as artifacts
+      *(2026-11-03: the dev builds (Ubuntu's libcurl 8.5.0 on OpenSSL
+      3.0.13: "certificate has expired" → 1, "certificate is not yet valid"
+      → 0) and the Release builds against the pinned prefixes — libcurl
+      8.10.1 on wolfSSL 5.7.2: "server verification failed: certificate has
+      expired." → 1, "… certificate not valid yet." → 0; libcurl 8.10.1 on
+      OpenSSL 3.5.9: both leaves right as well.)*
+- [x] A release dispatch on `development` yields the 8 assets as artifacts
       (run id); every assert, the unit suites, the consumer gates and the
       two classifier checks green on both platforms; no `hem-tool` file in
       any archive's listing (STEP-M13-020).
-- [ ] Each package's `README.txt` names the versions and points at
+      *(Release run 41670085883 — workflow_dispatch on `development` at
+      ef63648, 2026-11-03: Linux x86_64 3:17 (both prefixes cold, 0:38 +
+      1:41; the package steps 0:13 and 0:18, each with the unit suite and
+      the classifier), Windows x86_64 (MinGW UCRT64) 14:31 (prefixes 2:02 +
+      8:50; package steps 0:34 and 0:36); every step green, the publishing
+      job skipped (no tag); artifacts release-linux-x86_64 (29,445,226 B —
+      the 4 Linux archives + SHA256SUMS; the local dry run's set is 29.6 MB)
+      and release-windows-x86_64 (5,878,383 B — the 3 Windows zips +
+      SHA256SUMS). The absence of any program in the packages, the link
+      facts and the consumer gates are package-lib.sh's own asserts inside
+      those green steps; the uploaded artifacts' file lists were not
+      downloaded here (the API wants a token) — the public rc1 assets get
+      the independent listing at the gate (STEP-M13-060).)*
+- [x] Each package's `README.txt` names the versions and points at
       encedo-hem-tool (STEP-M13-020).
+      *(2026-11-03: both packages' README.txt carry "hem-tool, the
+      command-line client, is a separate download since SDK 1.2.1:
+      https://github.com/KajtomatO/encedo-hem-tool/releases …" and name the
+      SDK label, libcurl and OpenSSL/wolfSSL versions; the wolfSSL asset's
+      README names the -shared SDK as what loads it. Checked in the local
+      dry run's archives.)*
 - [ ] Tag path: the user's annotated `v1.2.1-rc1` publishes the pre-release
       with the 8 assets, the text = annotation + checksums, `SHA256SUMS`
       re-verified in the publishing job (run id, release id; STEP-M13-060).

@@ -2,12 +2,13 @@
  * tls_probe.c — tls-probe: one request to a URL under a given CA file, and
  * the SDK's verdict on its TLS failure, printed as one line.
  *
- * implements: REQ-NET-005 (the end-to-end proof driver of the expired-
- *             certificate classifier: scripts/release/check-expired-classifier.sh
- *             runs it against local expired and not-yet-valid endpoints in the
- *             release job under both backends — until M13 that driver was
- *             `hem-tool recovery`, now encedo-hem-tool's),
- *             REQ-BUILD-010 (the per-build classifier check)
+ * verifies: REQ-NET-005 (the end-to-end proof driver of the expired-
+ *           certificate classifier: scripts/release/check-expired-classifier.sh
+ *           runs it against local expired and not-yet-valid endpoints in the
+ *           release job under both backends — until M13 that driver was
+ *           `hem-tool recovery`, now encedo-hem-tool's)
+ *
+ * implements: REQ-BUILD-010 (the per-build classifier check)
  *
  *   tls-probe <url> <ca-file>
  *
