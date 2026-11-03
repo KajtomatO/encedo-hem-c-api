@@ -9,7 +9,9 @@ any more. **Re-checked for 1.2.0 (M12, 2026-10-16):** no change — M12
 binds no endpoint. Its one new public function, `ehem_build_info_get`,
 reports how the SDK was built and makes no device call; hem-tool's
 `init-wizard` drives the existing `auth/init` binding and `keys types`
-is local.
+is local. **Re-checked for 1.2.1 (M13, 2026-11-03):** no change — the
+public surface is untouched; the release stops carrying hem-tool, which is
+encedo-hem-tool's since.
 
 **Dispositions:** `BOUND` (SDK binding exists), `UNBOUND-DELIBERATE`
 (never planned, with reason), `DEFERRED-M10` (post-1.0 milestone — none

@@ -65,7 +65,7 @@ workplan/
 | `OPS` | cryptographic operation bindings: sign/verify, ECDH, AES, HMAC, ML-KEM/ML-DSA, random |
 | `SYS` | system/logger/storage bindings, incl. disruptive operations (reboot, firmware) |
 | `NET` | transport layer: vtable, libcurl implementation, TLS trust, timeouts |
-| `TOOL` | hem-tool CLI behavior, incl. protected-key removal policy |
+| `TOOL` | hem-tool CLI behaviour — superseded since M13 (2026-10-28): the same ids live on in encedo-hem-tool; the files here keep their frozen text and `status: superseded` |
 | `TEST` | testing policy & infrastructure: suite gating, device policy, fixtures |
 | `BUILD` | build system, packaging, dependency vendoring, CI |
 
@@ -302,6 +302,7 @@ Claude SHOULD propose capturing it as a REQ on the spot.
   | https://github.com/KajtomatO/encedo-hem-api-doc | HEM REST API endpoints, request/response payloads, error codes; its `DISCREPANCIES.md` records known doc/implementation divergences |
   | https://github.com/KajtomatO/encedo-hem-python-api | working client reference: auth/token caching behavior, TLS handling, `wipe_keys.py` protected-key policy |
   | `requirements/start_point/encedo-pkcs11/` (`hem.h`, `REQUIREMENTS-hem.md`) | the consumer contract: what encedo-pkcs11 needs from this SDK (HEM-SDK-1…9, error-condition set) |
+  | https://github.com/KajtomatO/encedo-hem-tool | hem-tool — its behaviour, release procedure and the `REQ-TOOL-*` ids (moved there at SDK 1.2.0 with the split of 2026-10-27, same ids); the `REQ-TOOL-*` files in this repository are superseded records with frozen text, and `superseded_by` may name a requirement there |
 
   Precedence when sources conflict: device > Encedo Manager > API doc;
   conflicts are recorded in the affected REQ, not silently resolved.

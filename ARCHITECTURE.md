@@ -36,11 +36,14 @@ the encedo-hem-api-doc spec.
 - **Transport** — HTTPS via libcurl, hidden behind a small function-pointer
   interface (vtable); unit tests inject a fake transport and never touch
   the network.
-- **`hem-tool` CLI** — thin consumer of the library: connection smoke test
-  (MVP), then key listing and key removal with the same protected-key
-  safety policy as the Python `wipe_keys.py` (protection is a client-side
-  convention over labels — device TLS material, paired phone authenticators
-  — requiring per-key explicit confirmation).
+- **Examples and the CLI** — `examples/status.c` and `examples/sign.c` are
+  the SDK's runnable examples (public API only, compiled with the SDK,
+  REQ-API-007). `hem-tool`, the full command-line client, is a thin consumer
+  of the public API in its own repository since 1.2.1 —
+  [encedo-hem-tool](https://github.com/KajtomatO/encedo-hem-tool), built on
+  the SDK's published static package (user decision 2026-10-27, M13); until
+  then it was built and released here, with the protected-key policy
+  mirrored from the Python `wipe_keys.py` (§8).
 - **Test suites** — unit (fake transport, no device), integration (real
   device, enabled by env/config — runs on the development machine where a
   HEM is available now; CI gains a device later and only then enables the
@@ -65,10 +68,12 @@ the encedo-hem-api-doc spec.
 - **Unit tests:** CMocka — pure C, cross-platform, built-in mocking.
 - **CI:** GitHub Actions — build + unit tests on Linux and Windows from
   day one; integration tests run locally against the dev-machine HEM until
-  CI gets device access (user decision 2026-07-15). M10 adds a release
-  workflow: hem-tool binaries for both platforms (static libcurl, dynamic
-  wolfSSL — the shared wolfSSL ships as its own asset) on every push to
-  `main`, GitHub Releases on `v*` tags (user decisions 2026-10-07/09).
+  CI gets device access (user decision 2026-07-15). M10 added a release
+  workflow (artifacts on every push to `main`, GitHub Releases on `v*`
+  tags — user decisions 2026-10-07/09); since M13 it publishes the SDK
+  library packages only — the static one on OpenSSL, the shared one on a
+  dynamically linked wolfSSL that ships as its own asset — 8 assets
+  (REQ-BUILD-010); hem-tool is released from encedo-hem-tool.
 
 **Data flow:** application calls a typed function (e.g. `ehem_key_list`) →
 session engine ensures a valid bearer token for the required scope
@@ -122,7 +127,8 @@ the context.
   TLS backend where we build libcurl ourselves.
 - **wolfSSL is never statically bundled into a published package** (user
   decision 2026-10-09; licensing — wolfSSL is GPLv2-or-later/commercial):
-  published hem-tool and library packages link wolfSSL dynamically, and the
+  the published `-shared` library package (until 1.2.1 the hem-tool
+  binaries too) links wolfSSL dynamically, and the
   shared wolfSSL ships as a separate asset with its license text, its build
   configuration and the corresponding source; static packages use a
   different library — **OpenSSL 3.x** (user decision 2026-10-12, M12;
@@ -157,7 +163,7 @@ the context.
   later without redesign (mirrors HEM-GEN-5).
 - **The SDK reads no config files** — URL, credentials, timeouts arrive as
   API parameters. Config-file handling (e.g. `encedo-pkcs11.conf` per
-  HEM-CFG-2/3) is the consumer's job; `hem-tool` uses CLI arguments and
+  HEM-CFG-2/3) is the consumer's job; hem-tool (encedo-hem-tool) uses CLI arguments and
   environment variables.
 - **Dangerous operations ship API-complete but test-gated** — reboot and
   firmware-upgrade functions exist and have tests, but those tests run
@@ -207,7 +213,7 @@ Constraints that shape the design:
 
 ```mermaid
 graph TD
-    APP["Application<br/>(encedo-pkcs11, hem-tool, ...)"] --> API
+    APP["Application<br/>(encedo-pkcs11; hem-tool — separate repository; examples/ ...)"] --> API
     subgraph libencedo-hem
         API["Public API<br/>include/ehem/*.h — ehem_ctx, typed structs, error enum"]
         API --> SES["Auth / session engine<br/>eJWT, token & scope cache"]
@@ -229,7 +235,8 @@ graph TD
 | Protocol bindings | endpoint ↔ struct mapping, device error translation | talk to the network directly |
 | Crypto shim | thin wrapper over wolfCrypt | implement primitives itself |
 | Transport | one function: request in, response out | know about JSON or auth |
-| hem-tool | CLI over the public API only | reach into internals |
+| hem-tool (encedo-hem-tool, a separate repository since 1.2.1) | CLI over the public API only — it links the published static package | reach into internals |
+| examples/ | the runnable examples, public API only | be run by the build (they need a device) |
 
 ## 4. Public API & conventions
 
@@ -360,59 +367,33 @@ sequenceDiagram
 
 ## 8. hem-tool CLI
 
-- Thin consumer of the public API only — doubles as living documentation
-  and the manual integration driver.
-- Subcommands (grow with milestones): `hem-tool status` (MVP connection
-  test), `hem-tool checkin`, `hem-tool cert-install` (M2), `hem-tool
-  keys list` / `hem-tool keys rm` (M3), `hem-tool keys pub` /
-  `hem-tool sign` (M4, user decision 2026-07-16), `hem-tool keys
-  gen` (M5, user decision 2026-07-16), `hem-tool random` (M6, user
-  decision 2026-07-17 — REQ-TOOL-010; transient `EHEMTEST` AES key when
-  `--kid` is not given), and `hem-tool keys update` / `hem-tool logs` /
-  `hem-tool selftest` (M7, user decision 2026-07-17 — REQ-TOOL-011/012/
-  013; a `hem-tool fw-upgrade` orchestrator is deferred to M9 with the
-  upgrade endpoints), and the `hem-tool ext` family — `ext pair` /
-  `ext list` / `ext login` (M8, user decision 2026-07-22 —
-  REQ-TOOL-016; `ext pair` renders the pairing QR **in the terminal**
-  via a vendored single-file MIT QR encoder (Nayuki qrcodegen, tool-only
-  linkage, cJSON-style vendoring) rather than any web service — the
-  payload comes from the SDK's `ehem_ext_qr_payload` (STEP-M12-137:
-  `hash` = base64(SHA-256(request)), the phone's check), and a Windows
-  console receives the rows as UTF-16 through the console API (also
-  STEP-M12-137 — the console's OEM code page made mojibake of the UTF-8
-  half-blocks, the rc3 finding; a file or pipe gets the bytes) — the
-  tester's quickchart.io approach leaks user/email/hostname to a third
-  party and is rejected; unpairing is plain `keys rm`, where real
-  phones' `(iPhone)`/`(Android)` labels already land in the
-  protected-key policy below).
-- **`cert-install`** (REQ-TOOL-003): harvests the cloud certificate
-  (REQ-SYS-006), skips if the device already serves it (leg-1 `csn` vs the
-  harvested leaf serial, or the broker suppressing the chain), else
-  authenticates, installs (REQ-SYS-004), **reboots** (REQ-SYS-005), waits
-  for the device, and verifies — one distinct exit code per failure mode.
-  Its orchestration lives in a small `hem-tool-core` static lib the CLI, the
-  unit test, and the disruptive live test all share; its live test is
-  `disruptive`-gated.
-- **M10 additions (user decision 2026-10-07):** `init-device` and
-  `wipe-device` over the `auth/init` and `wipeout` bindings (attended-only
-  verification), and `recovery` — the diagnose-then-remediate orchestrator
-  over `checkin`, `cert-install` and `tls-recover` (single check-in
-  attempt, no polling). The top-level help gains a **"manual recovery"**
-  section listing `cert-install` and `tls-recover` below the auth-grouped
-  listing, in which `recovery` itself stays.
-- Connection parameters via flags or env (`EHEM_URL`, `EHEM_PASSPHRASE`).
-  `--passphrase` is **deprecated** since 1.2.0 (user decision 2026-10-19,
-  REQ-TOOL-020 rev 2): a passphrase on the command line stays in the shell
-  history and shows in the process list, so hem-tool warns once on stderr
-  and will drop the flag in a later release; a safer entry (a session,
-  `hem-tool login`) is a BACKLOG item. `init-wizard` offers `my.ence.do` as
-  the hostname default, the host the default URL points at (REQ-TOOL-028
-  rev 3, user decision 2026-10-19).
-- **Protected-key policy** (mirrors Python `wipe_keys.py`): keys labeled
-  exactly `TLS PrivateKey` / `TLS Certificate`, or containing `(Android)`
-  / `(iPhone)`, are never removed by bulk operations; removing one
-  requires naming it exactly *and* typing the literal `YES` at a per-key
-  prompt; `--yes` is deliberately ignored for them.
+hem-tool, the command-line client over this SDK, lives in
+[encedo-hem-tool](https://github.com/KajtomatO/encedo-hem-tool) since the
+SDK's 1.2.1 (user decision 2026-10-27; M13, §11). What this section used to
+specify — the command set grouped by credential need, `cert-install` and
+`recovery`, `init-device` / `init-wizard` / `wipe-device`, the `ext` family
+with the terminal QR, the protected-key policy mirrored from the Python
+`wipe_keys.py`, the deprecated `--passphrase` — is that repository's
+ARCHITECTURE §3 and its `REQ-TOOL-*` requirements (the same ids; the copies
+under `requirements/` here are superseded, frozen records). What stays true
+for this SDK:
+
+- hem-tool is a thin consumer of the **public API only** (its CI gate
+  allows no include outside `ehem/*.h`); for its tests it builds the SDK
+  from a git submodule pinned to a release tag — reaching the hidden seams
+  through `ehem::test-support` (§9, REQ-BUILD-011) — and for its release
+  binary it links the published static package (one file per platform,
+  OpenSSL and libcurl inside), whose contents REQ-BUILD-010 keeps stable.
+- `hem-tool --version` prints its own version and the SDK version it
+  embeds; `c-v1.3.0` (2026-10-28) is built on SDK 1.2.0.
+- The SDK's own runnable examples are `examples/status.c` and
+  `examples/sign.c` (REQ-API-007; docs/API-GUIDE.md "Examples and
+  hem-tool").
+
+Until 1.2.0 hem-tool was built here (`src/tools/hem-tool/`, the targets
+`hem-tool-core` / `hem-tool`, the options `EHEM_BUILD_TOOL` /
+`EHEM_TOOL_LINK`) and released with the SDK (12 assets); that history is in
+`workplan/done/` and the superseded `requirements/REQ-TOOL-*.md`.
 
 ## 9. Testing policy
 
@@ -434,7 +415,7 @@ sequenceDiagram
   the label opt-in and `EHEM_ALLOW_DISRUPTIVE=1`. Never automatic
   (goal.txt).
 - **Attended-only** (user decision 2026-10-07, M10): device
-  initialisation and device wipe — the bindings and the hem-tool
+  initialisation and device wipe — the bindings, and encedo-hem-tool's
   commands over them — have **no live CTest at all**, not even under the
   `disruptive` label. They are verified by attended runs whose outcome
   is recorded as evidence in the owning REQ and step; their offline
@@ -442,6 +423,23 @@ sequenceDiagram
 - Every protocol binding lands together with at least one unit test and,
   where the device supports it non-destructively, one integration test
   (attended-only bindings: the unit test only).
+- **Test support as a target** (M13, REQ-BUILD-011): `tests/support/` is the
+  library `ehem_test_support`, alias `ehem::test-support` — the fake
+  transport, the simulated authenticator, `crypto_ref` (optional), the
+  fixtures, with `src/` on its include path for the hidden seams
+  (`ehem_auth_test_set_clock`, `ehem_auth_test_set_kdf_iters`,
+  `ehem_ext_test_set_poll_interval`, `ehem_crypto_test_force_mismatch`).
+  The SDK's own suites link it, and so does a project that adds this
+  repository as a CMake subdirectory with the SDK's tests off
+  (`EHEM_BUILD_TEST_SUPPORT ON` — encedo-hem-tool's shape); the
+  `subdir_consumer` gate (label `unit`) proves that shape on every CI leg.
+  Nothing new becomes public API.
+- **Release-job proof** (M13): `tests/release/tls-probe` (public API only;
+  built with the tests, not a CTest) drives the REQ-NET-005 classifier
+  check against local expired and not-yet-valid endpoints in the release
+  job, under both TLS backends. The release job also runs the unit suite
+  on each Release build and the consumer gate against each unpacked
+  package.
 
 ## 10. Directory layout
 
@@ -460,20 +458,35 @@ src/                   library sources
                        what both share (scrub, serial / date formatting,
                        the compatibility-check test seam)
   jwt.c                eJWT encode/decode
-  vendor/cjson/        vendored cJSON
-  tools/hem-tool/      CLI (inside src/ so implements-tags are greppable)
+  vendor/cjson/        vendored cJSON; vendor/bip39/ the BIP39 wordlist
+examples/              status.c, sign.c — the runnable examples
+                       (EHEM_BUILD_EXAMPLES; REQ-API-007)
 tests/
-  unit/
-  integration/
-  disruptive/
-  support/             fake transport, fixtures, test vectors
-cmake/                 toolchain files (mingw), FetchContent pins
-.github/workflows/     ci.yml (linux, windows-mingw)
+  unit/                CMocka suites + the scripted gates (exports, public
+                       headers, backend-free tests, ASCII literals, docs
+                       coverage)
+  integration/         live tests, gated on EHEM_TEST_URL
+  disruptive/          live tests that mutate the device (opt-in)
+  consumer/            the installed-package gate (check_consumer.cmake)
+                       and subdir/ — the add_subdirectory consumer gate
+                       (check_subdir_consumer.cmake; REQ-BUILD-011)
+  release/             tls-probe — the release job's REQ-NET-005 classifier
+                       driver (built with the tests, not a CTest)
+  support/             ehem::test-support (CMakeLists.txt): fake transport,
+                       ext_sim, crypto_ref (per backend), fixtures
+cmake/                 toolchain files (mingw), package config, .pc template
+scripts/               dependency installers, Windows build helpers,
+                       release/ (build-deps.sh, package.sh, package-lib.sh,
+                       package-wolfssl.sh, check-expired-classifier.sh,
+                       make-expired-cert.py, release-notes.sh)
+.github/workflows/     ci.yml (10 legs), release.yml (8 assets)
 dev                    developer assist script — build/test/env (not shipped)
 ```
 
 Code root `src/` and test root `tests/` match the defaults in
-REQUIREMENTS-MANAGEMENT.md §4.2.
+REQUIREMENTS-MANAGEMENT.md §4.2. `src/tools/hem-tool/` — the CLI, inside
+`src/` until 1.2.0 so its implements-tags were greppable — left with M13
+(encedo-hem-tool, its `c/` tree).
 
 ## 11. Milestones
 
@@ -1152,12 +1165,18 @@ not in a milestone (user decision 2026-10-07).
    at your option any later version) or a standard commercial license"
    (earlier revisions of this document said GPLv3 — re-check on every pin
    bump). **Decision (user, 2026-10-09, §1):** no published package
-   bundles wolfSSL statically; hem-tool (REQ-BUILD-005 rev 2) links it
+   bundles wolfSSL statically; the `-shared` SDK package (REQ-BUILD-010;
+   until 1.2.1 also the `-shared` hem-tool, REQ-BUILD-005 rev 2) links it
    dynamically and the shared wolfSSL is published as a separate asset
    with its `COPYING`, its exact build configuration and the corresponding
-   source tarball; the hem-tool archive carries only MIT/permissive
-   notices. Static packages use a different library: **OpenSSL 3.x**
-   (Apache-2.0; user decision 2026-10-12 at M12 planning, §11).
+   source tarball; the package archive carries only MIT/permissive
+   notices. The static package uses a different library: **OpenSSL 3.x**
+   (Apache-2.0; user decision 2026-10-12 at M12 planning, §11). Since M13
+   this repository publishes no executable at all, so the tripwires —
+   the configure-time warning on a static wolfSSL (REQ-BUILD-006) and the
+   release scripts' symbol checks — guard the library packages alone;
+   encedo-hem-tool's one-file binary is built on the OpenSSL package and
+   carries no wolfSSL either.
    *Still open:* encedo-pkcs11's own shipping shape inherits the same
    dynamic-link position. REQ-BUILD-005 rev 2 was re-approved on
    2026-10-09.

@@ -166,14 +166,14 @@ with expiry-aware silent refresh.
   itself always needs a passphrase login (the device demands `sub="U"`).
   The SDK composes the QR payload the phone scans (`ehem_ext_qr_payload`:
   `hash` = base64(SHA-256(request)) — the app checks it against the request
-  the pairing link serves); rendering it is the caller's (hem-tool draws a
-  terminal QR).
+  the pairing link serves); rendering it is the caller's (encedo-hem-tool's
+  `ext pair` draws a terminal QR).
 - The pollable confirm engine (`ehem_ext_confirm_begin/poll/wait/cancel`)
   serves consumers that cannot block.
 - The optional `ehem_options.confirm_notice` hook fires once per
   DELIVERED push (scope + effective wait) so a UI can announce what is
-  waiting on the phone — hem-tool's `mobile:` lines use it; the library
-  itself never prints.
+  waiting on the phone — encedo-hem-tool's `mobile:` lines use it; the
+  library itself never prints.
 
 ### Scopes
 
@@ -190,8 +190,9 @@ that key. The cache handles all of this transparently.
 
 The SDK is built against one crypto library, chosen at configure time with
 `EHEM_CRYPTO_BACKEND`: **wolfSSL** (the default, linked dynamically in
-the `-shared` packages) or **OpenSSL 3** (the one-file hem-tool and the
-static SDK package — the plain asset names from 1.2.0). The
+the `-shared` package) or **OpenSSL 3** (the static SDK package — the plain
+asset name from 1.2.0 — and encedo-hem-tool's one-file binary built on
+it). The
 public headers name neither — no `ehem_*` type depends on the choice — and
 `ehem_build_info_get()` tells a program which one it got, the version it
 was compiled against, the version loaded and how each library is linked.
