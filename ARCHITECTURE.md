@@ -1144,6 +1144,18 @@ REQUIREMENTS-MANAGEMENT.md §4.2. `src/tools/hem-tool/` — the CLI, inside
     The release itself — merge `development` → `main`, the annotated
     `v1.2.1` from the drafted notes — is the user's; REQ-BUILD-010's
     push-to-`main` and final-tag criterion closes with it.
+  - **Released 2026-11-03.** The user merged `development` into `main`
+    (pull request #10, bed5ad2) — CI 41693604382 and release run
+    41693604426 (Linux 3:15, Windows 11:50; artifacts, no release) — and
+    pushed the annotated `v1.2.1`: CI 41693666571, release run 41693666399
+    (Linux 3:23, Windows 13:24, publish 0:33) → release 433081161 with the
+    8 assets of REQ-BUILD-010's table and the drafted notes as the text —
+    REQ-BUILD-010's last criterion, verified (rev 4). The published Linux
+    packages smoke-checked on the dev host (checksums, libraries-only
+    listings, version, README pointer). M13 closed; the rc2 pre-release and
+    tag are the user's to delete. What follows is the tool repository's: a
+    pin bump to SDK 1.2.1 with `ehem::test-support` (encedo-hem-tool, its
+    own step).
   - *Decomposition (2026-10-28):* STEP-M13-010 … 060 in order; 020, 030
     and 040 depend on 010 only and may interleave within the WIP limit.
 - **MFW — firmware-pending** *(created by user decision 2026-08-07: one

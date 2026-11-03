@@ -53,10 +53,11 @@ a tag push and publishes.
 A tag run cannot restore the dependency caches made on `development`
 (GitHub scopes a cache to the branch that wrote it and to the default
 branch), so it builds both prefixes from source. With cold prefixes the
-jobs take about 3–4 minutes on Linux and 10–15 on Windows (the 1.2.1
-development dispatch, run 41670085883: 3:17 and 14:31, of which the
-prefixes were 2:19 and 10:52; `v1.2.0`: 2:44 and 10:26 with hem-tool still
-in the build); with warm caches 1–2 and 2–3.
+jobs take about 3–4 minutes on Linux and 8–15 on Windows (`v1.2.1`: 3:23
+and 13:24 plus 0:33 to publish, of which the prefixes were 2:17 and 10:04;
+`v1.2.1-rc2`: 3:30 and 8:22; the main push for 1.2.1: 3:15 and 11:50;
+`v1.2.0`: 2:44 and 10:26 with hem-tool still in the build); with warm
+caches 1–2 and 2–3.
 
 ## Rules the workflow enforces
 

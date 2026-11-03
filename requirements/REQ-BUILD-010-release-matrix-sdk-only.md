@@ -1,9 +1,9 @@
 ---
 id: REQ-BUILD-010
 title: Release matrix without hem-tool — the SDK library packages per OS (OpenSSL static as the plain assets, wolfSSL shared as -shared), the wolfSSL companion and source, SHA256SUMS; 8 assets
-status: implemented
+status: verified
 priority: must
-revision: 3   # 2026-11-03 (STEP-M13-060, the M13 gate): criterion 5 ticked — `v1.2.1-rc2` (release run 41689764961 → pre-release 433053084, 8 assets, checksums re-verified in the publishing job); the first candidate `v1.2.1-rc1` failed in package-lib.sh (the examples linked against the shared SDK without -rpath-link; fixed 58da33b, package-lib.sh builds no example). Status stays implemented until criterion 6 (the release). Record only. Rev 2 = 2026-11-03 (STEP-M13-020 done): criteria 1–4 ticked (the local Release dry run on both backends; release run 41670085883 on development); approved → implemented — proven by the workflow run, no `verifies:` test by nature (as REQ-BUILD-005/009 were); the tag-path criteria 5–6 wait for STEP-M13-060 and the release. Record only, no meaning change. Rev 1 = 2026-10-28 (M13 decomposition): drafted with the hem-tool split plan of 2026-10-27 and approved with it (the plan's §6.2 table: supersedes REQ-BUILD-005 and REQ-BUILD-009, whose hem-tool halves are encedo-hem-tool's REQ-PKG-003)
+revision: 4   # 2026-11-03 (1.2.1 released): criterion 6 ticked — the push to main (bed5ad2, run 41693604426: artifacts, no release) and the user's annotated v1.2.1 (run 41693666399 → release 433081161, 8 assets); implemented → verified — proven by the workflow runs end to end, no `verifies:` test by nature (record only, set by hand as REQ-BUILD-009 rev 12 was). Rev 3 = 2026-11-03 (STEP-M13-060, the M13 gate): criterion 5 ticked — `v1.2.1-rc2` (release run 41689764961 → pre-release 433053084, 8 assets, checksums re-verified in the publishing job); the first candidate `v1.2.1-rc1` failed in package-lib.sh (the examples linked against the shared SDK without -rpath-link; fixed 58da33b, package-lib.sh builds no example). Status stays implemented until criterion 6 (the release). Record only. Rev 2 = 2026-11-03 (STEP-M13-020 done): criteria 1–4 ticked (the local Release dry run on both backends; release run 41670085883 on development); approved → implemented — proven by the workflow run, no `verifies:` test by nature (as REQ-BUILD-005/009 were); the tag-path criteria 5–6 wait for STEP-M13-060 and the release. Record only, no meaning change. Rev 1 = 2026-10-28 (M13 decomposition): drafted with the hem-tool split plan of 2026-10-27 and approved with it (the plan's §6.2 table: supersedes REQ-BUILD-005 and REQ-BUILD-009, whose hem-tool halves are encedo-hem-tool's REQ-PKG-003)
 source: user decisions 2026-10-27 (the hem-tool split — clean split: SDK releases carry no hem-tool from 1.2.1 on; the one-file hem-tool is released from encedo-hem-tool, built against this repository's published static package); REQ-BUILD-009 rev 12 (the library-package half of the 1.2.0 matrix — carried over unchanged: names, contents, link asserts, consumer gates); REQ-BUILD-005 rev 6 (the workflow's triggers, the annotated-tag rule and release text); ARCHITECTURE.md §1 (wolfSSL is never statically bundled into a published package), §11 M13 part B; user decision 2026-10-14 (the wolfSSL library package is shared-only)
 depends_on: ["REQ-BUILD-001", "REQ-BUILD-002", "REQ-BUILD-006", "REQ-BUILD-007", "REQ-BUILD-008", "REQ-NET-005", "REQ-API-010"]
 supersedes: ["REQ-BUILD-005", "REQ-BUILD-009"]
@@ -147,6 +147,22 @@ plain package, sees no change in what it consumes.
       -rpath-link to the prefix — the dev host's system libwolfssl.so.42 had
       masked it; fixed in 58da33b (the library package builds no example);
       nothing was published under rc1 and its tag was deleted.)*
-- [ ] Push to `main` (the 1.2.1 release): artifacts, no release; then the
+- [x] Push to `main` (the 1.2.1 release): artifacts, no release; then the
       user's `v1.2.1` → the release with 8 assets (run ids, release id;
       recorded after the release as REQ-BUILD-009 rev 12 did).
+      *(2026-11-03: the merge of pull request #10, `development` → `main`
+      (bed5ad2), ran CI 41693604382 (10/10) and release run 41693604426 —
+      Linux 3:15, Windows 11:50, both prefixes cold — with the two artifacts
+      and the publishing job skipped (no tag). The user's annotated `v1.2.1`
+      on bed5ad2: CI 41693666571 (10/10) and release run 41693666399 — Linux
+      3:23 (prefixes 0:37 + 1:40; package steps 0:14 and 0:17), Windows
+      13:24 (1:53 + 8:11; 0:32 and 0:34), the publishing job 0:33 with the
+      checksums re-verified → release 433081161, 8 assets
+      (encedo-hem-1.2.1-{linux-x86_64,linux-x86_64-shared}.tar.gz,
+      encedo-hem-1.2.1-{windows-x86_64,windows-x86_64-shared}.zip, the two
+      wolfSSL companions, the wolfSSL source, SHA256SUMS), the release text =
+      the drafted notes + the checksum block (59 lines). Smoke-checked from
+      the public assets on the dev host: both Linux packages' checksums OK,
+      libraries-only listings (no program), encedo-hem.pc Version 1.2.1, the
+      README pointer to encedo-hem-tool. The rc2 pre-release and tag are the
+      user's to delete.)*
