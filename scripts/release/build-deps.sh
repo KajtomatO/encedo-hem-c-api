@@ -2,23 +2,22 @@
 #
 # build-deps.sh — build the pinned release dependencies into a prefix:
 #   wolfssl (default) — PINNED wolfSSL as a SHARED library and PINNED libcurl as
-#     a STATIC library, for the hem-tool release binaries and the wolfSSL SDK
-#     package (REQ-BUILD-005, REQ-BUILD-009). On Windows also the delay-load
-#     import library of libwolfssl.dll (lib/libwolfssl.delay.a) that the release
-#     hem-tool links, so a missing DLL is reported by hem-tool itself
-#     (REQ-TOOL-026).
+#     a STATIC library: the prefix of the -shared SDK library package and of the
+#     wolfSSL companion asset (REQ-BUILD-010).
 #   openssl — PINNED OpenSSL 3.5 LTS and PINNED libcurl (OpenSSL as its TLS
-#     backend), both STATIC: the deps-openssl prefix of the -static release
-#     variants (REQ-BUILD-009).
+#     backend), both STATIC: the deps-openssl prefix of the plain, static SDK
+#     package (REQ-BUILD-010).
+# (Until the SDK's 1.2.1 the same prefixes also built hem-tool — and, on
+# Windows, a delay-load import library of libwolfssl.dll for it; the CLI is
+# encedo-hem-tool's since, built against the plain package.)
 #
-# implements: REQ-BUILD-005, REQ-BUILD-009 (the deps-openssl prefix),
-#             REQ-TOOL-026 (the delay-load import library)
+# implements: REQ-BUILD-010
 #
 #   scripts/release/build-deps.sh <prefix> [wolfssl|openssl]
 #
 # wolfSSL is shared because no published package may bundle it statically
 # (ARCHITECTURE.md §1, user decision 2026-10-09 — wolfSSL is GPLv2-or-later /
-# commercial): hem-tool links it dynamically and scripts/release/
+# commercial): the -shared SDK library links it dynamically and scripts/release/
 # package-wolfssl.sh publishes the library as its own release asset, with its
 # license text, this build's exact configure line and the corresponding source
 # tarball. libcurl (curl license, permissive) is built with wolfSSL as its TLS
@@ -47,17 +46,18 @@ WOLFSSL_VERSION="${WOLFSSL_VERSION:-5.7.2}"     # pinned — bump deliberately, 
 WOLFSSL_SHA256="${WOLFSSL_SHA256:-0f2ed82e345b833242705bbc4b08a2a2037a33f7bf9c610efae6464f6b10e305}"
 CURL_VERSION="${CURL_VERSION:-8.10.1}"          # pinned — bump deliberately, WITH its sha256
 CURL_SHA256="${CURL_SHA256:-d15ebab765d793e2e96db090f0e172d127859d78ca6f6391d7eafecfd894bbc0}"
-# The 3.5 LTS line (REQ-BUILD-009; 3.0 LTS ended 2026-09-07). 3.5.9: sha256
+# The 3.5 LTS line (REQ-BUILD-010; 3.0 LTS ended 2026-09-07). 3.5.9: sha256
 # computed from the official download = the published .sha256, and its PGP
 # signature verified against openssl-library.org/source/pubkeys.asc.
 OPENSSL_VERSION="${OPENSSL_VERSION:-3.5.9}"     # pinned — bump deliberately, WITH its sha256
 OPENSSL_SHA256="${OPENSSL_SHA256:-603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a}"
 WORK="${WORK:-$PREFIX-src}"
 # The recipe number changes whenever a cached prefix must not survive a recipe
-# change (wolfssl r2: the Windows delay-load import library, REQ-TOOL-026;
-# openssl r2: no OpenSSL configuration on Windows, REQ-BUILD-009 rev 4).
+# change (wolfssl r2: the Windows delay-load import library for hem-tool; r3:
+# that library dropped with the tool, M13 2026-11-03; openssl r2: no OpenSSL
+# configuration on Windows, REQ-BUILD-009 rev 4 — carried by REQ-BUILD-010).
 case "$FLAVOUR" in
-  wolfssl) STAMP="wolfssl-${WOLFSSL_VERSION}-shared+curl-${CURL_VERSION}-static+r2" ;;
+  wolfssl) STAMP="wolfssl-${WOLFSSL_VERSION}-shared+curl-${CURL_VERSION}-static+r3" ;;
   openssl) STAMP="openssl-${OPENSSL_VERSION}-static+curl-${CURL_VERSION}-static+r2" ;;
   *) echo "build-deps.sh: unknown flavour '$FLAVOUR' (wolfssl|openssl)"; exit 1 ;;
 esac
@@ -70,7 +70,7 @@ if [ -f "$PREFIX/.stamp" ] && [ "$(cat "$PREFIX/.stamp")" = "$STAMP" ]; then
   echo "deps already built: $STAMP ($PREFIX)"
   exit 0
 fi
-rm -rf "$PREFIX" "$WORK/wolfssl-build" "$WORK/curl-build" "$WORK/libwolfssl.def"
+rm -rf "$PREFIX" "$WORK/wolfssl-build" "$WORK/curl-build"
 mkdir -p "$PREFIX/src"
 
 fetch() {  # fetch <url> <out> <sha256> — downloads unless present; ALWAYS verifies
@@ -105,7 +105,7 @@ if [ "$FLAVOUR" = wolfssl ]; then
   # OpenSSL-compat layer, ...). The rest is what the SDK's crypto shim uses:
   # X25519, Ed25519/Ed448 verify, ECC, SHA-512 (BIP39 seed), PBKDF2, AES key
   # wrap, cert parsing/generation. Hardening stays on (default). These are the
-  # flags of the headers hem-tool compiles against — the installed options.h must
+  # flags of the headers the SDK compiles against — the installed options.h must
   # describe the library a user drops next to the binary.
   # -Wno-error: wolfSSL's CMake build treats warnings as errors and newer GCCs
   # (13+) flag a benign stringop-overflow in tls.c — a third-party warning policy
@@ -116,12 +116,8 @@ if [ "$FLAVOUR" = wolfssl ]; then
     *)
       # MinGW: wolfSSL links Threads::Threads (= libwinpthread) and gcc's runtime;
       # fold both INTO the DLL so the published asset depends on Windows system
-      # DLLs only (both runtimes are permissively licensed). --output-def writes
-      # the DLL's export list, the input of the delay-load import library below.
-      # Its path in the Windows form: MSYS2 converts no argument that has a space
-      # before its first slash, as this one, and the native linker cannot open
-      # /d/a/... — it only notes that and links on, without the .def.
-      WOLFSSL_LDFLAGS=("-DCMAKE_SHARED_LINKER_FLAGS=-static -Wl,--output-def,$(cygpath -m "$WORK/libwolfssl.def")")
+      # DLLs only (both runtimes are permissively licensed).
+      WOLFSSL_LDFLAGS=(-DCMAKE_SHARED_LINKER_FLAGS=-static)
       ;;
   esac
   WOLFSSL_ARGS=(-DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PREFIX"
@@ -145,23 +141,8 @@ if [ "$FLAVOUR" = wolfssl ]; then
   cmake --build wolfssl-build > make-wolfssl.log 2>&1 || { tail -40 make-wolfssl.log; exit 1; }
   cmake --install wolfssl-build > /dev/null
   cp "wolfssl-${WOLFSSL_VERSION}-stable/COPYING" "$PREFIX/COPYING.wolfssl"
-  case "$(uname -s)" in
-    Linux*) ;;
-    *)
-      # REQ-TOOL-026: the delay-load import library — hem-tool links it instead of
-      # libwolfssl.dll.a (CMake EHEM_WOLFSSL_DELAYLOAD_LIB), so the DLL is loaded
-      # at the first wolfSSL call and a missing one reaches hem-tool's own
-      # failure hook. The .def comes from the link above, and only from it: a
-      # gendef fallback hid an unwritten .def until MSYS2 dropped gendef
-      # (mingw-w64-tools) from its toolchain group, 2026-10-14.
-      grep -q '^ *wolfSSL_Init\b' "$WORK/libwolfssl.def" 2> /dev/null \
-        || { echo "the wolfSSL link wrote no export list to $WORK/libwolfssl.def"; exit 1; }
-      dlltool --input-def "$WORK/libwolfssl.def" --dllname libwolfssl.dll \
-              --output-delaylib "$PREFIX/lib/libwolfssl.delay.a"
-      ;;
-  esac
 else
-  # --- OpenSSL (STATIC) — the deps-openssl prefix (REQ-BUILD-009) -------------
+  # --- OpenSSL (STATIC) — the deps-openssl prefix (REQ-BUILD-010) -------------
   # no-shared: archives only; no-module: no loadable code either — the legacy
   # provider is built into libcrypto (providers/build.info), so nothing looks
   # for a module directory; no-tests: none of OpenSSL's own test programs.
@@ -240,7 +221,7 @@ case "$(uname -s)" in
 esac
 if [ "$FLAVOUR" = wolfssl ]; then
   # curl's FindWolfSSL picks the shared library (the only one in the prefix) and
-  # records its absolute path in CURLTargets.cmake, so hem-tool's final link
+  # records its absolute path in CURLTargets.cmake, so the SDK's final link
   # imports libwolfssl rather than absorbing it.
   TLS_OPTS=(-DCURL_USE_WOLFSSL=ON -DCURL_USE_OPENSSL=OFF)
 else
@@ -279,8 +260,7 @@ if [ "$FLAVOUR" = wolfssl ]; then
       readelf -d "$PREFIX/lib/libwolfssl.so" | grep -E 'SONAME|NEEDED'
       ;;
     *)
-      ls -l "$PREFIX/bin/libwolfssl.dll" "$PREFIX/lib/libwolfssl.dll.a" \
-            "$PREFIX/lib/libwolfssl.delay.a" "$PREFIX/lib/libcurl.a"
+      ls -l "$PREFIX/bin/libwolfssl.dll" "$PREFIX/lib/libwolfssl.dll.a" "$PREFIX/lib/libcurl.a"
       DLLS="$(objdump -p "$PREFIX/bin/libwolfssl.dll" | awk '/DLL Name:/ {print tolower($3)}' | sort -u)"
       echo "libwolfssl.dll imports:"
       # shellcheck disable=SC2001  # indenting a multi-line value
@@ -297,7 +277,7 @@ if [ "$FLAVOUR" = wolfssl ]; then
       ;;
   esac
 else
-  # The -static variants link all of it in: archives only, no wolfSSL anywhere,
+  # The plain (static) SDK package links all of it in: archives only, no wolfSSL anywhere,
   # libcurl on OpenSSL.
   ls -l "$PREFIX/lib/libssl.a" "$PREFIX/lib/libcrypto.a" "$PREFIX/lib/libcurl.a"
   if find "$PREFIX" \( -name '*.so' -o -name '*.so.*' -o -name '*.dll' -o -name '*.dll.a' \

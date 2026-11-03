@@ -1,10 +1,11 @@
-# Release — hem-tool binaries for Linux and Windows that link libcurl STATICALLY
-# and wolfSSL DYNAMICALLY, plus the shared wolfSSL as its own asset
-# (REQ-BUILD-005), the SDK library package — the shared library, wolfSSL
-# flavour — and the OpenSSL variants: the one-file hem-tool and the static SDK
-# library package, published under the plain names (the wolfSSL builds carry
-# -shared; user decision 2026-10-19) (REQ-BUILD-009).
-# implements: REQ-BUILD-005, REQ-BUILD-009
+# Release — the SDK library packages for Linux and Windows (REQ-BUILD-010): per
+# OS the plain package (the static SDK on OpenSSL, with the OpenSSL and libcurl
+# archives it needs inside) and the -shared package (the shared SDK on wolfSSL,
+# which loads the wolfSSL companion asset published beside it), plus the wolfSSL
+# source and one SHA256SUMS — 8 assets. No hem-tool: the command-line client is
+# released from encedo-hem-tool (built against the plain package of a release)
+# since the SDK's 1.2.1.
+# implements: REQ-BUILD-010
 #
 # Every push to `main` (and a manual run on any ref) builds the archives and
 # uploads them as workflow artifacts; a version tag `v*` additionally publishes
@@ -17,26 +18,19 @@
 # decision 2026-10-09): scripts/release/build-deps.sh builds the pinned wolfSSL
 # as a SHARED library and the pinned libcurl (wolfSSL TLS backend, HTTP/HTTPS
 # only) as a static one — cached on the script's own hash, so any recipe change
-# rebuilds; the project is built Release against them, the unit suite runs on
-# that build, the link mode is asserted (wolfSSL dynamic, nothing else),
-# scripts/release/package-wolfssl.sh packages the library with its
-# GPLv2-or-later COPYING, build configuration and corresponding source, and the
-# two archives are smoke-tested side by side. On Windows hem-tool delay-loads
-# libwolfssl.dll (REQ-TOOL-026): package.sh asserts the delay import and runs
-# hem-tool WITHOUT the DLL first — it must report the DLL itself and exit 12.
-# package-lib.sh builds the shared library alone, packages it and builds + runs
-# the REQ-BUILD-008 sample consumer against the unpacked package and the
-# companion asset (find_package + pkg-config). Each job also builds the second,
-# all-static prefix deps-openssl (pinned OpenSSL 3.5 LTS + libcurl on OpenSSL),
-# cached on its own key, and from it the OpenSSL variants (package.sh … static
-# → package-static.sh): hem-tool with every third-party library linked in — the
-# unit suite on that build, glibc / Windows system DLLs only, no wolfSSL symbol
-# or name, --version reporting the pinned OpenSSL, the OpenSSL configuration
-# check (Windows reads none, Linux /etc/ssl) — and the static SDK package, whose
-# consumer links the all-static pkg-config closure (package-lib.sh static).
-# The Linux job also proves the REQ-NET-005 expired-certificate classifier
-# against local expired and not-yet-valid endpoints under both TLS backends
-# (scripts/release/check-expired-classifier.sh).
+# rebuilds — and, as the second prefix deps-openssl, the pinned OpenSSL 3.5 LTS
+# + libcurl on OpenSSL, both static. From each prefix scripts/release/package.sh
+# builds the SDK Release tree with its tests, runs the unit suite on it (the
+# consumer gate included), proves the REQ-NET-005 expired-certificate
+# classifier against local expired and not-yet-valid endpoints with
+# tests/release/tls-probe (Linux, under both backends), then packages:
+# package-wolfssl.sh the companion library with its GPLv2-or-later COPYING,
+# build configuration and corresponding source; package-lib.sh the library
+# package of the variant — asserting its link facts (the -shared library
+# imports wolfSSL and nothing else non-system; the plain package's archives
+# carry no wolfSSL symbol), and building + running the REQ-BUILD-008 sample
+# consumer against the unpacked package (find_package + pkg-config; the static
+# one through the all-static pkg-config closure).
 # ci.yml (REQ-BUILD-002) is untouched by this workflow.
 
 name: Release
@@ -52,8 +46,8 @@ permissions:
 
 jobs:
   linux:
-    name: Linux x86_64 (dynamic wolfSSL)
-    runs-on: ubuntu-22.04      # the oldest LTS runner — glibc reach for the binary
+    name: Linux x86_64
+    runs-on: ubuntu-22.04      # the oldest LTS runner — the glibc floor of the shared library
     steps:
       - uses: actions/checkout@v5
 
@@ -82,21 +76,15 @@ jobs:
       - name: Build static OpenSSL + static libcurl (deps-openssl)
         run: scripts/release/build-deps.sh deps-openssl openssl
 
-      - name: Build, test, package (hem-tool, wolfSSL asset, SDK library), smoke-test
+      - name: Build, test, prove the classifier, package the -shared SDK + the wolfSSL asset
         env:
           RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
         run: scripts/release/package.sh deps linux dist
 
-      - name: Prove the expired-certificate classifier (wolfSSL backend)
-        run: scripts/release/check-expired-classifier.sh build-release/hem-tool 8443
-
-      - name: Build, test, package the OpenSSL variants (one-file hem-tool, static SDK library), smoke-test
+      - name: Build, test, prove the classifier, package the static SDK (OpenSSL)
         env:
           RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
         run: scripts/release/package.sh deps-openssl linux dist static
-
-      - name: Prove the expired-certificate classifier (one-file hem-tool, OpenSSL backend)
-        run: scripts/release/check-expired-classifier.sh build-release-static/hem-tool 8445
 
       - uses: actions/upload-artifact@v6
         with:
@@ -107,7 +95,7 @@ jobs:
           if-no-files-found: error
 
   windows:
-    name: Windows x86_64 (dynamic wolfSSL, MinGW UCRT64)
+    name: Windows x86_64 (MinGW UCRT64)
     runs-on: windows-latest
     defaults:
       run:
@@ -115,7 +103,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # UCRT64 (user decision 2026-10-10; MINGW64 is deprecated): the binaries
+      # UCRT64 (user decision 2026-10-10; MINGW64 is deprecated): the libraries
       # use the Universal C Runtime, a Windows component from Windows 10 /
       # Server 2016 on. No MSYS2 wolfssl/curl — both come pinned from source.
       - name: Set up MSYS2 / MinGW-w64 (UCRT64)
@@ -154,12 +142,12 @@ jobs:
       - name: Build static OpenSSL + static libcurl (deps-openssl)
         run: scripts/release/build-deps.sh deps-openssl openssl
 
-      - name: Build, test, package (hem-tool, wolfSSL asset, SDK library), smoke-test
+      - name: Build, test, package the -shared SDK + the wolfSSL asset
         env:
           RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
         run: scripts/release/package.sh deps windows dist
 
-      - name: Build, test, package the OpenSSL variants (one-file hem-tool, static SDK library), smoke-test
+      - name: Build, test, package the static SDK (OpenSSL)
         env:
           RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
         run: scripts/release/package.sh deps-openssl windows dist static

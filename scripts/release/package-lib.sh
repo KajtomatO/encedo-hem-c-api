@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 #
-# package-lib.sh — the SDK library packages (REQ-BUILD-009), built against a
+# package-lib.sh — the SDK library packages (REQ-BUILD-010), built against a
 # prefix from build-deps.sh, installed, packaged and smoke-tested exactly as a
 # user unpacks them: the REQ-BUILD-008 sample consumer, built against the
 # unpacked package via find_package and pkg-config, runs
-# (tests/consumer/check_consumer.cmake, package mode).
+# (tests/consumer/check_consumer.cmake, package mode). The packages carry
+# libraries only — the command-line client is encedo-hem-tool's release, built
+# against the plain package.
 #   shared (default) — the wolfSSL flavour, encedo-hem-<label>-<os>-x86_64-shared:
 #     the SHARED library only — no static library ships with wolfSSL (user
 #     decision 2026-10-14; static linking is the OpenSSL package below).
@@ -19,12 +21,12 @@
 #     package config and .pc files, so `find_package` and `pkg-config --static`
 #     resolve everything inside the package (REQ-BUILD-008 criterion 4).
 #
-# implements: REQ-BUILD-009
+# implements: REQ-BUILD-010
 #
 #   scripts/release/package-lib.sh <prefix> <linux|windows> <dist> <label> <source ref> [shared|static]
 #
-# Called by package.sh (shared) and package-static.sh (static) once the
-# companion asset, if any, is in <dist>; package.sh writes SHA256SUMS afterwards.
+# Called by package.sh for either variant once the companion asset, if any, is
+# in <dist>; package.sh writes SHA256SUMS afterwards.
 set -euo pipefail
 
 PREFIX="$(cd "${1:?usage: package-lib.sh <prefix> <linux|windows> <dist> <label> <source ref> [shared|static]}" && pwd)"
@@ -84,13 +86,16 @@ esac
 
 # --- build + install: the library alone ---------------------------------------
 cmake -B "$BUILD" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PREFIX" \
-  -DCMAKE_INSTALL_LIBDIR=lib -DEHEM_BUILD_TOOL=OFF -DBUILD_TESTING=OFF \
+  -DCMAKE_INSTALL_LIBDIR=lib -DBUILD_TESTING=OFF \
   "${BUILD_OPTS[@]}" "${EXTRA[@]}"
 cmake --build "$BUILD"
 STAGE="$DIST/$NAME"
 rm -rf "$STAGE"
 cmake --install "$BUILD" --prefix "$STAGE"
-[ -z "$(find "$STAGE" -name 'hem-tool*')" ] || fail "hem-tool in the library package"
+# Libraries only (REQ-BUILD-010): nothing lands in bin/ but the Windows DLL —
+# the command-line client is encedo-hem-tool's own release.
+PROGS="$(find "$STAGE" -path '*/bin/*' -type f ! -name '*.dll' || true)"
+[ -z "$PROGS" ] || fail "a program in the library package: $PROGS"
 
 if [ "$VARIANT" = shared ]; then
   [ -z "$(find "$STAGE" -name '*.a' ! -name '*.dll.a')" ] || fail "a static library in the package"
@@ -195,6 +200,10 @@ statically; the static SDK is the OpenSSL-based
 encedo-hem-${LABEL}-${OS}-x86_64 package of the same release (the plain name).
 Verify downloads against SHA256SUMS.
 
+hem-tool, the command-line client, is a separate download since SDK 1.2.1:
+https://github.com/KajtomatO/encedo-hem-tool/releases - a one-file build on the
+plain (static, OpenSSL) package of an SDK release; it needs no wolfSSL.
+
 Use:
   CMake       find_package(encedo-hem CONFIG REQUIRED) with
               -DCMAKE_PREFIX_PATH=<this directory>, then
@@ -220,8 +229,8 @@ else
   cp "$PREFIX/LICENSE.openssl" "$STAGE/LICENSES/LICENSE.openssl"
   if [ "$OS" = "windows" ]; then
     CONF="OpenSSL configuration: these archives load none - neither openssl.cnf
-nor the file OPENSSL_CONF names (REQ-BUILD-009). An application that wants one
-loads it itself, e.g. OPENSSL_init_crypto(OPENSSL_INIT_LOAD_CONFIG, settings).
+nor the file OPENSSL_CONF names. An application that wants one loads it itself,
+e.g. OPENSSL_init_crypto(OPENSSL_INIT_LOAD_CONFIG, settings).
 Certificates: the SDK uses the Windows certificate store."
   else
     CONF="OpenSSL configuration: /etc/ssl/openssl.cnf (or the file OPENSSL_CONF
@@ -250,6 +259,10 @@ Contents:
 
 Everything the SDK needs is here: a program linked against it needs no
 encedo-hem, libcurl or OpenSSL library at run time. No wolfSSL code is in it.
+
+hem-tool, the command-line client, is a separate download since SDK 1.2.1:
+https://github.com/KajtomatO/encedo-hem-tool/releases - built against this
+package.
 
 Use:
   CMake       find_package(encedo-hem CONFIG REQUIRED) with

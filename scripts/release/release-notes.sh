@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
-# release-notes.sh — the GitHub Release text for a tag (REQ-BUILD-005): the
+# release-notes.sh — the GitHub Release text for a tag (REQ-BUILD-010): the
 # annotated tag's message, then the SHA256SUMS block. A lightweight tag has no
 # message, so it fails here — before anything is published.
 #
-# implements: REQ-BUILD-005
+# implements: REQ-BUILD-010
 #
 #   scripts/release/release-notes.sh <owner/repo> <tag> <SHA256SUMS> > notes.md
 #

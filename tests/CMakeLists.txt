@@ -89,6 +89,9 @@ target_compile_options(ehem_test_support PRIVATE ${EHEM_WARNING_FLAGS})
 
 add_subdirectory(unit)
 add_subdirectory(integration)
+# tests/release: tls-probe, the release job's REQ-NET-005 classifier driver
+# (not a CTest; see its CMakeLists.txt).
+add_subdirectory(release)
 
 # REQ-BUILD-008: the consumer gate — install this build into a scratch prefix,
 # then build and run tests/consumer against it via find_package and pkg-config
