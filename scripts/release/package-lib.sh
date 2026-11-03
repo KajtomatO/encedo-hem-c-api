@@ -85,8 +85,15 @@ case "$VARIANT" in
 esac
 
 # --- build + install: the library alone ---------------------------------------
+# No tests and no examples in this tree: the package holds libraries only, and
+# an executable linked against the shared library here would need the prefix's
+# libwolfssl.so.N at LINK time (-rpath-link) — package.sh's full build passes
+# that flag; this one does not, and v1.2.1-rc1's Linux job failed on exactly
+# that when EHEM_BUILD_EXAMPLES (default ON at top level) pulled the examples
+# in (2026-11-03). A dev host with a system libwolfssl.so.N of the same soname
+# masks the failure; the clean runner shows it.
 cmake -B "$BUILD" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PREFIX" \
-  -DCMAKE_INSTALL_LIBDIR=lib -DBUILD_TESTING=OFF \
+  -DCMAKE_INSTALL_LIBDIR=lib -DBUILD_TESTING=OFF -DEHEM_BUILD_EXAMPLES=OFF \
   "${BUILD_OPTS[@]}" "${EXTRA[@]}"
 cmake --build "$BUILD"
 STAGE="$DIST/$NAME"
