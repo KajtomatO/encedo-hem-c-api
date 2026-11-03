@@ -1,9 +1,9 @@
 ---
 id: REQ-BUILD-011
 title: Out-of-tree consumption — the SDK builds as a CMake subdirectory with its tests and variants switched off, and exports its test support as ehem::test-support
-status: approved
+status: verified
 priority: should
-revision: 1   # 2026-10-28 (M13 decomposition): drafted with the hem-tool split plan of 2026-10-27 and approved with it
+revision: 2   # 2026-11-03 (STEP-M13-030 done): criteria 1–4 ticked (the local matrix; CI run 41670005625 — 10/10 legs with the subdir_consumer gate; release run 41670085883 on both platforms); approved → verified (the gate carries the `verifies:` tag). Record only, no meaning change. Rev 1 = 2026-10-28 (M13 decomposition): drafted with the hem-tool split plan of 2026-10-27 and approved with it
 source: user decision 2026-10-27 (encedo-hem-tool consumes the SDK as a git submodule for build and tests — the hidden test seams and the fake transport stay reachable through the static link; the release binary links the published package instead); encedo-hem-tool c/CMakeLists.txt and c/tests/CMakeLists.txt at c-v1.3.0 (the consumer shape that exists today: `add_subdirectory(sdk EXCLUDE_FROM_ALL)` with `BUILD_TESTING`, `EHEM_BUILD_TOOL` and `EHEM_BUILD_SHARED` shadowed OFF, and a hand-built `hem_test_support` from `sdk/tests/support/fake_transport.c` with `sdk/src` on its include path); ARCHITECTURE.md §11 M13 part C
 depends_on: ["REQ-BUILD-001", "REQ-BUILD-006"]
 supersedes: null
@@ -52,16 +52,47 @@ exported by this repository keeps the two in step and makes the
 subdirectory shape a tested contract rather than an accident.
 
 **Acceptance criteria:**
-- [ ] The scratch consumer configures with `BUILD_TESTING=OFF
+- [x] The scratch consumer configures with `BUILD_TESTING=OFF
       EHEM_BUILD_SHARED=OFF` (CMP0077 shadowing): `ctest -N` lists no SDK
       test, no `hem-tool` target exists, the consumer builds and runs
       (STEP-M13-030).
-- [ ] `ehem::test-support` exists; the SDK's unit tests link it; the
+      *(2026-11-03: the gate asserts all three itself — `ctest -N` finds no
+      test (no CTest file at all), CMakeFiles/TargetDirectories.txt names
+      only ehem-cjson, ehem_test_support, encedo-hem-static, subdir_consumer
+      and CMake's utility targets, and the consumer prints
+      "subdir_consumer: OK (encedo-hem 1.2.0; one request through the fake
+      transport, uptime 42)" — on both dev backends, under ASan, shared-only
+      (the private archive) and static-only.)*
+- [x] `ehem::test-support` exists; the SDK's unit tests link it; the
       `EHEM_TEST_SUPPORT_CRYPTO_REF` and `EHEM_BUILD_TEST_SUPPORT` options
       behave as documented (STEP-M13-030).
-- [ ] The `subdir_consumer` gate is green on every ci.yml leg (run id;
+      *(2026-11-03: tests/support/CMakeLists.txt; the SDK's tests link the
+      target — tests/CMakeLists.txt refuses BUILD_TESTING without it or
+      without crypto_ref. The options, configure-only runs: EHEM_BUILD_TEST_
+      SUPPORT=OFF with BUILD_TESTING on → that configure error;
+      BUILD_TESTING=OFF → the support defaults OFF and no test target exists;
+      BUILD_TESTING=OFF + EHEM_BUILD_TEST_SUPPORT=ON → the target builds with
+      EHEM_TEST_SUPPORT_CRYPTO_REF defaulting OFF (no crypto_ref object),
+      also with EHEM_BUILD_STATIC=OFF on the private archive; the consumer
+      without CMAKE_BUILD_TYPE keeps it empty while the top-level configure
+      still defaults to Debug.)*
+- [x] The `subdir_consumer` gate is green on every ci.yml leg (run id;
       STEP-M13-030).
-- [ ] Recorded for the tool repository (not a criterion here): with its pin
+      *(CI run 41670005625 — push of ef63648, 2026-11-03: 10/10 legs green
+      with the gate on each — Linux gcc / clang / gcc shared-only / gcc
+      static-only / gcc OpenSSL / clang OpenSSL, Windows MinGW / shared-only
+      / static-only / OpenSSL; release run 41670085883 ran it inside both
+      package steps on both platforms as well.)*
+- [x] Recorded for the tool repository (not a criterion here): with its pin
       at this SDK version, encedo-hem-tool can replace its hand-built
       `hem_test_support` by `ehem::test-support` and drop
       `EHEM_BUILD_TOOL=OFF`.
+      *(Recorded 2026-11-03: encedo-hem-tool's c/CMakeLists.txt at c-v1.3.0
+      shadows BUILD_TESTING, EHEM_BUILD_TOOL and EHEM_BUILD_SHARED OFF and
+      builds its hem_test_support from sdk/tests/support/fake_transport.c
+      with sdk/src on the include path. With the pin at this SDK version it
+      sets EHEM_BUILD_TEST_SUPPORT ON (and EHEM_TEST_SUPPORT_CRYPTO_REF OFF —
+      its tests use no backend header) before the add_subdirectory, links
+      `ehem::test-support` instead, and drops EHEM_BUILD_TOOL=OFF (the option
+      no longer exists; until then CMake only warns about an unused
+      variable). The tool repository's own step.)*
