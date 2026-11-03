@@ -1,9 +1,9 @@
 ---
 id: REQ-BUILD-004
 title: Developer assist tool `./dev` — build, test, and environment runner
-status: needs-reverify
+status: implemented
 priority: should
-revision: 4   # 2026-10-28 (M13 decomposition, §6.2 approved with the hem-tool split plan 2026-10-27): meaning change — `./dev tool` and `--tool-link` leave with hem-tool (encedo-hem-tool has its own `c/dev tool`); needs-reverify until STEP-M13-010 ticks the new criterion. Rev 3 = 2026-10-13 (STEP-M12-080): note — `--openssl` on build / test / ci (REQ-BUILD-007); rev 2 (STEP-M12-060): `./dev build` takes the REQ-BUILD-006 switches. Additions the other REQs require; every obligation here unchanged, status kept
+revision: 5   # 2026-11-03 (STEP-M13-010 done): the M13 criterion ticked (`./dev ci` green on gcc + clang under wolfSSL and OpenSSL after the removal, shellcheck clean — 2026-10-28); needs-reverify → implemented, the status held before M13 (no `verifies:` test by nature; the six original criteria are still unticked — a records gap noted in TRACE for the M13 gate). Record only, no meaning change. Rev 4 = 2026-10-28 (M13 decomposition, §6.2 approved with the hem-tool split plan 2026-10-27): meaning change — `./dev tool` and `--tool-link` leave with hem-tool (encedo-hem-tool has its own `c/dev tool`); needs-reverify until STEP-M13-010 ticks the new criterion. Rev 3 = 2026-10-13 (STEP-M12-080): note — `--openssl` on build / test / ci (REQ-BUILD-007); rev 2 (STEP-M12-060): `./dev build` takes the REQ-BUILD-006 switches. Additions the other REQs require; every obligation here unchanged, status kept
 source: user decision 2026-07-16 (commissioned with usage spec; name/runtime/extras/compiler-default chosen via Q&A same day; approved 2026-07-16)
 depends_on: ["REQ-BUILD-001", "REQ-TEST-002"]
 supersedes: null
@@ -78,6 +78,10 @@ variables (integration tests then skip per REQ-TEST-002 if run anyway).
       session; noted if so).
 - [ ] CI and plain CMake/CTest remain fully usable without `./dev`
       (no build logic moves exclusively into the script).
-- [ ] M13 (rev 4): `./dev tool` and `--tool-link` are gone from the dispatch,
+- [x] M13 (rev 4): `./dev tool` and `--tool-link` are gone from the dispatch,
       usage text and completion; `./dev ci` green on gcc and clang under both
       backends after the removal; `shellcheck` clean (STEP-M13-010).
+      *(2026-10-28: `tool`, `--tool-link`, their usage lines and completion
+      words removed (7b549db); `./dev ci` gcc 37/37 + clang 37/37 (wolfSSL),
+      `./dev ci --openssl` gcc 37/37 + clang 37/37, the gates green on every
+      leg; `shellcheck dev` clean. Logs recorded in the step's evidence.)*

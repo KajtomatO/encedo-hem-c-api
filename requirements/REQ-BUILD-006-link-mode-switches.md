@@ -1,9 +1,9 @@
 ---
 id: REQ-BUILD-006
 title: Build configuration switches — library variants, dependency link mode, static-wolfSSL warning (the hem-tool link mode until M13)
-status: needs-reverify
+status: implemented
 priority: must
-revision: 5   # 2026-10-28 (M13 decomposition, §6.2 approved with the hem-tool split plan 2026-10-27): meaning change — `EHEM_TOOL_LINK` and `EHEM_BUILD_TOOL` leave with hem-tool; the CI leg "shared-only + EHEM_TOOL_LINK=shared" becomes "shared-only"; the three remaining options and the warning are unchanged; needs-reverify until STEP-M13-010 ticks the new criterion. Rev 4 = 2026-10-16 (STEP-M12-120 done): the EHEM_DEPS_LINK=static criterion checked (release run 38894733780). No meaning change. Rev 3 = 2026-10-13 (STEP-M12-060 done): the CI-legs criterion ticked (run 38403218107, both platforms green); rev 2 = OPEN criterion (distro static archives) resolved, local evidence. No meaning change — status set by the §4.3 regeneration
+revision: 6   # 2026-11-03 (STEP-M13-010 done): the M13 criterion ticked (local `cmake -LA`; CI run 40735080526 — the shared-only and static-only legs green on both platforms); needs-reverify → implemented, the status held before M13 (CI-proven, no `verifies:` test). Record only, no meaning change. Rev 5 = 2026-10-28 (M13 decomposition, §6.2 approved with the hem-tool split plan 2026-10-27): meaning change — `EHEM_TOOL_LINK` and `EHEM_BUILD_TOOL` leave with hem-tool; the CI leg "shared-only + EHEM_TOOL_LINK=shared" becomes "shared-only"; the three remaining options and the warning are unchanged; needs-reverify until STEP-M13-010 ticks the new criterion. Rev 4 = 2026-10-16 (STEP-M12-120 done): the EHEM_DEPS_LINK=static criterion checked (release run 38894733780). No meaning change. Rev 3 = 2026-10-13 (STEP-M12-060 done): the CI-legs criterion ticked (run 38403218107, both platforms green); rev 2 = OPEN criterion (distro static archives) resolved, local evidence. No meaning change — status set by the §4.3 regeneration
 source: ARCHITECTURE.md §11 M12 part B (early draft 2026-10-09, planned 2026-10-12: "link-mode switches — none exist today"; candidate names settled here); §1 (wolfSSL is never statically bundled into a published package — user decision 2026-10-09); §12 risk 1; REQ-BUILD-001 (both variants, one configure); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-BUILD-001", "REQ-BUILD-002", "REQ-API-006"]
 supersedes: null
@@ -153,8 +153,19 @@ packaging time only.
       inside the binaries, the configuration §1 forbids publishing; the
       static dependency link is exercised by `release.yml`'s OpenSSL builds
       (criterion above, STEP-M12-120). Recorded in ci.yml's header.
-- [ ] M13 (rev 5): `cmake -LA` lists neither `EHEM_TOOL_LINK` nor
+- [x] M13 (rev 5): `cmake -LA` lists neither `EHEM_TOOL_LINK` nor
       `EHEM_BUILD_TOOL`; the three remaining options keep their defaults and
       a default configure yields the library targets and install set only;
       the shared-only and static-only ci.yml legs green (run id;
       STEP-M13-010).
+      *(2026-10-28, dev host, fresh build directory: `cmake -LA -N` lists
+      EHEM_BUILD_SHARED=ON, EHEM_BUILD_STATIC=ON, EHEM_DEPS_LINK=default (plus
+      EHEM_CRYPTO_BACKEND and EHEM_SANITIZE) — neither EHEM_TOOL_LINK nor
+      EHEM_BUILD_TOOL; the default install is the 16-file library set recorded
+      under REQ-BUILD-001. CI run 40735080526 (push of 7b549db, 2026-10-28):
+      "Linux (gcc, shared-only)", "Linux (gcc, static-only)", "Windows
+      (MinGW, shared-only)" and "Windows (MinGW, static-only)" each Build +
+      Unit tests + "Assert the link result" success — the shared-only legs
+      now inspect the installed libencedo-hem.so / .dll (and no static SDK
+      installed) instead of build/hem-tool; the other six legs green too,
+      10/10.)*
