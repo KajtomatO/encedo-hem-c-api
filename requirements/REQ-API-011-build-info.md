@@ -3,7 +3,7 @@ id: REQ-API-011
 title: Build information API — crypto and transport backend names and versions (compiled against vs loaded)
 status: verified
 priority: should
-revision: 3   # 2026-10-14 (STEP-M12-090 done): the both-backends criterion ticked (CI run 38482938701). No meaning change. Rev 2 = 2026-10-13 (STEP-M12-020): shape settled (link-mode fields + a fixed-size reserved tail for 1.x growth); unit criteria ticked
+revision: 4   # 2026-10-28 (M13 decomposition): annotation only — hem-tool and the REQ-TOOL ids it cites live in encedo-hem-tool since the split (user decision 2026-10-27); no meaning change, status kept. Rev 3 = 2026-10-14 (STEP-M12-090 done): the both-backends criterion ticked (CI run 38482938701). No meaning change. Rev 2 = 2026-10-13 (STEP-M12-020): shape settled (link-mode fields + a fixed-size reserved tail for 1.x growth); unit criteria ticked
 source: user decision 2026-10-12 (M12 planning: `hem-tool --version` shows the SDK version, the wolfSSL version compiled against and the one loaded, and the libcurl version); ARCHITECTURE.md §11 M12 part A; §3 (hem-tool uses the public API only — it cannot include wolfSSL or libcurl headers itself); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-API-006", "REQ-API-008"]
 supersedes: null
@@ -49,7 +49,8 @@ EHEM_API void ehem_build_info_get(ehem_build_info *out);
 **Shape settled at STEP-M12-020 (2026-10-13):** the proposed names are
 kept and two fields are added — `crypto_link` and `transport_link`
 (`"dynamic"` / `"static"`, the build's resolved link mode of each
-dependency, which REQ-TOOL-025 prints and the tool cannot learn any other
+dependency, which hem-tool's `--version` prints — encedo-hem-tool's
+REQ-TOOL-025 — and the tool cannot learn any other
 way) — followed by `const char *reserved[8]` (NULL today). The struct is
 the one caller-allocated OUTPUT struct of the API, so the `abi_size`
 discipline of `ehem_options` does not fit it (nothing would stamp the

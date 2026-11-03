@@ -13,9 +13,11 @@ indexed here fails the build's test run.
 Related documents: [COVERAGE.md](COVERAGE.md) maps every endpoint of the
 device API documentation to its SDK binding (or records why it is
 deliberately unbound); [KNOWN-ISSUES.md](../KNOWN-ISSUES.md) records the
-firmware bugs and doc divergences the SDK works around; `hem-tool`
-(`src/tools/hem-tool/`) is the living usage documentation — every binding
-is drivable from it.
+firmware bugs and doc divergences the SDK works around; the two programs
+under `examples/` are the runnable examples (the last section), and
+[encedo-hem-tool](https://github.com/KajtomatO/encedo-hem-tool) — the
+command-line client, in its own repository since the SDK's 1.2.1 — is the
+broadest living usage documentation: every binding is drivable from it.
 
 ## Getting started
 
@@ -164,14 +166,14 @@ with expiry-aware silent refresh.
   itself always needs a passphrase login (the device demands `sub="U"`).
   The SDK composes the QR payload the phone scans (`ehem_ext_qr_payload`:
   `hash` = base64(SHA-256(request)) — the app checks it against the request
-  the pairing link serves); rendering it is the caller's (hem-tool draws a
-  terminal QR).
+  the pairing link serves); rendering it is the caller's (encedo-hem-tool's
+  `ext pair` draws a terminal QR).
 - The pollable confirm engine (`ehem_ext_confirm_begin/poll/wait/cancel`)
   serves consumers that cannot block.
 - The optional `ehem_options.confirm_notice` hook fires once per
   DELIVERED push (scope + effective wait) so a UI can announce what is
-  waiting on the phone — hem-tool's `mobile:` lines use it; the library
-  itself never prints.
+  waiting on the phone — encedo-hem-tool's `mobile:` lines use it; the
+  library itself never prints.
 
 ### Scopes
 
@@ -188,8 +190,9 @@ that key. The cache handles all of this transparently.
 
 The SDK is built against one crypto library, chosen at configure time with
 `EHEM_CRYPTO_BACKEND`: **wolfSSL** (the default, linked dynamically in
-the `-shared` packages) or **OpenSSL 3** (the one-file hem-tool and the
-static SDK package — the plain asset names from 1.2.0). The
+the `-shared` package) or **OpenSSL 3** (the static SDK package — the plain
+asset name from 1.2.0 — and encedo-hem-tool's one-file binary built on
+it). The
 public headers name neither — no `ehem_*` type depends on the choice — and
 `ehem_build_info_get()` tells a program which one it got, the version it
 was compiled against, the version loaded and how each library is linked.
@@ -353,15 +356,48 @@ rate-sensitive devices).
 | `ehem_storage_unlock` | expose disk N over USB-MSC (the SCOPE carries disk + rw) |
 | `ehem_storage_lock` | hide disk N again |
 
-## hem-tool
+## Examples and hem-tool
 
-The CLI is a thin consumer of exactly this public API and doubles as its
-living documentation: `hem-tool help <command>` documents each command
-(auth requirement included), the top-level page groups commands by
-credential need, and every command accepts `--mobile` where a bearer
-suffices. Default device URL: `https://my.ence.do`. Since 1.2 it
-initialises the SDK before any command and turns a refusal into one
-message naming the library and the remedy, exit code 12; `hem-tool
---version` prints the SDK version and the compiled/loaded versions and
-link modes of the crypto library and libcurl, and works even when the
-library is refused.
+Two small programs under `examples/` are the SDK's runnable examples
+(REQ-API-007). They are consumers like yours — public API only — compiled
+with the SDK whenever `EHEM_BUILD_EXAMPLES` is on (the default in a
+top-level build; every CI leg compiles them under both crypto backends),
+and never run by the build: they need a device.
+
+- **`examples/status.c`** — `status [URL]` (URL from the argument, else
+  `EHEM_URL`, else `https://my.ence.do`). The shape of every read-only
+  call: `ehem_global_init()` once, `ehem_options_init()` and the defaults
+  (system trust, automatic recoveries on), one context, `ehem_system_status()`,
+  the fields printed, `ehem_system_status_free()`, `ehem_ctx_destroy()`.
+  On failure it prints the `ehem_rc` name, `ehem_last_error()->message` and
+  the HTTP status, and one more line when the failure was the expired
+  device certificate (`tls_expired`, see "Automatic recoveries"). A refused
+  `ehem_global_init()` is explained from `ehem_build_info_get()`.
+- **`examples/sign.c`** — `sign LABEL [MESSAGE]` with `EHEM_PASSPHRASE`
+  (and `EHEM_URL`). The authenticated shape: `ehem_login()` records the
+  credential; `ehem_key_list_all()` — the first authenticated call, scope
+  `keymgmt:list` — acquires the bearer, so a wrong passphrase surfaces there
+  as `EHEM_ERR_AUTH_FAILED`; the key is found by label, its `alg` selector
+  chosen from `ehem_key_type_parse()` of its type (`Ed25519`,
+  `SHA256WithECDSA`, …), and `ehem_sign()` runs under the per-key scope
+  `keymgmt:use:<kid>`; the signature is printed as hex and released with
+  `ehem_signature_free()`. The device decides whether the key may sign (a
+  NIST key without the ExDSA mode is its 406, `EHEM_ERR_DEVICE`).
+
+Build and run from a build directory:
+
+```sh
+cmake --build build --target ehem-example-status ehem-example-sign
+build/examples/status https://my-hem.example
+EHEM_URL=https://my-hem.example EHEM_PASSPHRASE='…' build/examples/sign my-signing-key "hello"
+```
+
+**hem-tool**, the full-featured command-line client, lives in
+[encedo-hem-tool](https://github.com/KajtomatO/encedo-hem-tool) since the
+SDK's 1.2.1, with versions of its own (`c-v1.3.0` and on) and built on the
+plain, static SDK package of a release. It is a thin consumer of exactly
+this public API — `hem-tool help <command>` documents each command with its
+authentication requirement, every command takes `--mobile` where a bearer
+suffices, and `hem-tool --version` prints the SDK version it embeds — and
+remains the broadest living usage documentation of the SDK: every binding
+is drivable from it.

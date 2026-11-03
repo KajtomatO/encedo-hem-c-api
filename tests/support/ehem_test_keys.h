@@ -14,7 +14,8 @@
  *   4. calls ehem_test_sweep() in setup to remove stray EHEMTEST keys.
  *
  * No routine here ever mutates a key whose label lacks the EHEMTEST prefix, so
- * the protected set (REQ-TOOL-005) is out of bounds by construction.
+ * the protected set (hem-tool's REQ-TOOL-005, encedo-hem-tool) is out of bounds
+ * by construction.
  */
 #ifndef EHEM_TEST_KEYS_H
 #define EHEM_TEST_KEYS_H

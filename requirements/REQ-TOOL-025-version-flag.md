@@ -1,18 +1,25 @@
 ---
 id: REQ-TOOL-025
 title: hem-tool --version — SDK version, crypto backend compiled-against and loaded versions, libcurl version
-status: verified
+status: superseded
 priority: should
-revision: 4   # 2026-10-16 (STEP-M12-120 done): the both-backends criterion checked — the OpenSSL release jobs print the line (run 38894733780). No meaning change. Rev 3 = 2026-10-14 (STEP-M12-090 done): the both-backends criterion's evidence re-pointed — the OpenSSL CI legs cannot show the --version line; STEP-M12-120's OpenSSL release jobs print it. No meaning change. Rev 2 = 2026-10-13 (STEP-M12-020): output text settled (= the proposal); unit criteria recorded
+revision: 5   # 2026-10-28 (M13 decomposition, §6.2 approved with the hem-tool split plan 2026-10-27): superseded — hem-tool moved to encedo-hem-tool at 1.2.0; the same id there is authoritative; text frozen at rev 4. Rev 4 = 2026-10-16 (STEP-M12-120 done): the both-backends criterion checked — the OpenSSL release jobs print the line (run 38894733780). No meaning change. Rev 3 = 2026-10-14 (STEP-M12-090 done): the both-backends criterion's evidence re-pointed — the OpenSSL CI legs cannot show the --version line; STEP-M12-120's OpenSSL release jobs print it. No meaning change. Rev 2 = 2026-10-13 (STEP-M12-020): output text settled (= the proposal); unit criteria recorded
 source: user decision 2026-10-12 (M12 planning: "`hem-tool --version` — the SDK version, the wolfSSL version compiled against and the one loaded, and the libcurl version (today `--version` is an unknown option)"); ARCHITECTURE.md §11 M12 part A; REQ-API-011 (the facts); approved 2026-10-12 (M12 decomposition, user: "approve")
 depends_on: ["REQ-API-011", "REQ-TOOL-020"]
 supersedes: null
-superseded_by: null
+superseded_by: "KajtomatO/encedo-hem-tool requirements/REQ-TOOL-025"
 traces:
   architecture: ["ARCHITECTURE.md#8-hem-tool-cli", "ARCHITECTURE.md#11-milestones"]
 ---
 
 # hem-tool --version
+
+> **Superseded 2026-10-28 (M13 decomposition).** hem-tool moved to
+> [encedo-hem-tool](https://github.com/KajtomatO/encedo-hem-tool) at the SDK's 1.2.0 (user decision
+> 2026-10-27); this requirement continues there under the same id and is
+> maintained there. The text below is frozen at the revision it had when it
+> left (rev 4); the code and tests that implemented it leave this repository
+> in STEP-M13-010.
 
 hem-tool SHALL accept `--version` (and `version` as a command spelling,
 like `help`) and print to stdout, exit 0, without touching the network

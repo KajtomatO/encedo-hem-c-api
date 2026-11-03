@@ -1,9 +1,9 @@
 ---
 id: REQ-API-009
-title: The SDK's and hem-tool's own text is 7-bit ASCII
+title: The SDK's own text is 7-bit ASCII (hem-tool's too until M13)
 status: verified
 priority: should
-revision: 1
+revision: 2   # 2026-10-28 (M13 decomposition): wording — the hem-tool half moved to encedo-hem-tool as its REQ-TOOL-029 (the same comment-aware lexer gates it there); the SDK's obligation and its gate are unchanged, status kept
 source: user report 2026-10-10 (first Windows test of the release binary — "Printed info have strange characters": a UTF-8 em dash shown as "ÔÇö" in the console); ARCHITECTURE.md §4 (error detail), §8 (hem-tool); approved 2026-10-10 (user "I approve steps")
 depends_on: ["REQ-API-004"]
 supersedes: null
@@ -12,12 +12,14 @@ traces:
   architecture: ["ARCHITECTURE.md#4-public-api--conventions", "ARCHITECTURE.md#8-hem-tool-cli"]
 ---
 
-# The SDK's and hem-tool's own text is 7-bit ASCII
+# The SDK's own text is 7-bit ASCII
 
-Every string and character literal in the SDK and hem-tool sources
-(`src/`, `include/`; vendored third-party code excluded) — the SDK's
-error-detail messages (REQ-API-004) and everything hem-tool prints —
-SHALL consist of 7-bit ASCII characters only.
+Every string and character literal in the SDK sources (`src/`,
+`include/`; vendored third-party code excluded) — the SDK's error-detail
+messages (REQ-API-004) above all — SHALL consist of 7-bit ASCII characters
+only. *(Until the SDK's 1.2.1 this covered hem-tool's sources and
+everything it prints as well; that half is encedo-hem-tool's REQ-TOOL-029
+since the split of 2026-10-27.)*
 
 **Rationale:** a Windows console using a legacy code page (cp437, cp852 —
 the default for many locales) renders UTF-8 multibyte characters as

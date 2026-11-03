@@ -1,18 +1,25 @@
 ---
 id: REQ-TOOL-003
 title: hem-tool cert-install — harvest, install, reboot, verify
-status: verified
+status: superseded
 priority: must
-revision: 1
+revision: 2   # 2026-10-28 (M13 decomposition, §6.2 approved with the hem-tool split plan 2026-10-27): superseded — hem-tool moved to encedo-hem-tool at 1.2.0; the same id there is authoritative; text frozen at rev 1.
 source: user decision 2026-07-16 ("implement the working cert install" → "plan hem-tool cert-install"); live remediation procedure executed 2026-07-16 (python script); REQ-SYS-003 root-cause finding
 depends_on: ["REQ-TOOL-001", "REQ-SYS-004", "REQ-SYS-005", "REQ-SYS-006", "REQ-AUTH-001"]
 supersedes: null
-superseded_by: null
+superseded_by: "KajtomatO/encedo-hem-tool requirements/REQ-TOOL-003"
 traces:
   architecture: ["ARCHITECTURE.md#8-hem-tool-cli"]
 ---
 
 # hem-tool cert-install — harvest, install, reboot, verify
+
+> **Superseded 2026-10-28 (M13 decomposition).** hem-tool moved to
+> [encedo-hem-tool](https://github.com/KajtomatO/encedo-hem-tool) at the SDK's 1.2.0 (user decision
+> 2026-10-27); this requirement continues there under the same id and is
+> maintained there. The text below is frozen at the revision it had when it
+> left (rev 1); the code and tests that implemented it leave this repository
+> in STEP-M13-010.
 
 hem-tool SHALL provide a `cert-install` subcommand automating the manual
 remediation proven on 2026-07-16, for devices whose firmware (v1.2.2)

@@ -1,18 +1,25 @@
 ---
 id: REQ-TOOL-016
 title: hem-tool ext family — pair (terminal QR), list, login
-status: verified
+status: superseded
 priority: should
-revision: 5   # 2026-10-27 (STEP-M12-137 done): re-verified — the rev 3 unit criterion green on every CI leg (d532433 and a481d07) and both attended criteria met: the user's rc3 tests of 2026-10-20 (the Windows QR display the only finding) and, 2026-10-27, "Ext pair works on windows" from the published `v1.2.0-rc4` Windows hem-tool with Encedo HEM Auth 2.0.0-dev.8 — `ext list` shows the Samsung SM-S938B (Android) authenticator, kid 3dff0e4888f77b1e14e6812c17dbc4ce, [PROTECTED]. No meaning change. Rev 4 = 2026-10-20 (STEP-M12-137, the rc3 Windows finding): the terminal QR on a Windows console — the UTF-8 half-block rows showed as mojibake ("a mess of chars") because the console decodes stdout bytes in its OEM code page; `ext pair` now writes the rows as UTF-16 through the console API when stdout is a console (bytes otherwise). Annotation of the rendering clause + an attended criterion on `v1.2.0-rc4` — NO meaning change (the clause already promised a QR in the terminal; Windows showed none); status stays needs-reverify from rev 3. Rev 3 = 2026-10-20 (STEP-M12-137): MEANING CHANGE — the QR payload comes from the SDK's `ehem_ext_qr_payload()` (REQ-AUTH-008 rev 5: `hash` = base64(SHA-256(request)), the check the new Encedo Auth app makes); the tester's placeholder "not_implemented_yet" is gone from the flow text. §6.2 report approved with the plan 2026-10-20. needs-reverify until the unit criterion passes and the user's rc3 scan. Rev 2 = the M8-080 attended record (2026-08-05/06)
+revision: 6   # 2026-10-28 (M13 decomposition, §6.2 approved with the hem-tool split plan 2026-10-27): superseded — hem-tool moved to encedo-hem-tool at 1.2.0; the same id there is authoritative; text frozen at rev 5. Rev 5 = 2026-10-27 (STEP-M12-137 done): re-verified — the rev 3 unit criterion green on every CI leg (d532433 and a481d07) and both attended criteria met: the user's rc3 tests of 2026-10-20 (the Windows QR display the only finding) and, 2026-10-27, "Ext pair works on windows" from the published `v1.2.0-rc4` Windows hem-tool with Encedo HEM Auth 2.0.0-dev.8 — `ext list` shows the Samsung SM-S938B (Android) authenticator, kid 3dff0e4888f77b1e14e6812c17dbc4ce, [PROTECTED]. No meaning change. Rev 4 = 2026-10-20 (STEP-M12-137, the rc3 Windows finding): the terminal QR on a Windows console — the UTF-8 half-block rows showed as mojibake ("a mess of chars") because the console decodes stdout bytes in its OEM code page; `ext pair` now writes the rows as UTF-16 through the console API when stdout is a console (bytes otherwise). Annotation of the rendering clause + an attended criterion on `v1.2.0-rc4` — NO meaning change (the clause already promised a QR in the terminal; Windows showed none); status stays needs-reverify from rev 3. Rev 3 = 2026-10-20 (STEP-M12-137): MEANING CHANGE — the QR payload comes from the SDK's `ehem_ext_qr_payload()` (REQ-AUTH-008 rev 5: `hash` = base64(SHA-256(request)), the check the new Encedo Auth app makes); the tester's placeholder "not_implemented_yet" is gone from the flow text. §6.2 report approved with the plan 2026-10-20. needs-reverify until the unit criterion passes and the user's rc3 scan. Rev 2 = the M8-080 attended record (2026-08-05/06)
 source: user decision 2026-07-22 (M8 decomposition; "Add QR code generation to hem-tool" — user decision same day); hem-api-tester test_5.php QR payload (its `hash` placeholder — superseded by REQ-AUTH-008 rev 5, the Manager's definition); REQ-TOOL-012 family-in-one-REQ precedent; user bug report 2026-10-20 on v1.2.0-rc2 (the new Encedo Auth app refuses the QR: "the pairing link served a different request than the code promised") and user decision the same day: the SDK composes the payload; user bug report 2026-10-20 on v1.2.0-rc3 (Windows: "the QR code is a mess of chars and not a QR-Code")
 depends_on: ["REQ-AUTH-006", "REQ-AUTH-008", "REQ-AUTH-009", "REQ-AUTH-010", "REQ-KEY-001", "REQ-TOOL-005"]
 supersedes: null
-superseded_by: null
+superseded_by: "KajtomatO/encedo-hem-tool requirements/REQ-TOOL-016"
 traces:
   architecture: ["ARCHITECTURE.md#8-hem-tool-cli"]
 ---
 
 # hem-tool ext family — pair (terminal QR), list, login
+
+> **Superseded 2026-10-28 (M13 decomposition).** hem-tool moved to
+> [encedo-hem-tool](https://github.com/KajtomatO/encedo-hem-tool) at the SDK's 1.2.0 (user decision
+> 2026-10-27); this requirement continues there under the same id and is
+> maintained there. The text below is frozen at the revision it had when it
+> left (rev 5); the code and tests that implemented it leave this repository
+> in STEP-M13-010.
 
 hem-tool SHALL provide an `ext` subcommand family — `ext pair`,
 `ext list`, `ext login` — making the ExtAuth surface drivable by hand,

@@ -1,6 +1,6 @@
 /*
  * check_ascii_strings.c — the REQ-API-009 gate: every string and character
- * literal in the SDK and hem-tool sources (src/, include/; vendored code
+ * literal in the SDK sources (src/, include/; vendored code
  * excluded by the caller) is 7-bit ASCII. A UTF-8 em dash in a message prints
  * as mojibake in a Windows console that uses a legacy code page (found
  * 2026-10-10 on the first Windows test of the release binary). Comments are

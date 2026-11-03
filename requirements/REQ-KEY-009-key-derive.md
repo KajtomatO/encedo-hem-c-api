@@ -3,7 +3,7 @@ id: REQ-KEY-009
 title: Binding for /api/keymgmt/derive — ECDH+HKDF derived key stored on device
 status: verified
 priority: must
-revision: 2
+revision: 3   # 2026-10-28 (M13 decomposition): annotation only — hem-tool and the REQ-TOOL ids it cites live in encedo-hem-tool since the split (user decision 2026-10-27); no meaning change, status kept.
 source: ARCHITECTURE.md §11 (M7: keymgmt derive); encedo-hem-api-doc keymgmt/derive.md + discrepancies/DISCREPANCIES-OFFICIAL-DOCS.md §"derive vs ecdh"; encedo_firmware api_keymgmt.c:1285 api_post_keymgmt_derive (fw v1.2.2 — NOT prototyped in api.h; hem-api-tester test_10.php runs it green on real hardware); encedo-hem-python-api keymgmt.py derive (OQ-23: keymgmt:gen scope reuse); approved 2026-07-17
 depends_on: ["REQ-AUTH-002", "REQ-AUTH-003", "REQ-KEY-005", "REQ-OPS-004"]
 supersedes: null
@@ -32,8 +32,9 @@ pubkey, pubkey_len, mode, descr, descr_len, out_kid)` over
   SHA3-256/384/512, AES128/192/256). PQC types are not derivable
   (handler has no MLKEM/MLDSA branches; doc agrees).
 - `mode` optional, NIST-only literals as create (`ECDH` / `ECDH,ExDSA` /
-  `ExDSA`); the SDK applies REQ-TOOL-009's tool-side NIST default only
-  in hem-tool, never in the binding (verbatim pass-through).
+  `ExDSA`); hem-tool's tool-side NIST default (encedo-hem-tool's
+  REQ-TOOL-009) lives in the tool only, never in the binding (verbatim
+  pass-through).
 - **Scope:** the handler accepts `keymgmt:derive` OR `keymgmt:gen`
   (api_keymgmt.c:1329). The SDK requests **`keymgmt:gen`** — proven live
   by the hem-api-tester across create/derive/import and shared with

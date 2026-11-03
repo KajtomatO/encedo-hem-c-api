@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Mint a VALID self-signed CA plus two leaf certificates it signed for
-localhost — one EXPIRED, one NOT YET VALID (REQ-BUILD-005 / REQ-NET-005 check in
-the release workflow): the release binary must classify "certificate has
-expired" under the wolfSSL-backed libcurl, and must NOT classify a certificate
-that is not yet valid (REQ-NET-005 rev 2: wolfSSL -150 is ASN_BEFORE_DATE_E).
-Local HTTPS endpoints serving each leaf are probed by `hem-tool recovery` with
-the CA as its trust anchor; it prints "diagnosis: the device certificate has
-EXPIRED" only when the classifier fired.
+localhost — one EXPIRED, one NOT YET VALID (the REQ-BUILD-010 / REQ-NET-005
+check in the release workflow): the release build must classify "certificate
+has expired" under either TLS backend of its libcurl (wolfSSL, OpenSSL), and
+must NOT classify a certificate that is not yet valid (REQ-NET-005 rev 2:
+wolfSSL -150 is ASN_BEFORE_DATE_E). Local HTTPS endpoints serving each leaf are
+probed by tests/release/tls-probe with the CA as its trust anchor; it prints
+`tls_expired=1` only when the classifier fired (until M13 the driver was
+`hem-tool recovery`, now encedo-hem-tool's).
 
 The CA must be valid: wolfSSL (unlike a lax backend) refuses to even LOAD an
 expired certificate as a trust anchor, so a self-signed expired cert cannot be

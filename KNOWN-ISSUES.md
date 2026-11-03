@@ -140,7 +140,7 @@ trigger here: it keys on expired-cert TLS failures and on a challenge-GET
 
 ### Workaround
 
-`hem-tool checkin` (or `ehem_system_checkin()`): the check-in flow resyncs
+`ehem_system_checkin()` (or encedo-hem-tool's `hem-tool checkin`): the check-in flow resyncs
 the device clock as a side effect — verified twice on 2026-07-17 (challenge
 `exp` returned to exactly now + 60 both times). Run it after any device
 power-cycle and periodically on long-lived deployments.
@@ -205,9 +205,9 @@ groups. All found + confirmed live 2026-07-18; upstream-doc / firmware filings.
 `api_post_keymgmt_update` rewrites the key's entire metadata record, so a body
 with `label` but no `descr` wipes any stored DESCR — NOT "left unchanged" as
 `keymgmt/update.md` claims. **SDK/tool handling:** the binding passes the
-semantics through verbatim (documented in `ehem_key_update`); `hem-tool keys
-update` re-sends the stored descr when `--descr` is omitted so the CLI is
-least-surprise (REQ-KEY-007 rev2, REQ-TOOL-011 rev2). **Fix:** correct the doc,
+semantics through verbatim (documented in `ehem_key_update`); hem-tool's `keys
+update` (encedo-hem-tool, its REQ-TOOL-011 rev 2) re-sends the stored descr
+when `--descr` is omitted so the CLI is least-surprise (REQ-KEY-007 rev2). **Fix:** correct the doc,
 or make the firmware merge omitted fields.
 
 ### 2. `keymgmt/derive` output is not externally reproducible
@@ -325,8 +325,8 @@ Discovered while building and attending the M8 mobile-auth milestone
 
 ## OPEN — A wipe does not always remove the TLS material (fw v1.2.2)
 
-**Status:** open (observation, cause unknown). **Affected:** REQ-SYS-014,
-REQ-TOOL-022 texts; no functional failure.
+**Status:** open (observation, cause unknown). **Affected:** REQ-SYS-014
+(and encedo-hem-tool's REQ-TOOL-022) texts; no functional failure.
 
 The 2026-07-22 wipe of the test device (fw v1.2.2-DIAG) left it serving
 HTTP only, and `tls-recover` had to re-provision HTTPS. The two 2026-10-10
@@ -337,9 +337,9 @@ HTTPS with a certificate that verifies under system trust (`status`:
 TLS key and certificate are erased, and the tool still suggests an
 `http://` URL afterwards — that works either way. Whether the firmware
 build (DIAG vs production) or the unit's provisioning state makes the
-difference is not known. hem-tool no longer suggests `recovery` after init
-or wipe (REQ-TOOL-021 rev 3, REQ-TOOL-022 rev 2); run it only if HTTPS
-does not verify.
+difference is not known. hem-tool (encedo-hem-tool) no longer suggests
+`recovery` after init or wipe (its REQ-TOOL-021 rev 3, REQ-TOOL-022 rev 2);
+run it only if HTTPS does not verify.
 
 ## FIXED in 1.2.0 — 1.1.0 `ext pair`: the new Encedo Auth app rejects the QR
 
@@ -347,6 +347,11 @@ does not verify.
 `v1.2.0-rc2`, 2026-10-20). **Affected:** `hem-tool ext pair` in 1.0.0 and
 1.1.0, and any consumer that composed the QR payload itself from the
 broker's `link` with a placeholder `hash`.
+
+*hem-tool is [encedo-hem-tool](https://github.com/KajtomatO/encedo-hem-tool)'s
+since the SDK's 1.2.1; this record stays for the SDK half
+(`ehem_ext_qr_payload`) and for the tool as released with the SDK up to
+1.2.0.*
 
 **Symptom.** The new Encedo Auth app scans the terminal QR and refuses:
 "the pairing link served a different request than the code promised".
@@ -370,36 +375,30 @@ function.
 ## FIXED in 1.2.0 — 1.1.0 `ext pair` on Windows: the terminal QR is "a mess of chars"
 
 **Status:** fixed in 1.2.0 (STEP-M12-137; found by the user on
-`v1.2.0-rc3`, 2026-10-20). **Affected:** `hem-tool.exe ext pair` in
-1.0.0, 1.1.0 and the 1.2.0 candidates up to rc3, in every Windows
-console — cmd, PowerShell, Windows Terminal — whose output code page is
-the default OEM one (not 65001).
+`v1.2.0-rc3`, 2026-10-20). **Affected:** `hem-tool.exe ext pair` in 1.0.0,
+1.1.0 and the 1.2.0 candidates up to rc3, in every Windows console whose
+output code page is the default OEM one.
 
-**Symptom.** Instead of a QR code the console shows rows of letters and
-symbols, three per QR cell (`Γûê` in code page 437, `Ôľł` in 852, …).
-Output redirected to a file, and every Linux terminal, is fine.
-
-**Cause.** The render writes UTF-8 half-block characters (`█ ▀ ▄`)
-through stdio. A Windows console decodes the bytes it receives in its
-OUTPUT code page — the OEM page of the system locale, never UTF-8 unless
-`chcp 65001` was run in that console — so each three-byte character
-turns into three glyphs of that page.
-
-**Fix.** When stdout is a console the rows are written as UTF-16 through
-the console API (`WriteConsoleW`), which no code page touches and which
-even the legacy raster fonts render — the three blocks exist in every
-OEM font; a file or pipe still receives the UTF-8 bytes (REQ-TOOL-016
-rev 4). 1.1.0 users: `chcp 65001` in the same console before `hem-tool
-ext pair` usually helps; or `ext pair --no-qr` and a LOCAL QR generator
-over the printed payload — never a web one, the payload carries `user`,
-`email` and `hostname`. Other device strings hem-tool prints (key labels,
-names) still go through the code page: BACKLOG item 12.
+A hem-tool issue with no SDK part: the render wrote UTF-8 half-block
+characters through stdio and the console decoded them in its OEM code page;
+the fix writes the rows as UTF-16 through the console API when stdout is a
+console (REQ-TOOL-016 rev 4). hem-tool is
+[encedo-hem-tool](https://github.com/KajtomatO/encedo-hem-tool)'s since the
+SDK's 1.2.1 — the full record, the 1.1.0 workaround (`chcp 65001`) and the
+follow-up about other device strings in the console's code page (this
+repository's BACKLOG item 12, moved) live there.
 
 ## FIXED in 1.2.0 — 1.1.0 release hem-tool: a foreign libwolfssl crashes it, a missing libwolfssl.dll stops it before `main`
 
 **Status:** fixed in 1.2.0 (M12). **Affected:** the 1.1.0 release
 binaries (REQ-BUILD-005), and any consumer of the SDK built against one
 wolfSSL and run with another.
+
+*The SDK half — the refusal at `ehem_global_init()` — is this repository's.
+The hem-tool halves (the message and exit 12, the Windows delay-load import)
+are [encedo-hem-tool](https://github.com/KajtomatO/encedo-hem-tool)'s since
+the SDK's 1.2.1, where the one-file binary has no companion library to miss;
+the SDK's own release carries no executable from 1.2.1 on.*
 
 - **Foreign library** — `ehem_global_init()` refuses a wolfSSL other than
   the one the SDK was built against with `EHEM_ERR_BACKEND_MISMATCH`: the

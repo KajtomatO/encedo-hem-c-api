@@ -3,7 +3,7 @@ id: REQ-SYS-014
 title: Binding for the wipeout write of /api/system/config — device factory reset
 status: verified
 priority: should
-revision: 1
+revision: 2   # 2026-10-28 (M13 decomposition): annotation only — hem-tool and the REQ-TOOL ids it cites live in encedo-hem-tool since the split (user decision 2026-10-27); no meaning change, status kept.
 source: user decision 2026-10-07 (M10 scope: device wipe); ARCHITECTURE.md §11 (M10); encedo-hem-api-doc system/config.md (`wipeout` field; `false` = 406 no-op sentinel); encedo_firmware api_system.c:1060-1066 (POST config demands scope `system:config` AND token `sub` U or M) and :1089-1099 (200 is sent first, then 2 s delay, `system_full_wipeout()`, bootloader restart); REQ-SYS-004 (the config binding this extends); approved 2026-10-07 (M10 decomposition, user go-ahead)
 depends_on: ["REQ-SYS-004", "REQ-AUTH-002", "REQ-TEST-007"]
 supersedes: null
@@ -40,7 +40,8 @@ Device facts (fw v1.2.2, `api_system.c`):
 (REQ-AUTH-011); re-initialisation requires a wipeout first
 (`auth/init.md`), and the only alternative is a manual wipe through the
 Manager each time. The binding is deliberately plain: no confirmation
-logic in the library — that is the tool's job (REQ-TOOL-022).
+logic in the library — that is hem-tool's job (encedo-hem-tool,
+REQ-TOOL-022).
 
 **Acceptance criteria:**
 - [x] Unit (fake transport): the body is exactly `{"wipeout":true}`,

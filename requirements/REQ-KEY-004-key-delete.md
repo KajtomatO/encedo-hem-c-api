@@ -3,7 +3,7 @@ id: REQ-KEY-004
 title: Binding for /api/keymgmt/delete — remove a key by KID
 status: verified
 priority: must
-revision: 1
+revision: 2   # 2026-10-28 (M13 decomposition): annotation only — hem-tool and the REQ-TOOL ids it cites live in encedo-hem-tool since the split (user decision 2026-10-27); no meaning change, status kept.
 source: ARCHITECTURE.md §6, §11 (M3); encedo-hem-api-doc keymgmt/delete.md; HEM-SDK-6 (delete by KID); approved 2026-07-16
 depends_on: ["REQ-KEY-001", "REQ-AUTH-003"]
 supersedes: null
@@ -25,7 +25,8 @@ reboot binding established over the shared request path; device 406
 Deletion is immediate and irreversible at the API level (the doc
 documents no confirmation step; key material is zeroed in flash). The
 SDK stays policy-free by design: every confirmation and protected-key
-safeguard lives in hem-tool (REQ-TOOL-005/006), because ARCHITECTURE §8
+safeguard lives in hem-tool (encedo-hem-tool, its REQ-TOOL-005/006),
+because ARCHITECTURE §8
 defines protection as a client-side convention over labels.
 
 **Rationale:** key removal is half of the goal.txt tool milestone and of

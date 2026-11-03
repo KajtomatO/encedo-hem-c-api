@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 #
 # package-wolfssl.sh — package the SHARED wolfSSL built by build-deps.sh as its
-# own release asset (REQ-BUILD-005): hem-tool links it dynamically; the archive
-# is published beside hem-tool's, never inside it (ARCHITECTURE.md §1 — wolfSSL
-# is GPLv2-or-later / commercial, hem-tool and the SDK are MIT).
+# own release asset (REQ-BUILD-010): the -shared SDK library package links it
+# dynamically; the archive is published beside that package, never inside it
+# (ARCHITECTURE.md §1 — wolfSSL is GPLv2-or-later / commercial, the SDK is
+# MIT). Until the SDK's 1.2.1 the -shared hem-tool loaded it too; the CLI is
+# encedo-hem-tool's since, as a one-file build without wolfSSL.
 #
-# implements: REQ-BUILD-005
+# implements: REQ-BUILD-010
 #
 #   scripts/release/package-wolfssl.sh <prefix> <linux|windows> [dist-dir]
 #
@@ -31,12 +33,12 @@ SRC_SHA="$(cut -d' ' -f1 "$PREFIX/src/$SRC.sha256")"
 if [ "$OS" = "windows" ]; then
   LIBNAME=libwolfssl.dll
   LIB="$PREFIX/bin/$LIBNAME"
-  HOWTO="the directory of hem-tool.exe is first in the DLL search order"
+  HOWTO="next to your program's .exe (or in a directory on PATH), like libencedo-hem.dll itself"
 else
   LIBNAME="$(readelf -d "$PREFIX/lib/libwolfssl.so" | sed -n -E 's/.*\(SONAME\).*\[(.*)\].*/\1/p')"
   [ -n "$LIBNAME" ] || { echo "no SONAME in $PREFIX/lib/libwolfssl.so"; exit 1; }
   LIB="$PREFIX/lib/$LIBNAME"
-  HOWTO="hem-tool searches its own directory first (RUNPATH \$ORIGIN); the file name must stay ${LIBNAME}, the SONAME"
+  HOWTO="beside libencedo-hem.so, which looks in its own directory first (RUNPATH \$ORIGIN); the file name must stay ${LIBNAME}, the SONAME"
 fi
 [ -f "$LIB" ] || { echo "$LIB missing"; exit 1; }
 
@@ -47,19 +49,22 @@ cp -L "$LIB" "$STAGE/$LIBNAME"            # a real file, never a symlink
 cp "$PREFIX/COPYING.wolfssl" "$STAGE/COPYING"
 cp "$PREFIX/wolfssl-build-config.txt" "$STAGE/BUILD-CONFIG.txt"
 cat > "$STAGE/README.txt" <<EOF
-wolfSSL ${V} (${OS}, x86_64) - the TLS/crypto library hem-tool loads at run time.
+wolfSSL ${V} (${OS}, x86_64) - the TLS/crypto library the -shared Encedo HEM C
+SDK package of this release loads at run time.
 
 Contents: ${LIBNAME}; COPYING (GNU GPL version 2 - wolfSSL is licensed "GPLv2
 or, at your option, any later version", or commercially by wolfSSL Inc.);
 BUILD-CONFIG.txt (the exact CMake configure line and toolchain this library was
 built with); this file.
 
-Use: put ${LIBNAME} in the same directory as hem-tool (the -shared hem-tool
-asset; the plain one has OpenSSL linked in and needs no library) -
-${HOWTO}.
-hem-tool was compiled against the headers of THIS build: a substitute library
-must be built with the same options (BUILD-CONFIG.txt) or its struct layouts
-may differ.
+Use: put ${LIBNAME} ${HOWTO}.
+Only the -shared SDK package (encedo-hem-<label>-${OS}-x86_64-shared) needs it;
+the plain package has OpenSSL linked in, and so has hem-tool, the command-line
+client released from https://github.com/KajtomatO/encedo-hem-tool.
+The SDK was compiled against the headers of THIS build: a substitute library
+must be built with the same options (BUILD-CONFIG.txt) - another version, or
+the same version built with other options, is refused by ehem_global_init()
+(EHEM_ERR_BACKEND_MISMATCH) instead of crashing.
 
 Corresponding source (GPLv2 section 3): built UNMODIFIED from
   https://github.com/wolfSSL/wolfssl/releases/tag/v${V}-stable

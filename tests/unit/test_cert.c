@@ -2,8 +2,9 @@
  * test_cert.c — the public certificate-inspection helper ehem_cert_inspect(),
  * driven entirely offline against the frozen leaf fixture.
  *
- * verifies: REQ-SYS-006 / REQ-TOOL-003 (read the leaf serial + validity window
- *           the skip-if-current comparison and the cert-install summary rely on)
+ * verifies: REQ-SYS-006 (read the leaf serial + validity window that hem-tool's
+ *           cert-install skip-if-current comparison and summary rely on —
+ *           encedo-hem-tool, its REQ-TOOL-003)
  */
 #include <stdarg.h>
 #include <stddef.h>

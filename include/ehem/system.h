@@ -133,7 +133,7 @@ typedef struct ehem_checkin_info {
      * device's leg-3 status string. Firmware v1.2.2 acknowledges the claim but
      * never installs it (REQ-SYS-003 root cause), so this is what a caller
      * feeds to ehem_system_config_install_cert() to rotate the cert manually
-     * (hem-tool cert-install / REQ-TOOL-003).
+     * (hem-tool cert-install — encedo-hem-tool, its REQ-TOOL-003).
      */
     char *newcrt_chain;
 

@@ -3,14 +3,14 @@
 # `-L integration`; run with `./dev test it -d` or
 # `EHEM_ALLOW_DISRUPTIVE=1 ctest -L disruptive`.
 
-# REQ-TOOL-003: live cert-install (harvest → skip-if-current → install →
-# reboot → verify) driven through the real hem-tool cert-install code path.
-ehem_add_disruptive_test(test_cert_install_live SOURCES test_cert_install_live.c)
+# hem-tool's live cert-install test (test_cert_install_live) moved to
+# encedo-hem-tool with the tool — M13, 2026-10-28. This directory is added
+# unconditionally since then (tests/CMakeLists.txt).
 
 # REQ-SYS-010: ATTENDED storage unlock/lock probe. Disruptive-gated for its
 # first runs because the v1.2.2 handlers read an uninitialized pointer in
 # their scope check (a hard-fault would self-reset the device); public API +
-# cmocka, so declared directly rather than via the hem-tool-core macro.
+# cmocka, declared directly.
 add_executable(test_storage_live test_storage_live.c)
 target_link_libraries(test_storage_live PRIVATE ehem_test_support cmocka::cmocka)
 target_include_directories(test_storage_live PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
@@ -20,8 +20,8 @@ set_tests_properties(test_storage_live PROPERTIES LABELS disruptive SKIP_RETURN_
 
 # REQ-AUTH-008: broker registration probe — register/init + pending polls.
 # Disruptive per REQ-TEST-006 broker gating (creates a dangling broker
-# registration; never touches a phone). Public API + cmocka, so declared
-# directly (the hem-tool-core macro links no cmocka), like test_storage_live.
+# registration; never touches a phone). Public API + cmocka, declared
+# directly, like test_storage_live.
 add_executable(test_notify_register_live test_notify_register_live.c)
 target_link_libraries(test_notify_register_live PRIVATE ehem_test_support cmocka::cmocka)
 target_include_directories(test_notify_register_live PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)

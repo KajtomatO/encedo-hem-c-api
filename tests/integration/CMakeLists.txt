@@ -156,26 +156,6 @@ target_compile_options(test_auth_live PRIVATE ${EHEM_WARNING_FLAGS})
 add_test(NAME test_auth_live COMMAND test_auth_live)
 set_tests_properties(test_auth_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
 
-# REQ-TOOL-006: live `keys rm --label-prefix` removes EHEMTEST keys. Drives the
-# shared hem-tool-core code (public API), so it links hem-tool-core; only exists
-# when the CLI is built. Integration (EHEMTEST-only mutation), not disruptive.
-if(TARGET hem-tool-core)
-  # REQ-OPS-002 + REQ-TOOL-010: live hardware-RNG harvest + tool hygiene.
-  add_executable(test_random_live test_random_live.c)
-  target_link_libraries(test_random_live PRIVATE hem-tool-core cmocka::cmocka)
-  target_include_directories(test_random_live PRIVATE
-    ${PROJECT_SOURCE_DIR}/tests/support
-    ${PROJECT_SOURCE_DIR}/src/tools/hem-tool)
-  target_compile_options(test_random_live PRIVATE ${EHEM_WARNING_FLAGS})
-  add_test(NAME test_random_live COMMAND test_random_live)
-  set_tests_properties(test_random_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
-
-  add_executable(test_keys_rm_live test_keys_rm_live.c)
-  target_link_libraries(test_keys_rm_live PRIVATE hem-tool-core cmocka::cmocka)
-  target_include_directories(test_keys_rm_live PRIVATE
-    ${PROJECT_SOURCE_DIR}/tests/support
-    ${PROJECT_SOURCE_DIR}/src/tools/hem-tool)
-  target_compile_options(test_keys_rm_live PRIVATE ${EHEM_WARNING_FLAGS})
-  add_test(NAME test_keys_rm_live COMMAND test_keys_rm_live)
-  set_tests_properties(test_keys_rm_live PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
-endif()
+# The two live tests of hem-tool's `random` and `keys rm` (test_random_live,
+# test_keys_rm_live) moved to encedo-hem-tool with the tool — M13, 2026-10-28.
+# The SDK's own live RNG coverage (REQ-OPS-002) stays in test_cipher_live.

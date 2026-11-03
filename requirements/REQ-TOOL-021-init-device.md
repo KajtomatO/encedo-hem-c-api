@@ -1,18 +1,25 @@
 ---
 id: REQ-TOOL-021
 title: hem-tool init-device — personalise an uninitialised device
-status: verified
+status: superseded
 priority: should
-revision: 3   # 2026-10-10 (STEP-M10-068): user decision "remove any hints about recovery" — the Output no longer points at recovery / tls-recover; meaning change → draft; re-approved 2026-10-10 (user: "OK")
+revision: 4   # 2026-10-28 (M13 decomposition, §6.2 approved with the hem-tool split plan 2026-10-27): superseded — hem-tool moved to encedo-hem-tool at 1.2.0; the same id there is authoritative; text frozen at rev 3. Rev 3 = 2026-10-10 (STEP-M10-068): user decision "remove any hints about recovery" — the Output no longer points at recovery / tls-recover; meaning change → draft; re-approved 2026-10-10 (user: "OK")
 source: user decision 2026-10-07 (M10: "add both init-device and wipe-device to the tool"; attended-only); REQ-AUTH-011 (the binding); Encedo Manager assets/build.js initFinal (the authoritative client flow); encedo-hem-api-doc auth/init.md; approved 2026-10-07 (M10 decomposition, user go-ahead); rev 3: user decision 2026-10-10 ("remove any hints about recovery"), approved the same day ("Approve REQ-TOOL-021 rev 3 …: OK")
 depends_on: ["REQ-AUTH-011", "REQ-AUTH-012", "REQ-SYS-003", "REQ-TEST-007"]
 supersedes: null
-superseded_by: null
+superseded_by: "KajtomatO/encedo-hem-tool requirements/REQ-TOOL-021"
 traces:
   architecture: ["ARCHITECTURE.md#8-hem-tool-cli", "ARCHITECTURE.md#11-milestones"]
 ---
 
 # hem-tool init-device — personalise an uninitialised device
+
+> **Superseded 2026-10-28 (M13 decomposition).** hem-tool moved to
+> [encedo-hem-tool](https://github.com/KajtomatO/encedo-hem-tool) at the SDK's 1.2.0 (user decision
+> 2026-10-27); this requirement continues there under the same id and is
+> maintained there. The text below is frozen at the revision it had when it
+> left (rev 3); the code and tests that implemented it leave this repository
+> in STEP-M13-010.
 
 `hem-tool init-device` SHALL initialise an uninitialised device through
 `ehem_device_init` (REQ-AUTH-011): it runs a check-in first (the init

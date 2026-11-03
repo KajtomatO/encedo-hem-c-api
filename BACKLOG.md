@@ -26,7 +26,10 @@ is disruptive on the device side (ARCHITECTURE.md §9 test policy applies).
 
 ### 2. `hem-tool fw-upgrade`
 
-CLI orchestrator over item 1 (user decision 2026-07-17).
+CLI orchestrator over item 1 (user decision 2026-07-17). A hem-tool item:
+since the split (M13, 2026-10-27) it belongs to
+[encedo-hem-tool](https://github.com/KajtomatO/encedo-hem-tool) and would
+follow item 1 there.
 
 ### 3. `POST /api/system/config/provisioning`
 
@@ -64,54 +67,58 @@ missing and where to put it.
 
 ### 6. `init-wizard` explains the fields it asks for
 
-User note 2026-10-19 (from the 1.2.0-rc1 test; not analysed): the wizard
-should explain some of the fields — what `origin` or `dnsd` is, why it is
-needed and how it affects the HEM.
+**Moved to encedo-hem-tool** with hem-tool (M13, user decision 2026-10-27);
+kept here, with its number, for provenance. User note 2026-10-19 (from the
+1.2.0-rc1 test): the wizard should explain some of the fields — what
+`origin` or `dnsd` is, why it is needed and how it affects the HEM.
 
 ### 7. `init-wizard` readability
 
-User note 2026-10-19 (not analysed): the wizard should be more readable —
-colours, maybe a simple GUI.
+**Moved to encedo-hem-tool** (M13); kept for provenance. User note
+2026-10-19: the wizard should be more readable — colours, maybe a simple
+GUI.
 
 ### 8. Backup words: scrollback and a file
 
-User note 2026-10-19 (not analysed): the backup words stay visible in the
-terminal history (scrolling up); there should be an option to save them to
-a file.
+**Moved to encedo-hem-tool** (M13); kept for provenance. User note
+2026-10-19: the backup words stay visible in the terminal history
+(scrolling up); there should be an option to save them to a file.
 
 ### 9. A safer way to pass the passphrase
 
-User note 2026-10-19 (not analysed): the passphrase lands in the console
-history; consider sessions — a `hem-tool login` that takes the passphrase
-safely from the user — though how to store it is open. Related:
-`--passphrase` is deprecated since 1.2.0 (REQ-TOOL-020 rev 2) and will be
-removed; `EHEM_PASSPHRASE` stays until this item lands.
+**Moved to encedo-hem-tool** (M13); kept for provenance. User note
+2026-10-19: the passphrase lands in the console history; consider sessions
+— a `hem-tool login` that takes the passphrase safely from the user —
+though how to store it is open. `--passphrase` is deprecated since 1.2.0
+(REQ-TOOL-020 rev 2, now encedo-hem-tool's). The SDK side has nothing to
+add: `ehem_login()` takes the passphrase from the caller and never from
+the environment.
 
 ### 10. [Important] Split hem-tool from the SDK
 
-User note 2026-10-19 (not analysed): hem-tool and the SDK should become
-separate deliverables.
+**Done — M13 (SDK 1.2.1) and encedo-hem-tool T1 (`c-v1.3.0`, released
+2026-10-28).** User note 2026-10-19; user decisions 2026-10-27 (ARCHITECTURE.md
+§11 M13; the split plan is recorded in encedo-hem-tool's ARCHITECTURE §1
+and §7): hem-tool is a separate deliverable with its own repository and
+version, built on the SDK's published static package; the SDK releases the
+libraries only from 1.2.1 on. Kept here, with its number, for provenance.
 
 ### 11. `hem-tool random` is slow
 
-User note 2026-10-19 (not analysed): `hem-tool random` takes a long time —
-investigate; update the help text or the algorithm. Does it create a key
-only for itself? Perhaps keep that key instead of removing it every time:
-by default create it only if absent, with options to clean up and to use
-another existing key.
+**Moved to encedo-hem-tool** (M13); kept for provenance. User note
+2026-10-19: `hem-tool random` takes a long time — investigate; update the
+help text or the algorithm; perhaps keep its key instead of removing it
+every time. (The SDK's `ehem_random` harvests random bytes through AES
+encrypt IVs — REQ-OPS-002 — and is what the command drives.)
 
 ### 12. hem-tool on Windows: device strings in the console's OEM code page
 
-Found 2026-10-20 while fixing the `ext pair` QR display (STEP-M12-137;
-not analysed): hem-tool writes UTF-8 to stdout, and a Windows console
-decodes it in its OEM code page — a non-ASCII key label, user name or
-hostname from the device (the device and the Manager are UTF-8) shows as
+**Moved to encedo-hem-tool** (M13); kept for provenance. Found 2026-10-20
+while fixing the `ext pair` QR display (STEP-M12-137): hem-tool writes
+UTF-8 to stdout, and a Windows console decodes it in its OEM code page — a
+non-ASCII key label, user name or hostname from the device shows as
 mojibake there, and what the wizard reads from the console comes back in
-that code page. The QR fix bypasses the code page for the QR rows only.
-Options: switch the console to UTF-8 for the process
-(`SetConsoleOutputCP(65001)` + `SetConsoleCP(65001)`, restored at exit —
-also on Ctrl-C, as prompt.c restores the echo), or a wide-char console
-path for all console I/O.
+that code page. The QR fix bypassed the code page for the QR rows only.
 
 ## Candidates (no decision taken)
 

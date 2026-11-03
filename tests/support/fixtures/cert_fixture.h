@@ -2,8 +2,9 @@
  * cert_fixture.h — frozen check-in / certificate fixtures for the offline
  * harvest and cert-install unit tests.
  *
- * supports: REQ-SYS-006 (harvest the leg-2 `newcrt` chain + leg-1 `csn` serial),
- *           REQ-TOOL-003 (skip-if-current serial comparison, install summary).
+ * supports: REQ-SYS-006 (harvest the leg-2 `newcrt` chain + leg-1 `csn` serial;
+ *           hem-tool's cert-install skip-if-current comparison and install
+ *           summary — encedo-hem-tool, its REQ-TOOL-003 — build on the same leaf).
  *
  * The certificate is a self-signed EC leaf generated ONCE with a pinned serial
  * and validity window, then frozen here as base64 DER so its parsed fields

@@ -485,7 +485,7 @@ void ehem_checkin_result_free(ehem_checkin_info *result)
 }
 
 /* -------------------------------------------------------------------------- */
-/* certificate inspection (REQ-SYS-006 / REQ-TOOL-003)                        */
+/* certificate inspection (REQ-SYS-006; hem-tool's cert-install builds on it)  */
 /* -------------------------------------------------------------------------- */
 
 ehem_rc ehem_cert_inspect(ehem_ctx *ctx, const char *crt_b64,

@@ -63,43 +63,29 @@ function(ehem_add_integration_test name)
   set_tests_properties(${name} PROPERTIES LABELS integration SKIP_RETURN_CODE 77)
 endfunction()
 
-# ehem_add_disruptive_test(<name> SOURCES ...)
-# A live test that MUTATES + REBOOTS the device: label `disruptive`, excluded
-# from `-L integration`, and gated at runtime on EHEM_TEST_URL +
-# EHEM_ALLOW_DISRUPTIVE=1 (ehem_require_disruptive → exit 77 = skip). Links the
-# shared hem-tool cert-install code (hem-tool-core, public API) so the live run
-# drives exactly the tool a user would.
-function(ehem_add_disruptive_test name)
-  cmake_parse_arguments(A "" "" "SOURCES" ${ARGN})
-  add_executable(${name} ${A_SOURCES})
-  target_link_libraries(${name} PRIVATE hem-tool-core)
-  target_include_directories(${name} PRIVATE ${PROJECT_SOURCE_DIR}/tests/support)
-  target_compile_options(${name} PRIVATE ${EHEM_WARNING_FLAGS})
-  add_test(NAME ${name} COMMAND ${name})
-  set_tests_properties(${name} PROPERTIES LABELS disruptive SKIP_RETURN_CODE 77)
-endfunction()
+# Disruptive live tests (label `disruptive`; MUTATE + REBOOT the device; gated
+# at runtime on EHEM_TEST_URL + EHEM_ALLOW_DISRUPTIVE=1, ehem_require_disruptive
+# → exit 77 = skip) are declared directly in disruptive/CMakeLists.txt — the
+# ehem_add_disruptive_test helper left with hem-tool's cert-install test (M13).
 
 # --- shared test support --------------------------------------------------
-# Fake transport and (later) fixtures/vectors. Our code, so held to the same
-# warning flags; PUBLIC-includes the internal src/ headers (transport.h,
-# context.h) and the support dir, and pulls the static lib transitively so
-# tests linking it resolve the internal symbols the fake calls.
-add_library(ehem_test_support STATIC
-  support/fake_transport.c
-  support/ext_sim.c
-  # The live tests' reference computations on the build's crypto library
-  # (REQ-BUILD-007) — the only test sources that include a backend header.
-  support/crypto_ref_${EHEM_CRYPTO_BACKEND}.c)
-# EHEM_STATIC_TARGET: the static variant, or the private archive when the
-# variant is off (REQ-BUILD-006) — the unit tests need the hidden seams.
-target_link_libraries(ehem_test_support PUBLIC ${EHEM_STATIC_TARGET})
-target_include_directories(ehem_test_support PUBLIC
-  ${PROJECT_SOURCE_DIR}/src
-  ${CMAKE_CURRENT_SOURCE_DIR}/support)
-target_compile_options(ehem_test_support PRIVATE ${EHEM_WARNING_FLAGS})
+# ehem_test_support (alias ehem::test-support) — the fake transport, the
+# simulated authenticator, crypto_ref and the fixtures — is defined in
+# support/CMakeLists.txt, which the top-level CMakeLists.txt adds whenever
+# EHEM_BUILD_TEST_SUPPORT is on (REQ-BUILD-011: out-of-tree consumers link the
+# same target). The suites below need it with crypto_ref inside.
+if(NOT TARGET ehem_test_support)
+  message(FATAL_ERROR "BUILD_TESTING needs EHEM_BUILD_TEST_SUPPORT=ON (tests/support)")
+endif()
+if(NOT EHEM_TEST_SUPPORT_CRYPTO_REF)
+  message(FATAL_ERROR "the SDK's own tests need EHEM_TEST_SUPPORT_CRYPTO_REF=ON (the live tests' crypto_ref)")
+endif()
 
 add_subdirectory(unit)
 add_subdirectory(integration)
+# tests/release: tls-probe, the release job's REQ-NET-005 classifier driver
+# (not a CTest; see its CMakeLists.txt).
+add_subdirectory(release)
 
 # REQ-BUILD-008: the consumer gate — install this build into a scratch prefix,
 # then build and run tests/consumer against it via find_package and pkg-config
@@ -125,9 +111,30 @@ if(NOT CMAKE_CROSSCOMPILING)
       -DEHEM_CRYPTO_BACKEND=${EHEM_CRYPTO_BACKEND}
       -P ${CMAKE_CURRENT_SOURCE_DIR}/consumer/check_consumer.cmake)
   set_tests_properties(consumer_interface PROPERTIES LABELS unit)
+
+  # REQ-BUILD-011: the out-of-tree consumer gate — tests/consumer/subdir adds
+  # this source tree as a subdirectory (tests and the shared variant off, the
+  # test support on), links the static SDK + ehem::test-support, reaches a
+  # hidden seam, drives a request through the fake transport, and runs; the
+  # SDK must bring no test or program target along
+  # (consumer/check_subdir_consumer.cmake).
+  add_test(NAME subdir_consumer
+    COMMAND ${CMAKE_COMMAND}
+      "-DEHEM_SDK_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
+      "-DEHEM_SCRATCH=${CMAKE_CURRENT_BINARY_DIR}/subdir-gate"
+      "-DEHEM_CONSUMER_SRC=${CMAKE_CURRENT_SOURCE_DIR}/consumer/subdir"
+      "-DEHEM_GENERATOR=${CMAKE_GENERATOR}"
+      "-DEHEM_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}"
+      "-DEHEM_C_COMPILER=${CMAKE_C_COMPILER}"
+      "-DEHEM_BUILD_TYPE=${CMAKE_BUILD_TYPE}"
+      "-DEHEM_PREFIX_PATH=${_ehem_prefix_path}"
+      -DEHEM_SANITIZE=${EHEM_SANITIZE}
+      -DEHEM_CRYPTO_BACKEND=${EHEM_CRYPTO_BACKEND}
+      -DEHEM_DEPS_LINK=${EHEM_DEPS_LINK}
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/consumer/check_subdir_consumer.cmake)
+  set_tests_properties(subdir_consumer PROPERTIES LABELS unit)
 endif()
-# Disruptive live tests need the shared tool code (hem-tool-core), which only
-# exists when the CLI is built.
-if(TARGET hem-tool-core)
-  add_subdirectory(disruptive)
-endif()
+# Disruptive live tests: always declared, gated at run time (EHEM_TEST_URL +
+# EHEM_ALLOW_DISRUPTIVE=1). Until M13 they hid behind the hem-tool target and
+# would have vanished silently with it (ARCHITECTURE.md §11 M13, plan risk 5).
+add_subdirectory(disruptive)
