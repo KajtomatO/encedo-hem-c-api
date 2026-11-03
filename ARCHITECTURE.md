@@ -1120,14 +1120,30 @@ REQUIREMENTS-MANAGEMENT.md §4.2. `src/tools/hem-tool/` — the CLI, inside
     macOS / MSVC; the ABI — 1.2.1 is a **patch** (user decision 2026-10-28):
     CMake options and targets leave with the tool, nothing in `include/`
     changes.
-  - **Gate (draft):** ci.yml's 10 legs green on `development`; a release
-    dispatch on `development` → 8 assets, the consumer gates and the
-    `tls-probe` classifier check green under both backends; encedo-hem-tool
-    `c-v1.3.0` published with `--version` showing `sdk: encedo-hem 1.2.0`
-    (met 2026-10-28, before this decomposition); docs checklist
-    (docs/RELEASING.md "Final release"); TRACE with no `needs-reverify`
-    and no orphan tag; README Status 1.2.1; then `v1.2.1-rc1` (the user
-    tags) and `v1.2.1` (STEP-M13-060).
+  - **Gate PASSED (2026-11-03, STEP-M13-060):** ci.yml 10/10 on
+    `development` at every step (the last: run 41689668960 on 58da33b); the
+    release dispatch on `development` (run 41670085883, ef63648) and the
+    candidate's tag run both green — 8 assets, the unit suites on both
+    Release builds, the consumer gates and the `tls-probe` classifier
+    check under both backends. Candidates: `v1.2.1-rc1` (557efd8, run
+    41685599368) FAILED in the Linux job's -shared package step —
+    package-lib.sh's library tree had started building `examples/` against
+    the shared SDK without `-rpath-link` to the prefix once
+    `EHEM_BUILD_EXAMPLES` defaulted ON (part D); the dev host's system
+    libwolfssl.so.42 had masked it; fixed in 58da33b (the library package
+    builds no example) — `v1.2.1-rc2` (58da33b): release run 41689764961
+    (Linux 3:30, Windows 8:22, publish 0:22) → pre-release 433053084 with
+    the 8 assets and the annotation + checksums text. Verified from the
+    public assets: checksums, libraries-only listings, version files 1.2.1,
+    README pointers, the consumer gate in package mode against both Linux
+    packages, `examples/status.c` linked statically against the published
+    plain package running against the dev device. encedo-hem-tool
+    `c-v1.3.0` published 2026-10-28 (`sdk: encedo-hem 1.2.0`); docs
+    checklist re-verified; TRACE 72 verified / 4 implemented / 0
+    needs-reverify / 30 superseded, no orphan tag; README Status 1.2.1.
+    The release itself — merge `development` → `main`, the annotated
+    `v1.2.1` from the drafted notes — is the user's; REQ-BUILD-010's
+    push-to-`main` and final-tag criterion closes with it.
   - *Decomposition (2026-10-28):* STEP-M13-010 … 060 in order; 020, 030
     and 040 depend on 010 only and may interleave within the WIP limit.
 - **MFW — firmware-pending** *(created by user decision 2026-08-07: one

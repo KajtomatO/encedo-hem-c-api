@@ -5,7 +5,8 @@ A portable **C99 client library** (the *Encedo HEM C SDK*, symbol prefix
 device over its REST/HTTPS API. Its first consumer is the `encedo-pkcs11`
 module.
 
-> **Status: 1.2.1 in development (M13) — the latest release is
+> **Status: 1.2.1 (M13 gate passed 2026-11-03; tested as `v1.2.1-rc2`) —
+> the release follows the merge to `main`; the latest published release is
 > [1.2.0](https://github.com/KajtomatO/encedo-hem-c-api/releases/latest)
 > (2026-10-27).** 1.2.1 is a **patch**: `hem-tool`, the command-line
 > client, has moved to its own repository,
