@@ -23,7 +23,11 @@ set(CMAKE_C_VISIBILITY_PRESET hidden)
 set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+# The default build type — only when this is the top-level project: a consumer
+# that adds the SDK as a subdirectory (REQ-BUILD-011) decides its own.
+# (PROJECT_IS_TOP_LEVEL needs CMake 3.21; this comparison works from 3.20.)
+if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR
+   AND NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE Debug CACHE STRING "" FORCE)
 endif()
 
@@ -72,6 +76,12 @@ endif()
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 include(CTest)               # defines BUILD_TESTING (default ON), enables CTest
+# REQ-BUILD-011: tests/support — the fake transport, the simulated
+# authenticator, the fixtures — as the target ehem::test-support, for this
+# build's tests and for an out-of-tree consumer's; such a consumer sets it ON
+# before add_subdirectory() while leaving BUILD_TESTING off.
+option(EHEM_BUILD_TEST_SUPPORT
+  "Build ehem::test-support (tests/support) for tests in and out of tree" ${BUILD_TESTING})
 
 # Third-party libraries the link closure may name that are never archived here:
 # glibc stays dynamic (a static glibc breaks NSS/getaddrinfo), and Windows'
@@ -331,11 +341,12 @@ set(EHEM_SOURCES
 
 # The static archive is the installed static variant (EHEM_BUILD_STATIC=ON);
 # with the variant off it is still built — privately, never installed, as
-# encedo-hem-internal — whenever the unit tests need the hidden seams.
+# encedo-hem-internal — whenever the unit tests, or an out-of-tree consumer's
+# through ehem::test-support (REQ-BUILD-011), need the hidden seams.
 # EHEM_STATIC_TARGET names it for the in-tree consumers.
 if(EHEM_BUILD_STATIC)
   set(EHEM_STATIC_TARGET encedo-hem-static)
-elseif(BUILD_TESTING)
+elseif(BUILD_TESTING OR EHEM_BUILD_TEST_SUPPORT)
   set(EHEM_STATIC_TARGET encedo-hem-internal)
 else()
   set(EHEM_STATIC_TARGET "")
@@ -539,6 +550,9 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/encedo-hem.pc
 # only. Its 27 REQ-TOOL requirements are superseded by the same ids there.
 
 # --- tests ----------------------------------------------------------------
+if(EHEM_BUILD_TEST_SUPPORT)
+  add_subdirectory(tests/support)      # ehem::test-support (REQ-BUILD-011)
+endif()
 if(BUILD_TESTING)
   add_subdirectory(tests)
 endif()
