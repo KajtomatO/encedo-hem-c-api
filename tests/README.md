@@ -41,7 +41,14 @@ SDK objects). The switch and OpenSSL legs then install the build and assert
 what it links (`ci.yml`, "Assert the link result"). `./dev build
 --static-only|--shared-only|--deps …|--openssl` builds the same sets
 locally, each in its own directory. Every leg also compiles `examples/`
-(REQ-API-007) and `tests/release/tls-probe`.
+(REQ-API-007) and `tests/release/tls-probe`. The Linux legs run on
+`ubuntu-latest` and the Windows legs on MSYS2's current packages, so a new
+compiler reaches the matrix before the dev host has it: MSYS2's GCC 16
+(2026-10-13, `-Wunterminated-string-initialization`) and Ubuntu 26.04's
+clang (2026-11-09, `-Wuninitialized-const-pointer`, new in clang 21) each
+failed a leg on code the host compilers accepted — fixed at the source both
+times, never by relaxing `-Werror` or pinning the image. Only the release
+build jobs pin a runner (`ubuntu-22.04`, the glibc floor).
 
 The refusal of a foreign crypto library (REQ-API-010) cannot be produced on
 demand with a real library, so a test seam forces it: `test_backend_compat`

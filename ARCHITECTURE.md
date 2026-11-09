@@ -1156,6 +1156,22 @@ REQUIREMENTS-MANAGEMENT.md §4.2. `src/tools/hem-tool/` — the CLI, inside
     tag are the user's to delete. What follows is the tool repository's: a
     pin bump to SDK 1.2.1 with `ehem::test-support` (encedo-hem-tool, its
     own step).
+  - **Post-release (2026-11-09):** the push of the release records to
+    `main` (5cf82f9; CI 42588056323) failed its two clang legs while the
+    release run of the same push (42588056204, build jobs pinned to
+    `ubuntu-22.04`) and the eight other legs were green: GitHub's
+    `ubuntu-latest` became Ubuntu 26.04 in the October–November 2026
+    rollout (actions/runner-images issue 14748), and its clang carries
+    `-Wuninitialized-const-pointer` (new in clang 21, under
+    `-Wuninitialized`) — `test_init_arg_validation` handed a never-written
+    `ehem_init_params` to `ehem_device_init`'s NULL-context call, code
+    unchanged since 1.1.0 and accepted by clang 18. Fixed on `development`
+    the same day (the commit carrying this entry: the struct is zeroed
+    first). A clang-18 AST pass emulating the warning over every compile
+    unit of both backends, the examples, `tls-probe` and the consumer-gate
+    sources found no other `&local` passed uninitialized to a
+    pointer-to-const parameter. Policy unchanged: the CI image floats so
+    that new compiler warnings reach the matrix first; see tests/README.md.
   - *Decomposition (2026-10-28):* STEP-M13-010 … 060 in order; 020, 030
     and 040 depend on 010 only and may interleave within the WIP limit.
 - **MFW — firmware-pending** *(created by user decision 2026-08-07: one

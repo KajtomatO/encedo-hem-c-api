@@ -378,13 +378,13 @@ static void test_init_arg_validation(void **state)
     assert_non_null(fake);
     ehem_ctx *ctx = ctx_with(fake);
     ehem_init_params p;
+    memset(&p, 0, sizeof p);                              /* not stamped */
     ehem_init_info *info = (ehem_init_info *)0x1;
 
     assert_int_equal(ehem_device_init(NULL, &p, &info), EHEM_ERR_ARG);
     assert_int_equal(ehem_device_init(ctx, NULL, &info), EHEM_ERR_ARG);
     assert_null(info);
 
-    memset(&p, 0, sizeof p);                              /* not stamped */
     assert_int_equal(ehem_device_init(ctx, &p, &info), EHEM_ERR_ARG);
     assert_non_null(strstr(ehem_last_error(ctx)->message, "ehem_init_params_init"));
 
